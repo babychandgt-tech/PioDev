@@ -791,10 +791,7 @@ export function useChat(userId: string | undefined) {
         };
       });
 
-      // ── BACKGROUND GENERATION via server ──────────────────────────────────
-      // Server insert AI placeholder, jalanin streaming Qwen, simpan partial
-      // content tiap 1.5s ke DB. Client cuma poll untuk update UI.
-      // Hasilnya: kalau user refresh, generation tetep lanjut & content kesimpen.
+      // ── DIRECT STREAMING ──────────────────────────────────────────────────
       const enableThinking = !!((options?.webSearch || options?.thinking) && !hasImages);
       const systemPrompt = await getSystemPrompt(options?.voiceMode);
       const fullHistory = [
@@ -802,44 +799,173 @@ export function useChat(userId: string | undefined) {
         ...buildHistory(),
       ];
 
-      const startResp = await fetch(`/api/chat/bg-generate`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${await getToken()}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          chatId,
-          aiMsgId,
-          models: chain,
-          messages: fullHistory,
-          enableThinking,
+      let response: Response | null = null;
+
+      for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+          fullContent = "";
+          fullThinking = "";
+          setChats((prev) =>
+            prev.map((c) => {
+              if (c.id !== chatId) return c;
+              return {
+                ...c,
+                messages: c.messages.map((m) =>
+                  m.id === aiMsgId ? { ...m, content: "", thinking: undefined } : m
+                ),
+              };
+            })
+          );
+          await new Promise((r) => setTimeout(r, 800 * attempt));
+        }
+
+        for (const model of chain) {
+          try {
+            const r = await fetch(`${API_BASE_URL}/chat/completions`, {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${await getToken()}`,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                model,
+                messages: fullHistory,
+                stream: true,
+                stream_options: { include_usage: true },
+                ...(enableThinking && { enable_thinking: true }),
+              }),
+              signal: abortControllerRef.current!.signal,
+            });
+
+            if (r.status === 429 && r.headers.get("X-Pioo-Error") === "QUOTA_EXCEEDED") {
+              const body = await r.json();
+              throw new QuotaExceededError(body.error ?? "Limit harian tercapai.");
+            }
+            if (r.status === 403 && r.headers.get("X-Pioo-Error") === "MODEL_RESTRICTED") {
+              const body = await r.json();
+              throw new ModelRestrictedError(body.error ?? "Model ini hanya untuk pengguna Plus.");
+            }
+            if (r.status === 403 || r.status === 429 || r.status >= 500) {
+              console.warn(`[PioCode] Model ${model} returned ${r.status}`);
+              continue;
+            }
+            if (!r.ok) {
+              const text = await r.text();
+              console.warn(`[PioCode] Model ${model} not ok (${r.status}):`, text);
+              throw new Error(text);
+            }
+
+            response = r;
+            break;
+          } catch (err: any) {
+            if (err?.name === "AbortError") throw err;
+            if (err?.code === "QUOTA_EXCEEDED") throw err;
+            if (err?.code === "MODEL_RESTRICTED") throw err;
+            console.warn(`[PioCode] Model ${model} exception:`, err?.message);
+            continue;
+          }
+        }
+
+        if (!response) {
+          if (attempt >= MAX_RETRIES) throw new Error("Semua model tidak tersedia saat ini. Coba lagi nanti.");
+          continue;
+        }
+
+        const reader = response.body!.getReader();
+        const decoder = new TextDecoder();
+        let lastFlush = 0;
+        let buf = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buf += decoder.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() || "";
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const data = line.slice(6).trim();
+            if (data === "[DONE]") continue;
+
+            try {
+              const parsed = JSON.parse(data);
+              const delta = parsed.choices?.[0]?.delta;
+              const thinkingDelta = delta?.reasoning_content || "";
+              const contentDelta = delta?.content || "";
+
+              if (!thinkingDelta && !contentDelta) {
+                if (parsed.usage) {
+                  capturedUsage = {
+                    promptTokens: parsed.usage.prompt_tokens || 0,
+                    completionTokens: parsed.usage.completion_tokens || 0,
+                    totalTokens: parsed.usage.total_tokens || 0,
+                  };
+                }
+                continue;
+              }
+
+              if (thinkingDelta) fullThinking += thinkingDelta;
+              if (contentDelta) fullContent += contentDelta;
+
+              const now = Date.now();
+              if (now - lastFlush < 30) continue;
+              lastFlush = now;
+
+              const snapshot = fullContent;
+              const thinkingSnapshot = fullThinking;
+              setChats((prev) =>
+                prev.map((c) => {
+                  if (c.id !== chatId) return c;
+                  return {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === aiMsgId
+                        ? { ...m, content: snapshot, thinking: thinkingSnapshot || undefined }
+                        : m
+                    ),
+                  };
+                })
+              );
+            } catch {
+              // skip malformed chunks
+            }
+          }
+        }
+
+        break;
+      }
+
+      // Final state update — pastikan konten terakhir tampil di UI
+      setChats((prev) =>
+        prev.map((c) => {
+          if (c.id !== chatId) return c;
+          return {
+            ...c,
+            messages: c.messages.map((m) =>
+              m.id === aiMsgId
+                ? { ...m, content: fullContent, thinking: fullThinking || undefined }
+                : m
+            ),
+          };
+        })
+      );
+
+      // Simpan AI message ke DB
+      await supabase.from("messages").upsert({
+        id: aiMsgId,
+        conversation_id: chatId!,
+        role: "ai",
+        content: fullContent,
+        ...(capturedUsage && {
+          prompt_tokens: capturedUsage.promptTokens,
+          completion_tokens: capturedUsage.completionTokens,
+          total_tokens: capturedUsage.totalTokens,
         }),
-        signal: abortControllerRef.current!.signal,
       });
 
-      if (startResp.status === 429 && startResp.headers.get("X-Pioo-Error") === "QUOTA_EXCEEDED") {
-        const body = await startResp.json();
-        throw new QuotaExceededError(body.error ?? "Limit harian tercapai.");
-      }
-      if (startResp.status === 403 && startResp.headers.get("X-Pioo-Error") === "MODEL_RESTRICTED") {
-        const body = await startResp.json();
-        throw new ModelRestrictedError(body.error ?? "Model ini hanya untuk pengguna Plus.");
-      }
-      if (!startResp.ok) {
-        const text = await startResp.text();
-        throw new Error(text || "Gagal memulai generation");
-      }
-
-      // Polling — server simpan content tiap 1.5s ke DB
-      const pollResult = await pollGeneration(chatId!, aiMsgId, abortControllerRef.current?.signal);
-      fullContent = pollResult.content;
-      if (pollResult.tokenUsage) capturedUsage = pollResult.tokenUsage;
-      if (pollResult.timedOut) {
-        throw new Error("Generation timeout — coba lagi ya!");
-      }
-
-      // Fallback estimasi (hampir gak pernah kepake karena server selalu kirim)
+      // Fallback estimasi token
       if (!capturedUsage) {
         const estimatedCompletion = Math.ceil(fullContent.length / 4);
         const estimatedPrompt = Math.ceil(content.length / 4);
@@ -851,7 +977,7 @@ export function useChat(userId: string | undefined) {
       }
 
       const finalUsage = capturedUsage;
-      // Update UI dengan token usage final
+      // Update token usage di UI
       setChats((prev) =>
         prev.map((c) => {
           if (c.id !== chatId) return c;
@@ -863,7 +989,8 @@ export function useChat(userId: string | undefined) {
           };
         })
       );
-      // Optimistic bump untuk UI counter (server udah simpan ke DB)
+
+      // Optimistic bump untuk UI counter
       if (typeof window !== "undefined" && finalUsage.totalTokens > 0) {
         window.dispatchEvent(new CustomEvent("pioo:token-usage-bump", {
           detail: {
@@ -874,10 +1001,8 @@ export function useChat(userId: string | undefined) {
           },
         }));
       }
-      // NOTE: AI message & token usage sudah disimpan ke DB oleh server bg-generate.
 
       // Auto-generate judul untuk chat baru (fire-and-forget)
-      // Kirim user message + AI reply biar judulnya lebih akurat
       if (isNewChat && (content.trim() || fullContent)) {
         generateTitle(content.trim(), fullContent).then((generatedTitle) => {
           if (!generatedTitle) return;
@@ -892,7 +1017,9 @@ export function useChat(userId: string | undefined) {
       if (err?.name === "AbortError") return;
 
       console.error("[PioCode] Chat error:", err?.message, err);
-      const errorMsg = `Gagal: ${err?.message || "error tidak diketahui"}`;
+      const errorMsg = err instanceof QuotaExceededError || err instanceof ModelRestrictedError
+        ? err.message
+        : `Gagal: ${err?.message || "error tidak diketahui"}`;
       setChats((prev) =>
         prev.map((c) => {
           if (c.id !== chatId) return c;
