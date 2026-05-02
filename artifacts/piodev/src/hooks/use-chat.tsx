@@ -765,16 +765,9 @@ export function useChat(userId: string | undefined) {
         })
       );
 
-      // Optimistic bump untuk UI counter
-      if (typeof window !== "undefined" && finalUsage.totalTokens > 0) {
-        window.dispatchEvent(new CustomEvent("pioo:token-usage-bump", {
-          detail: {
-            promptTokens: finalUsage.promptTokens,
-            completionTokens: finalUsage.completionTokens,
-            totalTokens: finalUsage.totalTokens,
-            messages: 1,
-          },
-        }));
+      // Simpan token ke DB + optimistic bump UI counter
+      if (finalUsage.totalTokens > 0 && userId) {
+        recordTokenUsageToDB(userId, finalUsage.promptTokens, finalUsage.completionTokens).catch(() => {});
       }
 
       // Auto-generate judul untuk chat baru (fire-and-forget)
