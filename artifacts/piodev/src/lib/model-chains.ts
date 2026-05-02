@@ -216,6 +216,31 @@ export const TRANSLATION_MODELS = [
 
 export const LLM_CHAIN = [...PLUS_CHAIN, ...MINI_CHAIN];
 
+export type SelectableModel = {
+  id: string;
+  name: string;
+  desc?: string;
+  tier: "plus" | "coder" | "free";
+};
+
+export const SELECTABLE_MODELS: SelectableModel[] = [
+  { id: "qwen3.6-max-preview",           name: "Qwen3.6 Max Preview",    desc: "Flagship terbaru 2026",        tier: "plus" },
+  { id: "qwen3.5-397b-a17b",             name: "Qwen3.5 397B MoE",       desc: "Model raksasa 397B parameter", tier: "plus" },
+  { id: "qwen3.5-plus-2026-04-20",       name: "Qwen3.5 Plus",           desc: "Kualitas tinggi, cepat",       tier: "plus" },
+  { id: "qwen3-235b-a22b",               name: "Qwen3 235B MoE",         desc: "Terbesar dari seri Qwen3",     tier: "plus" },
+  { id: "qwq-plus",                      name: "QwQ Plus",               desc: "Deep reasoning specialist",    tier: "plus" },
+  { id: "deepseek-v3.2",                 name: "DeepSeek V3.2",          desc: "Top open-source DeepSeek",     tier: "plus" },
+  { id: "qwen3-max",                     name: "Qwen3 Max",              desc: "Flagship Qwen3 generasi 3",    tier: "plus" },
+  { id: "qwen3-32b",                     name: "Qwen3 32B",              desc: "Dense 32B, balanced",          tier: "plus" },
+  { id: "qwen3-coder-480b-a35b-instruct",name: "Qwen3 Coder 480B",       desc: "Coder terbesar & terkuat",     tier: "coder" },
+  { id: "qwen3-coder-plus",              name: "Qwen3 Coder Plus",       desc: "Coding serba bisa",            tier: "coder" },
+  { id: "qwen3-coder-flash",             name: "Qwen3 Coder Flash",      desc: "Coder cepat ringan",           tier: "coder" },
+  { id: "qwen3.6-flash-2026-04-16",      name: "Qwen3.6 Flash",          desc: "Tercepat terbaru 2026",        tier: "free"  },
+  { id: "qwen3.5-flash",                 name: "Qwen3.5 Flash",          desc: "Flash generasi 3.5",           tier: "free"  },
+  { id: "qwen-plus-latest",              name: "Qwen Plus",              desc: "Serbaguna, andalan lama",      tier: "free"  },
+  { id: "qwen-turbo-latest",             name: "Qwen Turbo",             desc: "Ultra cepat, hemat kuota",     tier: "free"  },
+];
+
 export type ChainCategory = {
   id: string;
   label: string;

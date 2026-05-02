@@ -5,7 +5,7 @@ import {
   Menu, Plus,
   Send, Square, Terminal, Cpu, Lightbulb, Code,
   Sun, Moon, X, ImageIcon, FileText, Check, Copy, ArrowDown, RotateCcw,
-  Globe, Brain, ChevronDown, Download,
+  Globe, Brain, ChevronDown, Download, Zap,
   MoreHorizontal, Star, Pencil, Trash2, Gift, Lock,
   AudioLines, Library,
 } from "lucide-react";
@@ -23,6 +23,7 @@ import { VoiceModeOverlay } from "@/components/voice-mode-overlay";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { SELECTABLE_MODELS, type SelectableModel } from "@/lib/model-chains";
 
 const FREE_DAILY_LIMIT = 60_000;
 const PLUS_DAILY_LIMIT = 200_000;
@@ -147,9 +148,20 @@ export default function ChatPage() {
   const [renameTitleInput, setRenameTitleInput] = useState("");
   const [pendingDeleteHeader, setPendingDeleteHeader] = useState(false);
   const renameTitleRef = useRef<HTMLInputElement>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(() => {
+    return localStorage.getItem("pioo-selected-model") || null;
+  });
   const setModelTierPersist = (tier: "plus" | "mini" | "coder") => {
     setModelTier(tier);
+    setSelectedModel(null);
     localStorage.setItem("pioo-model-tier", tier);
+    localStorage.removeItem("pioo-selected-model");
+    setIsModelDropdownOpen(false);
+  };
+  const setSelectedModelPersist = (modelId: string | null) => {
+    setSelectedModel(modelId);
+    if (modelId) localStorage.setItem("pioo-selected-model", modelId);
+    else localStorage.removeItem("pioo-selected-model");
     setIsModelDropdownOpen(false);
   };
   // Multi-attachment state
@@ -457,7 +469,7 @@ export default function ChatPage() {
       input.trim(),
       attachedImages.length ? attachedImages : undefined,
       attachedFiles.length ? attachedFiles : undefined,
-      { webSearch: webSearchEnabled, thinking: thinkingEnabled, modelTier },
+      { webSearch: webSearchEnabled, thinking: thinkingEnabled, modelTier, selectedModel: selectedModel ?? undefined },
     );
     setInput("");
     setAttachedImages([]);
@@ -583,7 +595,9 @@ export default function ChatPage() {
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg hover:bg-muted transition-colors group"
               >
                 <span className="text-sm font-semibold text-foreground">
-                  {modelTier === "plus" ? "Pioo Plus" : modelTier === "coder" ? "Pioo Coder" : "Pioo Mini"}
+                  {selectedModel
+                    ? (SELECTABLE_MODELS.find(m => m.id === selectedModel)?.name ?? selectedModel)
+                    : modelTier === "plus" ? "Pioo Plus" : modelTier === "coder" ? "Pioo Coder" : "Pioo Mini"}
                 </span>
                 {(isPremium || isAdmin) && (
                   <span className={cn(
@@ -605,59 +619,99 @@ export default function ChatPage() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -6, scale: 0.97 }}
                     transition={{ duration: 0.12 }}
-                    className="absolute top-full left-0 mt-1.5 w-64 bg-popover border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1.5"
+                    className="absolute top-full left-0 mt-1.5 w-72 bg-popover border border-border rounded-xl shadow-lg z-50 overflow-hidden py-1.5"
                   >
+                    {/* AUTO CHAINS */}
+                    <div className="px-3 pt-1.5 pb-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Auto Chain</p>
+                    </div>
                     {/* Plus — hanya untuk pengguna Plus/Admin */}
                     <button
-                      onClick={() => { if (isPremium) setModelTierPersist("plus"); else setLocation("/premium"); }}
+                      onClick={() => { if (isPremium || isAdmin) setModelTierPersist("plus"); else setLocation("/premium"); }}
                       className={cn(
-                        "w-full flex items-start gap-3 px-3.5 py-2.5 transition-colors text-left",
-                        isPremium ? "hover:bg-muted" : "opacity-60 cursor-pointer"
+                        "w-full flex items-center gap-3 px-3.5 py-2 transition-colors text-left",
+                        (isPremium || isAdmin) ? "hover:bg-muted" : "opacity-60 cursor-pointer"
                       )}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-foreground">Pioo Plus</span>
-                          {modelTier === "plus" && isPremium && <Check className="w-3.5 h-3.5 text-primary" />}
-                          {!isPremium && <Lock className="w-3 h-3 text-muted-foreground" />}
+                          {!selectedModel && modelTier === "plus" && (isPremium || isAdmin) && <Check className="w-3.5 h-3.5 text-primary" />}
+                          {!(isPremium || isAdmin) && <Lock className="w-3 h-3 text-muted-foreground" />}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {isPremium ? "Model flagship, kualitas terbaik" : "Hanya untuk pengguna Plus"}
-                        </p>
+                        <p className="text-xs text-muted-foreground">Model flagship, kualitas terbaik</p>
                       </div>
                     </button>
-                    {/* Coder — hanya untuk pengguna Plus/Admin */}
+                    {/* Coder */}
                     <button
-                      onClick={() => { if (isPremium) setModelTierPersist("coder"); else setLocation("/premium"); }}
+                      onClick={() => { if (isPremium || isAdmin) setModelTierPersist("coder"); else setLocation("/premium"); }}
                       className={cn(
-                        "w-full flex items-start gap-3 px-3.5 py-2.5 transition-colors text-left",
-                        isPremium ? "hover:bg-muted" : "opacity-60 cursor-pointer"
+                        "w-full flex items-center gap-3 px-3.5 py-2 transition-colors text-left",
+                        (isPremium || isAdmin) ? "hover:bg-muted" : "opacity-60 cursor-pointer"
                       )}
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-foreground">Pioo Coder</span>
-                          {modelTier === "coder" && isPremium && <Check className="w-3.5 h-3.5 text-primary" />}
-                          {!isPremium && <Lock className="w-3 h-3 text-muted-foreground" />}
+                          {!selectedModel && modelTier === "coder" && (isPremium || isAdmin) && <Check className="w-3.5 h-3.5 text-primary" />}
+                          {!(isPremium || isAdmin) && <Lock className="w-3 h-3 text-muted-foreground" />}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {isPremium ? "Spesialis coding & programming" : "Hanya untuk pengguna Plus"}
-                        </p>
+                        <p className="text-xs text-muted-foreground">Spesialis coding & programming</p>
                       </div>
                     </button>
-                    {/* Mini — tersedia untuk semua */}
+                    {/* Mini */}
                     <button
                       onClick={() => setModelTierPersist("mini")}
-                      className="w-full flex items-start gap-3 px-3.5 py-2.5 hover:bg-muted transition-colors text-left"
+                      className="w-full flex items-center gap-3 px-3.5 py-2 hover:bg-muted transition-colors text-left"
                     >
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-semibold text-foreground">Pioo Mini</span>
-                          {modelTier === "mini" && <Check className="w-3.5 h-3.5 text-primary" />}
+                          {!selectedModel && modelTier === "mini" && <Check className="w-3.5 h-3.5 text-primary" />}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-0.5">Cepat & ringan, respons instan</p>
+                        <p className="text-xs text-muted-foreground">Cepat & ringan, respons instan</p>
                       </div>
                     </button>
+
+                    {/* PILIH MODEL SPESIFIK */}
+                    <div className="mx-3 my-1.5 border-t border-border" />
+                    <div className="px-3 pb-1">
+                      <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Pilih Model Spesifik</p>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto">
+                      {SELECTABLE_MODELS.map((m: SelectableModel) => {
+                        const canUse = m.tier === "free" || isPremium || isAdmin;
+                        const isActive = selectedModel === m.id;
+                        return (
+                          <button
+                            key={m.id}
+                            onClick={() => {
+                              if (!canUse) { setIsModelDropdownOpen(false); setLocation("/premium"); return; }
+                              setSelectedModelPersist(isActive ? null : m.id);
+                            }}
+                            className={cn(
+                              "w-full flex items-center gap-2.5 px-3.5 py-2 transition-colors text-left",
+                              canUse ? "hover:bg-muted" : "opacity-50 cursor-pointer",
+                              isActive && "bg-primary/8"
+                            )}
+                          >
+                            <Zap className={cn(
+                              "w-3 h-3 shrink-0",
+                              m.tier === "plus" ? "text-violet-500" : m.tier === "coder" ? "text-blue-500" : "text-green-500"
+                            )} />
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-medium text-foreground truncate">{m.name}</span>
+                                {isActive && <Check className="w-3 h-3 text-primary shrink-0" />}
+                                {!canUse && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                              </div>
+                              {m.desc && <p className="text-[11px] text-muted-foreground truncate">{m.desc}</p>}
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
                     {/* Hint upgrade untuk user free */}
                     {!isPremium && !isAdmin && (
                       <div className="mx-2 my-1 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">

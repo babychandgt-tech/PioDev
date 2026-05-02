@@ -389,7 +389,7 @@ export function useChat(userId: string | undefined) {
     content: string,
     imageUrls?: string[],
     fileDatas?: { name: string; content: string }[],
-    options?: { webSearch?: boolean; thinking?: boolean; imageGen?: boolean; modelTier?: "plus" | "mini" | "coder"; voiceMode?: boolean },
+    options?: { webSearch?: boolean; thinking?: boolean; imageGen?: boolean; modelTier?: "plus" | "mini" | "coder"; voiceMode?: boolean; selectedModel?: string },
   ) => {
     if (!userId) return;
     let chatId = activeChatId;
@@ -523,18 +523,21 @@ export function useChat(userId: string | undefined) {
 
     try {
       // Smart routing:
+      // - selectedModel override → use only that model (no fallback)
       // - gambar → VISION_CHAIN
       // - web search → WEB_SEARCH_CHAIN (beda dari thinking — butuh enable_search)
       // - thinking only → THINKING_CHAIN
       // - else → Plus / Mini / Coder sesuai tier
       const llmChain = options?.modelTier === "mini" ? MINI_CHAIN : options?.modelTier === "coder" ? CODER_CHAIN : PLUS_CHAIN;
-      const chain = hasImages
-        ? VISION_CHAIN
-        : options?.webSearch
-          ? WEB_SEARCH_CHAIN
-          : options?.thinking
-            ? THINKING_CHAIN
-            : llmChain;
+      const chain = options?.selectedModel
+        ? [options.selectedModel]
+        : hasImages
+          ? VISION_CHAIN
+          : options?.webSearch
+            ? WEB_SEARCH_CHAIN
+            : options?.thinking
+              ? THINKING_CHAIN
+              : llmChain;
 
       const buildHistory = () => currentMessages.map((m, idx) => {
         const isLast = idx === currentMessages.length - 1;
