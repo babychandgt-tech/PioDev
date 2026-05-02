@@ -173,12 +173,36 @@ export default function ImageStudio() {
           throw new Error(body.error ?? "Kuota generate gambar habis.");
         }
 
-        // Model-level error (rate limit from DashScope, invalid param, etc.) — try next model
-        if (!submitRes.ok) continue;
+        // Model-level error — log and try next model
+        if (!submitRes.ok) {
+          const errBody = await submitRes.json().catch(() => ({}));
+          console.warn(`[ImageChain] ${model} submit failed — HTTP ${submitRes.status}:`, errBody);
+          continue;
+        }
 
         const submitData = await submitRes.json();
+        console.log(`[ImageChain] ${model} submit OK:`, JSON.stringify(submitData).slice(0, 300));
+
+        // ── Handle SYNC response (newer models return results immediately) ──
+        const syncUrls: string[] = (submitData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
+        if (syncUrls.length > 0) {
+          console.log(`[ImageChain] ${model} returned sync results (${syncUrls.length} images)`);
+          const newImages: GeneratedImage[] = syncUrls.map((url) => ({
+            url, prompt: prompt.trim(), model, size: selectedSize,
+          }));
+          setResults((prev) => [...newImages, ...prev]);
+          setActiveModelName(MODEL_LABELS[model] ?? model);
+          if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
+          succeeded = true;
+          break;
+        }
+
+        // ── Handle ASYNC response (task polling) ───────────────────────────
         const taskId = submitData.output?.task_id;
-        if (!taskId) continue;
+        if (!taskId) {
+          console.warn(`[ImageChain] ${model} — no task_id and no sync results:`, submitData);
+          continue;
+        }
 
         // Poll for result
         setProgress(`Memproses dengan ${MODEL_LABELS[model] ?? model}...`);
@@ -197,6 +221,7 @@ export default function ImageStudio() {
 
           const pollData = await pollRes.json();
           const status   = pollData.output?.task_status;
+          console.log(`[ImageChain] ${model} poll ${i + 1} → status: ${status}`);
 
           if (status === "SUCCEEDED") {
             const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
@@ -212,8 +237,10 @@ export default function ImageStudio() {
             break;
           }
 
-          // Task failed — try next model
-          if (status === "FAILED" || status === "CANCELED") break;
+          if (status === "FAILED" || status === "CANCELED") {
+            console.warn(`[ImageChain] ${model} task ${status}:`, pollData);
+            break;
+          }
         }
 
         if (succeeded) break;

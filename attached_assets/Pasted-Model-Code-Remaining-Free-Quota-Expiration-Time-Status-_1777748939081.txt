@@ -1,0 +1,280 @@
+Model Code	
+Remaining Free Quota
+Expiration Time
+Status
+Actions
+wan2.1-vace-plus
+Remaining50/Total50
+2026/06/12
+On	
+Free Quota Only
+wan2.7-videoedit
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota Only
+wan2.1-kf2v-plus
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-edit-plus
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-edit-plus-2025-10-30
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.7-i2v
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota Only
+wan2.6-image
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.6-t2v
+Remaining40/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-edit
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-t2v-plus
+Remaining40/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-2.0
+Remaining99/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.7-t2v
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota Only
+z-image-turbo
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-max-2025-12-30
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.7-r2v
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota Only
+wan2.2-animate-move
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-edit-max-2026-01-16
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.6-i2v
+Remaining45/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.5-t2v-preview
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-t2v-plus
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+happyhorse-1.0-t2v
+Remaining10/Total10
+2026/07/21
+Off	
+Free Quota Only
+happyhorse-1.0-r2v
+Remaining10/Total10
+2026/07/25
+Off	
+Free Quota Only
+wan2.5-t2i-preview
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-t2v-turbo
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-i2v-turbo
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-t2i-turbo
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+happyhorse-1.0-video-edit
+Remaining10/Total10
+2026/07/25
+Off	
+Free Quota Only
+wan2.7-i2v-2026-04-25
+Remaining50/Total50
+2026/07/25
+Off	
+Free Quota Only
+wan2.5-i2v-preview
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-i2v-plus
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-t2i-flash
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-t2i-plus
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-i2v-flash
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-2.0-2026-03-03
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-edit-max
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-max
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-2.0-pro-2026-03-03
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.5-i2i-preview
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-plus
+Remaining89/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-2.0-pro
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-plus-2026-01-09
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-i2v-plus
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+wan2.7-image-pro
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota Only
+wan2.6-r2v
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.1-t2i-plus
+Remaining200/Total200
+2026/06/12
+Off	
+Free Quota Only
+wan2.2-animate-mix
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.6-t2i
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+qwen-image-2.0-pro-2026-04-22
+Remaining100/Total100
+2026/07/22
+Off	
+Free Quota Only
+wan2.6-i2v-flash
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+wan2.7-t2v-2026-04-25
+Remaining50/Total50
+2026/07/25
+Off	
+Free Quota Only
+qwen-image-edit-plus-2025-12-15
+Remaining100/Total100
+2026/06/12
+Off	
+Free Quota Only
+wan2.6-r2v-flash
+Remaining50/Total50
+2026/06/12
+Off	
+Free Quota Only
+happyhorse-1.0-i2v
+Remaining10/Total10
+2026/07/21
+Off	
+Free Quota Only
+wan2.7-image
+Remaining50/Total50
+2026/06/30
+Off	
+Free Quota On
