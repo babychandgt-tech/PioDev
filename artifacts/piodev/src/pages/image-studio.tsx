@@ -20,22 +20,23 @@ type StylePreset = { label: string; suffix: string };
 type GeneratedImage = { url: string; prompt: string; model: string; size: string };
 
 // ── Model fallback chain — system tries each in order, best → fallback ─────────
+// Names are official DashScope model IDs for text-to-image (image-synthesis endpoint)
 const MODEL_CHAIN = [
-  "qwen-image-2.0-pro",
-  "wan2.7-image-pro",
-  "qwen-image-max",
-  "qwen-image-plus",
-  "wan2.7-image",
-  "qwen-image-2.0",
+  "qwen-image-plus",        // Confirmed working — Qwen Image Plus
+  "qwen-image-max",         // Qwen Image Max (higher tier)
+  "wanx2.1-t2i-plus",      // Wanx 2.1 Plus — high quality
+  "wanx2.1-t2i-turbo",     // Wanx 2.1 Turbo — fast
+  "wanx-plus",              // Wanx Plus (older)
+  "wanx-v1",                // Wanx v1 — stable fallback
 ];
 
 const MODEL_LABELS: Record<string, string> = {
-  "qwen-image-2.0-pro": "Qwen Image 2.0 Pro",
-  "wan2.7-image-pro":   "Wan2.7 Image Pro",
-  "qwen-image-max":     "Qwen Image Max",
   "qwen-image-plus":    "Qwen Image Plus",
-  "wan2.7-image":       "Wan2.7 Image",
-  "qwen-image-2.0":     "Qwen Image 2.0",
+  "qwen-image-max":     "Qwen Image Max",
+  "wanx2.1-t2i-plus":  "Wanx 2.1 Plus",
+  "wanx2.1-t2i-turbo": "Wanx 2.1 Turbo",
+  "wanx-plus":          "Wanx Plus",
+  "wanx-v1":            "Wanx v1",
 };
 
 const SIZES: GenSize[] = [
