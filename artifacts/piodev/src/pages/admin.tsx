@@ -33,8 +33,9 @@ import {
   Zap, MessageSquare, TrendingUp, Newspaper, Plus,
   Check, Loader2, Tag, AlertCircle,
   MoreHorizontal, Pencil, Eye, ChevronLeft, ChevronRight, ArrowUpDown,
-  Copy,
+  Copy, ChevronDown, ChevronUp, Cpu,
 } from "lucide-react";
+import { CHAIN_CATEGORIES } from "@/lib/model-chains";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
 import {
@@ -42,13 +43,14 @@ import {
   DEFAULT_PRICING, type PricingConfig,
 } from "@/hooks/use-pricing-config";
 
-type Section = "ringkasan" | "pengguna" | "harga" | "changelog";
+type Section = "ringkasan" | "pengguna" | "harga" | "changelog" | "model-chain";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
-  { id: "ringkasan",  label: "Ringkasan",     icon: LayoutDashboard },
-  { id: "pengguna",   label: "Pengguna",      icon: Users },
-  { id: "harga",      label: "Harga & Promo", icon: Tag },
-  { id: "changelog",  label: "What's New",    icon: Newspaper },
+  { id: "ringkasan",    label: "Ringkasan",     icon: LayoutDashboard },
+  { id: "pengguna",     label: "Pengguna",      icon: Users },
+  { id: "harga",        label: "Harga & Promo", icon: Tag },
+  { id: "changelog",    label: "What's New",    icon: Newspaper },
+  { id: "model-chain",  label: "Model Chain",   icon: Cpu },
 ];
 
 function useToast() {
@@ -1357,6 +1359,124 @@ function SectionChangelog({ showToast }: { showToast: (msg: string, ok: boolean)
   );
 }
 
+const COLOR_MAP: Record<string, { bg: string; text: string; border: string; badge: string; num: string }> = {
+  violet: { bg: "bg-violet-500/10", text: "text-violet-600 dark:text-violet-400", border: "border-violet-200 dark:border-violet-800", badge: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300", num: "bg-violet-500" },
+  blue:   { bg: "bg-blue-500/10",   text: "text-blue-600 dark:text-blue-400",     border: "border-blue-200 dark:border-blue-800",     badge: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",     num: "bg-blue-500" },
+  green:  { bg: "bg-green-500/10",  text: "text-green-600 dark:text-green-400",   border: "border-green-200 dark:border-green-800",   badge: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",   num: "bg-green-500" },
+  orange: { bg: "bg-orange-500/10", text: "text-orange-600 dark:text-orange-400", border: "border-orange-200 dark:border-orange-800", badge: "bg-orange-100 text-orange-700 dark:bg-orange-900/40 dark:text-orange-300", num: "bg-orange-500" },
+  sky:    { bg: "bg-sky-500/10",    text: "text-sky-600 dark:text-sky-400",       border: "border-sky-200 dark:border-sky-800",       badge: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300",           num: "bg-sky-500" },
+  pink:   { bg: "bg-pink-500/10",   text: "text-pink-600 dark:text-pink-400",     border: "border-pink-200 dark:border-pink-800",     badge: "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300",       num: "bg-pink-500" },
+  rose:   { bg: "bg-rose-500/10",   text: "text-rose-600 dark:text-rose-400",     border: "border-rose-200 dark:border-rose-800",     badge: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",       num: "bg-rose-500" },
+  amber:  { bg: "bg-amber-500/10",  text: "text-amber-600 dark:text-amber-400",   border: "border-amber-200 dark:border-amber-800",   badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",   num: "bg-amber-500" },
+};
+
+function ChainCard({ cat }: { cat: typeof CHAIN_CATEGORIES[number] }) {
+  const [expanded, setExpanded] = useState(false);
+  const c = COLOR_MAP[cat.color] ?? COLOR_MAP.violet;
+  const PREVIEW = 5;
+  const shown = expanded ? cat.models : cat.models.slice(0, PREVIEW);
+
+  return (
+    <div className={cn("rounded-xl border bg-card overflow-hidden", c.border)}>
+      {/* Header */}
+      <div className={cn("px-5 py-4 flex items-start justify-between gap-3", c.bg)}>
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={cn("font-semibold text-sm", c.text)}>{cat.label}</span>
+            <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full", c.badge)}>
+              {cat.badge}
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{cat.description}</p>
+        </div>
+        <div className={cn("shrink-0 text-xs font-bold text-white rounded-full w-8 h-8 flex items-center justify-center", c.num)}>
+          {cat.models.length}
+        </div>
+      </div>
+
+      {/* Model list */}
+      <div className="px-5 py-3 space-y-1.5">
+        {shown.map((model, idx) => (
+          <div key={model} className="flex items-center gap-2.5">
+            <span className={cn(
+              "shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center text-white",
+              idx === 0 ? c.num : "bg-muted-foreground/30"
+            )}>
+              {idx + 1}
+            </span>
+            <code className={cn(
+              "text-xs font-mono truncate",
+              idx === 0 ? cn("font-semibold", c.text) : "text-muted-foreground"
+            )}>
+              {model}
+            </code>
+            {idx === 0 && (
+              <span className={cn("shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded uppercase tracking-wide", c.badge)}>
+                Utama
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Expand/collapse */}
+      {cat.models.length > PREVIEW && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          className={cn(
+            "w-full flex items-center justify-center gap-1.5 py-2.5 text-xs font-medium border-t transition-colors",
+            c.border,
+            c.text,
+            "hover:opacity-80"
+          )}
+        >
+          {expanded ? (
+            <><ChevronUp className="w-3.5 h-3.5" />Sembunyikan</>
+          ) : (
+            <><ChevronDown className="w-3.5 h-3.5" />+{cat.models.length - PREVIEW} model lainnya</>
+          )}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function SectionModelChain() {
+  const totalModels = CHAIN_CATEGORIES.reduce((s, c) => s + c.models.length, 0);
+  const totalChains = CHAIN_CATEGORIES.length;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-base font-semibold text-foreground mb-1">Model Chain</h2>
+          <p className="text-sm text-muted-foreground">
+            Daftar model yang digunakan per kategori — urutan dari atas = prioritas tertinggi (dicoba pertama).
+            Jika model pertama gagal, sistem otomatis fallback ke model berikutnya.
+          </p>
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-2xl font-bold text-foreground tabular-nums">{totalModels}</div>
+          <div className="text-xs text-muted-foreground">{totalChains} chain</div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {CHAIN_CATEGORIES.map(cat => (
+          <ChainCard key={cat.id} cat={cat} />
+        ))}
+      </div>
+
+      <div className="rounded-xl border border-border bg-muted/40 px-5 py-4 text-xs text-muted-foreground leading-relaxed">
+        <strong className="text-foreground">Cara kerja fallback:</strong> Setiap request mencoba model pertama di chain.
+        Jika API mengembalikan error (rate limit, model down, quota habis), sistem langsung lanjut ke model berikutnya
+        secara otomatis — tanpa user tahu. Proses ini terus berulang sampai ada model yang berhasil merespons
+        atau semua model di chain sudah dicoba.
+      </div>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1522,6 +1642,9 @@ export default function AdminPage() {
           )}
           {activeSection === "changelog" && (
             <SectionChangelog showToast={showToast} />
+          )}
+          {activeSection === "model-chain" && (
+            <SectionModelChain />
           )}
         </main>
 
