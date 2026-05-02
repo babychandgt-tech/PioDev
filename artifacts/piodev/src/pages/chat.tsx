@@ -962,11 +962,30 @@ export default function ChatPage() {
                   <Logo size={28} className="rounded-lg shadow-sm" />
                   <span className="text-xs font-semibold text-muted-foreground tracking-wide uppercase">Pioo 2.0</span>
                 </div>
-                <div className="pl-9 flex items-center gap-1.5 h-7">
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow" />
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow animation-delay-100" />
-                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow animation-delay-200" />
-                </div>
+                {webSearchEnabled ? (
+                  <div className="pl-9 flex items-center gap-2 h-7">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1.4, repeat: Infinity, ease: "linear" }}
+                      className="text-sky-500"
+                    >
+                      <Globe size={14} />
+                    </motion.div>
+                    <motion.span
+                      className="text-sm text-sky-500 font-medium"
+                      animate={{ opacity: [1, 0.5, 1] }}
+                      transition={{ duration: 1.2, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      Mencari di web...
+                    </motion.span>
+                  </div>
+                ) : (
+                  <div className="pl-9 flex items-center gap-1.5 h-7">
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow" />
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow animation-delay-100" />
+                    <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce-slow animation-delay-200" />
+                  </div>
+                )}
               </motion.div>
             )}
             <div ref={messagesEndRef} className="h-4" />
