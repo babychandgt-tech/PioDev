@@ -20,23 +20,40 @@ type StylePreset = { label: string; suffix: string };
 type GeneratedImage = { url: string; prompt: string; model: string; size: string };
 
 // ── Model fallback chain — system tries each in order, best → fallback ─────────
-// Names are official DashScope model IDs for text-to-image (image-synthesis endpoint)
+// All IDs sourced from the official model list in api-keys.tsx IMAGE_MODELS.
+// Pro-tier models tried first; system falls through to plus-tier on failure.
 const MODEL_CHAIN = [
-  "qwen-image-plus",        // Confirmed working — Qwen Image Plus
-  "qwen-image-max",         // Qwen Image Max (higher tier)
-  "wanx2.1-t2i-plus",      // Wanx 2.1 Plus — high quality
-  "wanx2.1-t2i-turbo",     // Wanx 2.1 Turbo — fast
-  "wanx-plus",              // Wanx Plus (older)
-  "wanx-v1",                // Wanx v1 — stable fallback
+  // ── Pro tier (best quality, tried first) ────────────────────────────────
+  "qwen-image-2.0-pro",     // Qwen Image 2.0 Pro — flagship, best prompt adherence
+  "wan2.7-image-pro",       // Wan 2.7 Image Pro — highest quality Wan
+  "qwen-image-max",         // Qwen Image Max — most detailed output
+  "wan2.7-image",           // Wan 2.7 Image
+  // ── Plus tier (accessible) ──────────────────────────────────────────────
+  "qwen-image-plus",        // ✓ Confirmed working
+  "qwen-image-2.0",         // Qwen Image 2.0 — high quality base
+  "wan2.6-image",           // Wan 2.6 Image
+  "wan2.2-t2i-plus",        // Wan 2.2 Plus
+  "wan2.2-t2i-flash",       // Wan 2.2 Flash — fast
+  "qwen-image",             // Qwen Image — balanced
+  "wan2.1-t2i-plus",        // Wan 2.1 Plus
+  "wan2.1-t2i-turbo",       // Wan 2.1 Turbo
+  "z-image-turbo",          // Z-Image Turbo — super fast fallback
 ];
 
 const MODEL_LABELS: Record<string, string> = {
-  "qwen-image-plus":    "Qwen Image Plus",
-  "qwen-image-max":     "Qwen Image Max",
-  "wanx2.1-t2i-plus":  "Wanx 2.1 Plus",
-  "wanx2.1-t2i-turbo": "Wanx 2.1 Turbo",
-  "wanx-plus":          "Wanx Plus",
-  "wanx-v1":            "Wanx v1",
+  "qwen-image-2.0-pro":  "Qwen Image 2.0 Pro",
+  "wan2.7-image-pro":    "Wan 2.7 Image Pro",
+  "qwen-image-max":      "Qwen Image Max",
+  "wan2.7-image":        "Wan 2.7 Image",
+  "qwen-image-plus":     "Qwen Image Plus",
+  "qwen-image-2.0":      "Qwen Image 2.0",
+  "wan2.6-image":        "Wan 2.6 Image",
+  "wan2.2-t2i-plus":     "Wan 2.2 T2I Plus",
+  "wan2.2-t2i-flash":    "Wan 2.2 T2I Flash",
+  "qwen-image":          "Qwen Image",
+  "wan2.1-t2i-plus":     "Wan 2.1 T2I Plus",
+  "wan2.1-t2i-turbo":    "Wan 2.1 T2I Turbo",
+  "z-image-turbo":       "Z-Image Turbo",
 };
 
 const SIZES: GenSize[] = [
