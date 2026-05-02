@@ -169,6 +169,8 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const userScrolledUpRef = useRef(false);
+  const prevScrollTopRef = useRef(0);
 
   const {
     chats,
@@ -268,27 +270,42 @@ export default function ChatPage() {
   };
 
   // Auto-scroll ke bawah saat ada pesan baru / isTyping
+  // Tapi BERHENTI jika user sudah scroll ke atas secara manual
   useEffect(() => {
-    if (!showScrollBtn) {
+    if (!userScrolledUpRef.current) {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [activeChat?.messages, isTyping]);
 
-  // Scroll to bottom button visibility
+  // Scroll to bottom button visibility + deteksi user scroll ke atas
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
     if (!el) return;
     const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const scrolledUp = el.scrollTop < prevScrollTopRef.current;
+
+    // Kalau user scroll ke atas (bukan karena konten tumbuh) → kunci auto-scroll
+    if (scrolledUp && distFromBottom > 80) {
+      userScrolledUpRef.current = true;
+    }
+    // Kalau hampir di bawah → buka kunci auto-scroll lagi
+    if (distFromBottom < 80) {
+      userScrolledUpRef.current = false;
+    }
+
+    prevScrollTopRef.current = el.scrollTop;
     setShowScrollBtn(distFromBottom > 200);
   }, []);
 
   const scrollToBottom = () => {
+    userScrolledUpRef.current = false;
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     setShowScrollBtn(false);
   };
 
   // Reset scroll button saat ganti chat
   useEffect(() => {
+    userScrolledUpRef.current = false;
     setShowScrollBtn(false);
     messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
   }, [activeChat?.id]);
