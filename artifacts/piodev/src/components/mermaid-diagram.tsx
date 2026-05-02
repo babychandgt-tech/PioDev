@@ -155,10 +155,18 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   const diagramContent = (z: number) => (
     error ? (
-      <div className="flex flex-col items-center gap-2 py-6 text-center">
-        <span className="text-xs font-semibold text-red-500 uppercase tracking-wide">Gagal render diagram</span>
-        <pre className="text-xs text-muted-foreground whitespace-pre-wrap max-w-sm">{error}</pre>
-        <pre className={cn("text-xs mt-2 p-3 rounded-lg w-full text-left font-mono whitespace-pre-wrap", isDark ? "bg-zinc-800 text-zinc-300" : "bg-zinc-100 text-zinc-700")}>{code}</pre>
+      <div className="flex flex-col items-center gap-3 py-6 text-center px-4">
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-xs font-semibold text-red-500 uppercase tracking-wide">Gagal render diagram</span>
+          <p className="text-xs text-muted-foreground max-w-xs">
+            {error.includes("No diagram type") || error.includes("usecaseDiagram")
+              ? 'Tipe diagram tidak didukung. Coba minta Pioo: "buat ulang pakai flowchart TD"'
+              : error.includes("Parse error") || error.includes("Syntax")
+              ? "Syntax diagram tidak valid. Coba minta Pioo untuk generate ulang."
+              : error}
+          </p>
+        </div>
+        <pre className={cn("text-xs p-3 rounded-lg w-full text-left font-mono whitespace-pre-wrap overflow-auto max-h-40", isDark ? "bg-zinc-800 text-zinc-400" : "bg-zinc-100 text-zinc-600")}>{code}</pre>
       </div>
     ) : svg ? (
       <div

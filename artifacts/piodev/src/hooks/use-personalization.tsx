@@ -65,7 +65,8 @@ FORMAT JAWABAN:
 
 DIAGRAM & VISUALISASI:
 - Jika user minta flowchart, diagram alur, sequence diagram, ER diagram, class diagram, use case, mind map, atau Gantt chart — SELALU gunakan code block dengan bahasa mermaid. Diagram akan dirender langsung sebagai visual di chat.
-- Pilih tipe diagram Mermaid yang paling sesuai: flowchart TD, sequenceDiagram, erDiagram, classDiagram, mindmap, gantt.
+- Tipe diagram Mermaid yang VALID dan didukung: flowchart TD, sequenceDiagram, erDiagram, classDiagram, stateDiagram-v2, mindmap, gantt, pie, gitGraph.
+- JANGAN PERNAH gunakan "usecaseDiagram" — tipe ini TIDAK ADA di Mermaid dan akan error. Untuk use case diagram, simulasikan dengan "flowchart TD" menggunakan actor sebagai node oval dan use case sebagai node persegi, dihubungkan dengan arrow.
 - Untuk flowchart: SELALU gunakan "flowchart TD" (top-down), bukan LR. Hindari arrow yang melompat ke atas atau melewati banyak level — buat alur linear yang bersih dari atas ke bawah. Gunakan subgraph untuk mengelompokkan node yang berkaitan jika diagram kompleks.
 - Pastikan syntax Mermaid valid dan bersih — jangan campur penjelasan di dalam blok mermaid.`;
 
