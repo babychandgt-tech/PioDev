@@ -6,6 +6,7 @@ import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/pris
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
+import { MermaidDiagram } from "@/components/mermaid-diagram";
 
 const LANG_DISPLAY: Record<string, string> = {
   js: "JavaScript", jsx: "JavaScript", ts: "TypeScript", tsx: "TypeScript",
@@ -35,6 +36,10 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
   };
 
   if (!inline && match) {
+    if (lang === "mermaid") {
+      return <MermaidDiagram code={codeStr} />;
+    }
+
     return (
       <div className={cn("group relative my-4 rounded-xl overflow-hidden border", isDark ? "bg-[#18181b] border-white/[0.07]" : "bg-zinc-50 border-black/[0.08]")}>
         <div className={cn("flex items-center justify-between px-4 py-2.5 border-b", isDark ? "border-white/[0.07] bg-white/[0.03]" : "border-black/[0.06] bg-black/[0.03]")}>
