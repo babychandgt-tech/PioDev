@@ -591,7 +591,7 @@ export function useChat(userId: string | undefined) {
                 messages: fullHistory,
                 stream: true,
                 stream_options: { include_usage: true },
-                ...(enableThinking && { enable_thinking: true }),
+                enable_thinking: enableThinking,
                 ...(enableSearch && { enable_search: true }),
               }),
               signal: abortControllerRef.current!.signal,

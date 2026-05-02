@@ -3569,7 +3569,7 @@ async function runChatGenerationBg(
           messages: history,
           stream: true,
           stream_options: { include_usage: true },
-          ...(enableThinking && { enable_thinking: true }),
+          enable_thinking: enableThinking,
         }),
       });
 
