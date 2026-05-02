@@ -10,7 +10,6 @@ import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { useChat } from "@/hooks/use-chat";
 import { ChatSidebar } from "@/components/chat-sidebar";
-import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
 
@@ -353,7 +352,6 @@ export default function ImageStudio() {
 
   if (!user) return null;
 
-  const selectedSizeObj = SIZES.find((s) => s.value === selectedSize) ?? SIZES[0];
   const canGenerate = !!(prompt.trim()) && !isGenerating && (isAdmin || !quota || quota.remaining > 0);
 
   return (
@@ -410,33 +408,35 @@ export default function ImageStudio() {
 
       {/* Main content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
+        {/* Header — matches Video/Voice Studio style */}
         <header className={cn(
           "flex items-center gap-3 px-4 py-3 border-b shrink-0",
           isDark ? "border-white/[0.06] bg-background" : "border-black/[0.06] bg-white"
         )}>
-          <button onClick={() => setIsMobileSidebarOpen(true)} className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors">
+          <button onClick={() => setIsMobileSidebarOpen(true)}
+            className="md:hidden p-2 rounded-lg hover:bg-muted transition-colors">
             <Menu className="w-5 h-5" />
           </button>
           <div className="flex items-center gap-2.5">
-            <Logo size={28} className="rounded-lg shadow-sm" />
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-indigo-400 flex items-center justify-center shadow-sm">
+              <ImageIcon className="w-4 h-4 text-white" />
+            </div>
             <div>
-              <h1 className="text-base font-bold tracking-tight">Image Studio</h1>
-              <p className="text-[11px] text-muted-foreground">Generate gambar AI · model otomatis</p>
+              <h1 className="text-base font-bold">Image Studio</h1>
+              <p className="text-[11px] text-muted-foreground -mt-0.5">Generate gambar dengan AI</p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
             {!isAdmin && quota && (
-              <span className={cn(
-                "text-xs font-medium px-2.5 py-1 rounded-full border",
-                quota.remaining <= 0
-                  ? "text-red-500 bg-red-500/10 border-red-500/20"
-                  : quota.remaining <= 3
-                  ? "text-orange-500 bg-orange-500/10 border-orange-500/20"
-                  : isDark ? "text-zinc-400 bg-zinc-800 border-zinc-700/60" : "text-zinc-600 bg-zinc-100 border-zinc-200"
+              <div className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium",
+                quota.remaining > 0
+                  ? isDark ? "bg-emerald-500/10 text-emerald-400" : "bg-emerald-50 text-emerald-600"
+                  : isDark ? "bg-red-500/10 text-red-400" : "bg-red-50 text-red-600"
               )}>
-                {quota.remaining}/{quota.limit} gambar hari ini
-              </span>
+                <Sparkles className="w-3 h-3" />
+                {quota.remaining}/{quota.limit}
+              </div>
             )}
             <button onClick={() => setTheme(isDark ? "light" : "dark")}
               className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
@@ -445,55 +445,44 @@ export default function ImageStudio() {
           </div>
         </header>
 
-        {/* Body: split layout */}
-        <div className="flex-1 flex overflow-hidden">
-          {/* Controls panel */}
-          <div className={cn(
-            "w-full md:w-[380px] md:border-r shrink-0 flex flex-col overflow-y-auto",
-            isDark ? "border-white/[0.06]" : "border-black/[0.06]"
-          )}>
-            <div className="flex flex-col gap-5 p-5">
+        {/* Body — single scrollable column, matches Video/Voice Studio */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
 
+            {/* ── Main input card ── */}
+            <div className={cn(
+              "rounded-2xl border p-5 space-y-5",
+              isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+            )}>
               {/* Prompt */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Prompt</label>
-                <div className={cn(
-                  "rounded-xl border overflow-hidden transition-colors",
-                  isDark ? "bg-zinc-900 border-zinc-700/60 focus-within:border-violet-500/50" : "bg-white border-zinc-200 focus-within:border-violet-500/50"
-                )}>
-                  <textarea
-                    ref={textareaRef}
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    onInput={handleTextareaInput}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Deskripsikan gambar yang ingin dibuat... (⌘+Enter untuk generate)"
-                    className="w-full bg-transparent border-0 p-3.5 text-sm focus:outline-none resize-none min-h-[100px] placeholder:text-muted-foreground/60 leading-relaxed"
-                    rows={4}
-                  />
-                  <div className={cn("flex items-center justify-between px-3 py-2 border-t", isDark ? "border-zinc-700/40" : "border-zinc-100")}>
-                    <span className="text-[11px] text-muted-foreground/50">{prompt.length} karakter</span>
-                    {prompt.trim() && (
-                      <button onClick={() => { setPrompt(""); if (textareaRef.current) textareaRef.current.style.height = "auto"; }}
-                        className="text-[11px] text-muted-foreground/50 hover:text-muted-foreground transition-colors flex items-center gap-1">
-                        <X className="w-3 h-3" /> Hapus
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+              <textarea
+                ref={textareaRef}
+                value={prompt}
+                onChange={(e) => setPrompt(e.target.value)}
+                onInput={handleTextareaInput}
+                onKeyDown={handleKeyDown}
+                placeholder="Deskripsikan gambar yang ingin kamu buat...&#10;Contoh: A serene mountain lake at sunrise, misty atmosphere, ultra detailed, cinematic"
+                rows={3}
+                className={cn(
+                  "w-full resize-none rounded-xl px-4 py-3 text-sm leading-relaxed border transition-all",
+                  "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40",
+                  isDark
+                    ? "bg-zinc-800/50 border-white/[0.06] placeholder:text-zinc-600"
+                    : "bg-zinc-50 border-black/[0.06] placeholder:text-zinc-400"
+                )}
+              />
 
               {/* Style presets */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Gaya</label>
+              <div>
+                <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Gaya</label>
                 <div className="flex flex-wrap gap-1.5">
                   {STYLE_PRESETS.map((s, i) => (
                     <button key={s.label} onClick={() => setSelectedStyle(i)}
                       className={cn(
                         "px-2.5 py-1 rounded-lg text-xs font-medium transition-all border",
                         selectedStyle === i
-                          ? "bg-violet-500/15 text-violet-500 border-violet-500/30"
-                          : isDark ? "bg-zinc-800 text-zinc-400 border-zinc-700/50 hover:border-zinc-600" : "bg-zinc-100 text-zinc-600 border-zinc-200 hover:border-zinc-300"
+                          ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20 text-foreground"
+                          : isDark ? "border-white/[0.06] bg-zinc-800/30 text-zinc-400 hover:bg-zinc-800/60" : "border-black/[0.06] bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
                       )}>
                       {s.label}
                     </button>
@@ -501,129 +490,109 @@ export default function ImageStudio() {
                 </div>
               </div>
 
-              {/* Size */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ukuran</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {SIZES.map((s) => (
-                    <button key={s.value} onClick={() => setSelectedSize(s.value)}
-                      className={cn(
-                        "flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all text-center",
-                        selectedSize === s.value
-                          ? "bg-violet-500/15 text-violet-500 border-violet-500/30"
-                          : isDark ? "bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600" : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:border-zinc-300"
-                      )}>
-                      {s.icon}
-                      <span className="text-[10px] font-semibold">{s.ratio}</span>
-                    </button>
-                  ))}
+              {/* Size + Count row */}
+              <div className="grid grid-cols-2 gap-5">
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Ukuran</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {SIZES.map((s) => (
+                      <button key={s.value} onClick={() => setSelectedSize(s.value)}
+                        className={cn(
+                          "flex flex-col items-center gap-1 p-2 rounded-xl border transition-all text-center",
+                          selectedSize === s.value
+                            ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                            : isDark ? "border-white/[0.06] bg-zinc-800/30 text-zinc-400 hover:bg-zinc-800/60" : "border-black/[0.06] bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                        )}>
+                        {s.icon}
+                        <span className="text-[10px] font-semibold">{s.ratio}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* Jumlah */}
-              <div className="flex flex-col gap-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Jumlah Gambar</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {[1, 2, 3, 4].map((n) => (
-                    <button key={n} onClick={() => setNumImages(n)}
-                      className={cn(
-                        "py-2.5 rounded-xl border text-sm font-semibold transition-all",
-                        numImages === n
-                          ? "bg-violet-500/15 text-violet-500 border-violet-500/30"
-                          : isDark ? "bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600" : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:border-zinc-300"
-                      )}>
-                      {n}
-                    </button>
-                  ))}
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">Jumlah</label>
+                  <div className="grid grid-cols-4 gap-1.5">
+                    {[1, 2, 3, 4].map((n) => (
+                      <button key={n} onClick={() => setNumImages(n)}
+                        className={cn(
+                          "py-2 rounded-xl border text-sm font-semibold transition-all",
+                          numImages === n
+                            ? "border-primary/40 bg-primary/5 ring-1 ring-primary/20"
+                            : isDark ? "border-white/[0.06] bg-zinc-800/30 text-zinc-400 hover:bg-zinc-800/60" : "border-black/[0.06] bg-zinc-50 text-zinc-600 hover:bg-zinc-100"
+                        )}>
+                        {n}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* Auto-model info */}
-              <div className={cn(
-                "flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs",
-                isDark ? "bg-zinc-800/50 border-zinc-700/40 text-zinc-400" : "bg-zinc-50 border-zinc-200 text-zinc-500"
-              )}>
-                <Cpu className="w-3.5 h-3.5 shrink-0 text-violet-400" />
-                <span>Model dipilih otomatis · sistem akan coba model terbaik yang tersedia</span>
               </div>
 
               {/* Error */}
               {error && (
                 <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                  className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
-                  <X className="w-4 h-4 shrink-0 mt-0.5" />
+                  className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+                  <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                   <span>{error}</span>
                 </motion.div>
               )}
 
-              {/* Generate button */}
-              <button
-                onClick={isGenerating ? () => { abortRef.current?.abort(); setIsGenerating(false); setProgress(""); } : generate}
-                disabled={!isGenerating && !canGenerate}
-                className={cn(
-                  "flex items-center justify-center gap-2 w-full py-3 rounded-xl text-sm font-semibold transition-all",
-                  isGenerating
-                    ? "bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20"
-                    : canGenerate
-                    ? "bg-violet-500 text-white hover:bg-violet-600 shadow-lg shadow-violet-500/25"
-                    : "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
-                )}>
-                {isGenerating ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    {progress || "Generating..."} · Batalkan
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-4 h-4" />
-                    Generate {numImages > 1 ? `${numImages} Gambar` : "Gambar"}
-                  </>
-                )}
-              </button>
-
-              {/* Size info */}
-              <p className="text-[11px] text-muted-foreground/50 text-center -mt-2">
-                {selectedSizeObj.label} ({selectedSizeObj.ratio}) · {selectedSizeObj.value.replace("*", "×")} px
-              </p>
-            </div>
-          </div>
-
-          {/* Results panel */}
-          <div className="hidden md:flex flex-1 flex-col overflow-y-auto">
-            {results.length === 0 && !isGenerating ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-10 text-center">
-                <div className={cn(
-                  "w-20 h-20 rounded-2xl flex items-center justify-center mb-5",
-                  isDark ? "bg-zinc-800" : "bg-zinc-100"
-                )}>
-                  <ImageIcon className="w-9 h-9 text-muted-foreground/40" />
+              {/* Bottom row: auto-model info + generate button */}
+              <div className="flex items-center gap-2 justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                  <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
+                  <span>Model dipilih otomatis</span>
                 </div>
-                <p className="text-base font-semibold text-foreground mb-1.5">Belum ada gambar</p>
-                <p className="text-sm text-muted-foreground max-w-xs">
-                  Tulis prompt di kiri, pilih gaya &amp; ukuran, lalu klik Generate.
-                </p>
-                <p className="text-xs text-muted-foreground/50 mt-2 max-w-xs">
-                  Model terbaik akan dipilih otomatis oleh sistem.
-                </p>
+                <button
+                  onClick={isGenerating
+                    ? () => { abortRef.current?.abort(); setIsGenerating(false); setProgress(""); }
+                    : generate}
+                  disabled={!isGenerating && !canGenerate}
+                  className={cn(
+                    "flex items-center gap-2 px-5 py-2 rounded-lg font-semibold text-xs transition-all shrink-0",
+                    isGenerating
+                      ? "bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20"
+                      : canGenerate
+                      ? "bg-gradient-to-r from-primary to-indigo-500 text-white shadow-md shadow-primary/20 hover:shadow-lg hover:shadow-primary/30 hover:brightness-110"
+                      : "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
+                  )}>
+                  {isGenerating ? (
+                    <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Batalkan</>
+                  ) : (
+                    <><Sparkles className="w-3.5 h-3.5" /> Generate {numImages > 1 ? `${numImages} Gambar` : "Gambar"}</>
+                  )}
+                </button>
               </div>
-            ) : (
-              <div className="p-5">
-                {/* Active model badge */}
-                {activeModelName && !isGenerating && (
-                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
-                    className={cn(
-                      "flex items-center gap-1.5 mb-4 px-3 py-2 rounded-lg border w-fit text-xs font-medium",
-                      isDark ? "bg-violet-500/10 border-violet-500/20 text-violet-400" : "bg-violet-50 border-violet-200 text-violet-600"
-                    )}>
-                    <Cpu className="w-3 h-3" />
-                    Dibuat dengan {activeModelName}
-                  </motion.div>
-                )}
+
+              {/* Progress indicator */}
+              {isGenerating && (
+                <p className="text-[11px] text-muted-foreground/50 text-center">{progress || "Memproses..."}</p>
+              )}
+            </div>
+
+            {/* ── Results section ── */}
+            {(results.length > 0 || isGenerating) && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hasil</h2>
+                  {activeModelName && !isGenerating && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium",
+                        isDark ? "bg-primary/10 border-primary/20 text-primary/80" : "bg-primary/5 border-primary/20 text-primary"
+                      )}>
+                      <Cpu className="w-3 h-3" />
+                      {activeModelName}
+                    </motion.div>
+                  )}
+                </div>
 
                 {isGenerating && results.length === 0 && (
-                  <div className="flex flex-col items-center justify-center py-20 gap-4">
-                    <div className="w-16 h-16 rounded-full border-2 border-violet-500/20 flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                  <div className={cn(
+                    "rounded-2xl border flex flex-col items-center justify-center py-16 gap-4",
+                    isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+                  )}>
+                    <div className="w-14 h-14 rounded-full border-2 border-primary/20 flex items-center justify-center">
+                      <Loader2 className="w-7 h-7 text-primary animate-spin" />
                     </div>
                     <div className="text-center">
                       <p className="text-sm font-medium text-muted-foreground">{progress || "Memproses..."}</p>
@@ -632,24 +601,27 @@ export default function ImageStudio() {
                   </div>
                 )}
 
-                <div className="columns-2 gap-3 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                   {isGenerating && results.length > 0 && (
                     <div className={cn(
-                      "break-inside-avoid rounded-xl border flex items-center justify-center aspect-square",
-                      isDark ? "bg-zinc-800/60 border-zinc-700/50" : "bg-zinc-100 border-zinc-200"
+                      "rounded-xl border flex items-center justify-center aspect-square",
+                      isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
                     )}>
                       <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
+                        <Loader2 className="w-7 h-7 text-primary animate-spin" />
                         <p className="text-xs text-muted-foreground">{progress}</p>
                       </div>
                     </div>
                   )}
                   {results.map((img, i) => (
-                    <motion.div key={i} initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                      className="break-inside-avoid group relative rounded-xl overflow-hidden cursor-pointer"
+                    <motion.div key={i}
+                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+                      className={cn(
+                        "group relative rounded-xl overflow-hidden cursor-pointer border",
+                        isDark ? "border-white/[0.06]" : "border-black/[0.06] shadow-sm"
+                      )}
                       onClick={() => setLightboxUrl(img.url)}>
-                      <img src={img.url} alt={img.prompt} className="w-full object-cover rounded-xl" loading="lazy" />
-                      {/* Model badge on image */}
+                      <img src={img.url} alt={img.prompt} className="w-full aspect-square object-cover" loading="lazy" />
                       <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-black/60 text-white/80">
                           {MODEL_LABELS[img.model] ?? img.model}
@@ -664,7 +636,14 @@ export default function ImageStudio() {
                             <Download className="w-3.5 h-3.5" />
                           </button>
                           <button
-                            onClick={(e) => { e.stopPropagation(); setPrompt(img.prompt); if (textareaRef.current) { textareaRef.current.style.height = "auto"; textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`; } }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPrompt(img.prompt);
+                              if (textareaRef.current) {
+                                textareaRef.current.style.height = "auto";
+                                textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
+                              }
+                            }}
                             className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
                             title="Gunakan prompt ini">
                             <RefreshCw className="w-3.5 h-3.5" />
@@ -676,6 +655,26 @@ export default function ImageStudio() {
                 </div>
               </div>
             )}
+
+            {/* ── Empty state ── */}
+            {results.length === 0 && !isGenerating && (
+              <div className={cn(
+                "rounded-2xl border flex flex-col items-center justify-center py-20 text-center",
+                isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+              )}>
+                <div className={cn(
+                  "w-16 h-16 rounded-2xl flex items-center justify-center mb-4",
+                  isDark ? "bg-zinc-800" : "bg-zinc-100"
+                )}>
+                  <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+                </div>
+                <p className="text-sm font-semibold text-foreground mb-1">Belum ada gambar</p>
+                <p className="text-xs text-muted-foreground max-w-xs">
+                  Tulis prompt di atas, pilih gaya &amp; ukuran, lalu klik Generate.
+                </p>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
