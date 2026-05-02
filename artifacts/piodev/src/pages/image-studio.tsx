@@ -3,8 +3,8 @@ import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Image as ImageIcon, Menu, Sparkles, Download, X, Loader2,
-  ChevronDown, RefreshCw, Sun, Moon, Square, RectangleHorizontal,
-  RectangleVertical, LayoutTemplate,
+  RefreshCw, Sun, Moon, Square, RectangleHorizontal,
+  RectangleVertical, LayoutTemplate, Cpu,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -19,31 +19,40 @@ type GenSize = { label: string; value: string; icon: React.ReactNode; ratio: str
 type StylePreset = { label: string; suffix: string };
 type GeneratedImage = { url: string; prompt: string; model: string; size: string };
 
-// ── Constants ─────────────────────────────────────────────────────────────────
-const MODELS = [
-  { value: "qwen-image-2.0-pro", label: "Qwen Image 2.0 Pro", badge: "Best" },
-  { value: "qwen-image-max",     label: "Qwen Image Max",     badge: null },
-  { value: "qwen-image-plus",    label: "Qwen Image Plus",    badge: null },
-  { value: "qwen-image-2.0",     label: "Qwen Image 2.0",     badge: null },
-  { value: "wan2.7-image-pro",   label: "Wan2.7 Image Pro",   badge: "New" },
-  { value: "wan2.7-image",       label: "Wan2.7 Image",       badge: null },
+// ── Model fallback chain — system tries each in order, best → fallback ─────────
+const MODEL_CHAIN = [
+  "qwen-image-2.0-pro",
+  "wan2.7-image-pro",
+  "qwen-image-max",
+  "qwen-image-plus",
+  "wan2.7-image",
+  "qwen-image-2.0",
 ];
 
+const MODEL_LABELS: Record<string, string> = {
+  "qwen-image-2.0-pro": "Qwen Image 2.0 Pro",
+  "wan2.7-image-pro":   "Wan2.7 Image Pro",
+  "qwen-image-max":     "Qwen Image Max",
+  "qwen-image-plus":    "Qwen Image Plus",
+  "wan2.7-image":       "Wan2.7 Image",
+  "qwen-image-2.0":     "Qwen Image 2.0",
+};
+
 const SIZES: GenSize[] = [
-  { label: "Square", value: "1024*1024", icon: <Square className="w-3.5 h-3.5" />, ratio: "1:1" },
-  { label: "Landscape", value: "1280*720", icon: <RectangleHorizontal className="w-3.5 h-3.5" />, ratio: "16:9" },
-  { label: "Portrait", value: "720*1280", icon: <RectangleVertical className="w-3.5 h-3.5" />, ratio: "9:16" },
-  { label: "Classic", value: "1024*768", icon: <LayoutTemplate className="w-3.5 h-3.5" />, ratio: "4:3" },
+  { label: "Square",    value: "1024*1024", icon: <Square className="w-3.5 h-3.5" />,            ratio: "1:1"  },
+  { label: "Landscape", value: "1280*720",  icon: <RectangleHorizontal className="w-3.5 h-3.5" />, ratio: "16:9" },
+  { label: "Portrait",  value: "720*1280",  icon: <RectangleVertical className="w-3.5 h-3.5" />,   ratio: "9:16" },
+  { label: "Classic",   value: "1024*768",  icon: <LayoutTemplate className="w-3.5 h-3.5" />,      ratio: "4:3"  },
 ];
 
 const STYLE_PRESETS: StylePreset[] = [
-  { label: "Default", suffix: "" },
-  { label: "Realistic", suffix: ", realistic photo, ultra detailed, 8k" },
-  { label: "Cinematic", suffix: ", cinematic lighting, film grain, dramatic composition" },
-  { label: "Anime", suffix: ", anime style, vibrant colors, detailed illustration" },
+  { label: "Default",      suffix: "" },
+  { label: "Realistic",    suffix: ", realistic photo, ultra detailed, 8k" },
+  { label: "Cinematic",    suffix: ", cinematic lighting, film grain, dramatic composition" },
+  { label: "Anime",        suffix: ", anime style, vibrant colors, detailed illustration" },
   { label: "Illustration", suffix: ", digital illustration, flat design, vector art" },
-  { label: "3D Render", suffix: ", 3D render, blender, octane render, studio lighting" },
-  { label: "Sketch", suffix: ", pencil sketch, hand drawn, black and white" },
+  { label: "3D Render",    suffix: ", 3D render, blender, octane render, studio lighting" },
+  { label: "Sketch",       suffix: ", pencil sketch, hand drawn, black and white" },
   { label: "Oil Painting", suffix: ", oil painting style, canvas texture, impasto" },
 ];
 
@@ -64,21 +73,19 @@ export default function ImageStudio() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Generation state
-  const [prompt, setPrompt] = useState("");
-  const [selectedModel, setSelectedModel] = useState(MODELS[0].value);
-  const [selectedSize, setSelectedSize] = useState(SIZES[0].value);
+  const [prompt, setPrompt]           = useState("");
+  const [selectedSize, setSelectedSize]   = useState(SIZES[0].value);
   const [selectedStyle, setSelectedStyle] = useState(0);
-  const [numImages, setNumImages] = useState(1);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [progress, setProgress] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [results, setResults] = useState<GeneratedImage[]>([]);
-  const [quota, setQuota] = useState<{ remaining: number; limit: number } | null>(null);
-  const [isModelOpen, setIsModelOpen] = useState(false);
+  const [numImages, setNumImages]     = useState(1);
+  const [isGenerating, setIsGenerating]   = useState(false);
+  const [progress, setProgress]       = useState("");
+  const [error, setError]             = useState<string | null>(null);
+  const [results, setResults]         = useState<GeneratedImage[]>([]);
+  const [quota, setQuota]             = useState<{ remaining: number; limit: number } | null>(null);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const modelDropRef = useRef<HTMLDivElement>(null);
+  const [activeModelName, setActiveModelName] = useState<string | null>(null);
+  const abortRef     = useRef<AbortController | null>(null);
+  const textareaRef  = useRef<HTMLTextAreaElement>(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -94,14 +101,6 @@ export default function ImageStudio() {
     fetchQuota();
   }, [user?.id]);
 
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (modelDropRef.current && !modelDropRef.current.contains(e.target as Node)) setIsModelOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
   const handleTextareaInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -109,6 +108,7 @@ export default function ImageStudio() {
     }
   };
 
+  // ── Fallback chain generate ─────────────────────────────────────────────────
   const generate = useCallback(async () => {
     if (!prompt.trim() || isGenerating) return;
     if (!isAdmin && quota && quota.remaining <= 0) {
@@ -119,81 +119,107 @@ export default function ImageStudio() {
     abortRef.current = new AbortController();
     setIsGenerating(true);
     setError(null);
-    setProgress("Mengirim permintaan...");
+    setActiveModelName(null);
+    setProgress("Mencari model terbaik...");
 
-    const styleObj = STYLE_PRESETS[selectedStyle];
+    const styleObj  = STYLE_PRESETS[selectedStyle];
     const fullPrompt = prompt.trim() + styleObj.suffix;
+    const token     = await getToken();
 
-    try {
-      const token = await getToken();
-      setProgress("Memproses gambar...");
+    let succeeded = false;
 
-      const submitRes = await fetch("/api/dashscope/api/v1/services/aigc/text2image/image-synthesis", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "X-DashScope-Async": "enable",
-        },
-        body: JSON.stringify({
-          model: selectedModel,
-          input: { prompt: fullPrompt },
-          parameters: { size: selectedSize, n: numImages },
-        }),
-        signal: abortRef.current.signal,
-      });
+    for (const model of MODEL_CHAIN) {
+      if (abortRef.current.signal.aborted) break;
 
-      if (submitRes.status === 429) {
-        const body = await submitRes.json().catch(() => ({}));
-        throw new Error(body.error ?? "Kuota generate gambar habis.");
-      }
-      if (!submitRes.ok) {
-        const body = await submitRes.json().catch(() => ({}));
-        throw new Error(body.error?.message || body.message || "Gagal submit task.");
-      }
+      setProgress(`Mencoba ${MODEL_LABELS[model] ?? model}...`);
 
-      const submitData = await submitRes.json();
-      const taskId = submitData.output?.task_id;
-      if (!taskId) throw new Error("Task ID tidak ditemukan.");
-
-      // Poll
-      for (let i = 0; i < 45; i++) {
-        if (abortRef.current.signal.aborted) throw new DOMException("Aborted", "AbortError");
-        await new Promise((r) => setTimeout(r, 2000));
-        setProgress(`Menunggu hasil... (${(i + 1) * 2}s)`);
-
-        const pollRes = await fetch(`/api/dashscope/api/v1/tasks/${taskId}`, {
-          headers: { Authorization: `Bearer ${token}` },
+      try {
+        const submitRes = await fetch("/api/dashscope/api/v1/services/aigc/text2image/image-synthesis", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json",
+            "X-DashScope-Async": "enable",
+          },
+          body: JSON.stringify({
+            model,
+            input: { prompt: fullPrompt },
+            parameters: { size: selectedSize, n: numImages },
+          }),
           signal: abortRef.current.signal,
         });
-        if (!pollRes.ok) continue;
-        const pollData = await pollRes.json();
-        const status = pollData.output?.task_status;
 
-        if (status === "SUCCEEDED") {
-          const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
-          const newImages: GeneratedImage[] = urls.map((url) => ({
-            url,
-            prompt: prompt.trim(),
-            model: selectedModel,
-            size: selectedSize,
-          }));
-          setResults((prev) => [...newImages, ...prev]);
-          if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
+        // Quota hit (our own quota gate) — stop entirely
+        if (submitRes.status === 429) {
+          const body = await submitRes.json().catch(() => ({}));
+          throw new Error(body.error ?? "Kuota generate gambar habis.");
+        }
+
+        // Model-level error (rate limit from DashScope, invalid param, etc.) — try next model
+        if (!submitRes.ok) continue;
+
+        const submitData = await submitRes.json();
+        const taskId = submitData.output?.task_id;
+        if (!taskId) continue;
+
+        // Poll for result
+        setProgress(`Memproses dengan ${MODEL_LABELS[model] ?? model}...`);
+        let taskSucceeded = false;
+
+        for (let i = 0; i < 45; i++) {
+          if (abortRef.current.signal.aborted) throw new DOMException("Aborted", "AbortError");
+          await new Promise((r) => setTimeout(r, 2000));
+          setProgress(`${MODEL_LABELS[model] ?? model} · ${(i + 1) * 2}s...`);
+
+          const pollRes = await fetch(`/api/dashscope/api/v1/tasks/${taskId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal: abortRef.current.signal,
+          });
+          if (!pollRes.ok) continue;
+
+          const pollData = await pollRes.json();
+          const status   = pollData.output?.task_status;
+
+          if (status === "SUCCEEDED") {
+            const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
+            if (urls.length === 0) break;
+            const newImages: GeneratedImage[] = urls.map((url) => ({
+              url, prompt: prompt.trim(), model, size: selectedSize,
+            }));
+            setResults((prev) => [...newImages, ...prev]);
+            setActiveModelName(MODEL_LABELS[model] ?? model);
+            if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
+            taskSucceeded = true;
+            succeeded = true;
+            break;
+          }
+
+          // Task failed — try next model
+          if (status === "FAILED" || status === "CANCELED") break;
+        }
+
+        if (succeeded) break;
+        if (!taskSucceeded) continue;
+
+      } catch (err: any) {
+        if (err?.name === "AbortError") break;
+        // Hard error (quota) — stop chain
+        if (err?.message?.includes("Kuota")) {
+          setError(err.message);
           break;
         }
-        if (status === "FAILED" || status === "CANCELED") {
-          throw new Error("Generate gambar gagal.");
-        }
+        // Other error — try next model
+        continue;
       }
-    } catch (err: any) {
-      if (err?.name === "AbortError") return;
-      setError(err.message || "Terjadi kesalahan.");
-    } finally {
-      setIsGenerating(false);
-      setProgress("");
     }
-  }, [prompt, selectedModel, selectedSize, selectedStyle, numImages, isGenerating, isAdmin, quota]);
+
+    if (!succeeded && !abortRef.current.signal.aborted && !error) {
+      setError("Semua model sedang tidak tersedia. Coba lagi dalam beberapa saat.");
+    }
+
+    setIsGenerating(false);
+    setProgress("");
+  }, [prompt, selectedSize, selectedStyle, numImages, isGenerating, isAdmin, quota, error]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate();
@@ -211,7 +237,6 @@ export default function ImageStudio() {
 
   if (!user) return null;
 
-  const selectedModelObj = MODELS.find((m) => m.value === selectedModel) ?? MODELS[0];
   const selectedSizeObj = SIZES.find((s) => s.value === selectedSize) ?? SIZES[0];
   const canGenerate = !!(prompt.trim()) && !isGenerating && (isAdmin || !quota || quota.remaining > 0);
 
@@ -281,7 +306,7 @@ export default function ImageStudio() {
             <Logo size={28} className="rounded-lg shadow-sm" />
             <div>
               <h1 className="text-base font-bold tracking-tight">Image Studio</h1>
-              <p className="text-[11px] text-muted-foreground">Generate gambar AI dengan Qwen & Wan</p>
+              <p className="text-[11px] text-muted-foreground">Generate gambar AI · model otomatis</p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -304,7 +329,7 @@ export default function ImageStudio() {
           </div>
         </header>
 
-        {/* Body: split layout — controls left, results right on desktop */}
+        {/* Body: split layout */}
         <div className="flex-1 flex overflow-hidden">
           {/* Controls panel */}
           <div className={cn(
@@ -379,68 +404,31 @@ export default function ImageStudio() {
                 </div>
               </div>
 
-              {/* Model & count row */}
-              <div className="grid grid-cols-2 gap-3">
-                {/* Model selector */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Model</label>
-                  <div ref={modelDropRef} className="relative">
-                    <button
-                      onClick={() => setIsModelOpen((v) => !v)}
+              {/* Jumlah */}
+              <div className="flex flex-col gap-2">
+                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Jumlah Gambar</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[1, 2, 3, 4].map((n) => (
+                    <button key={n} onClick={() => setNumImages(n)}
                       className={cn(
-                        "w-full flex items-center justify-between gap-1 px-3 py-2 rounded-xl border text-sm transition-all",
-                        isDark ? "bg-zinc-900 border-zinc-700/60 hover:border-zinc-600 text-zinc-200" : "bg-white border-zinc-200 hover:border-zinc-300 text-zinc-700"
+                        "py-2.5 rounded-xl border text-sm font-semibold transition-all",
+                        numImages === n
+                          ? "bg-violet-500/15 text-violet-500 border-violet-500/30"
+                          : isDark ? "bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600" : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:border-zinc-300"
                       )}>
-                      <span className="truncate text-xs font-medium">{selectedModelObj.label}</span>
-                      <ChevronDown className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      {n}
                     </button>
-                    <AnimatePresence>
-                      {isModelOpen && (
-                        <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
-                          className={cn(
-                            "absolute left-0 top-full mt-1 w-56 rounded-xl border shadow-xl z-20 overflow-hidden",
-                            isDark ? "bg-zinc-900 border-zinc-700/60" : "bg-white border-zinc-200"
-                          )}>
-                          {MODELS.map((m) => (
-                            <button key={m.value}
-                              onClick={() => { setSelectedModel(m.value); setIsModelOpen(false); }}
-                              className={cn(
-                                "w-full flex items-center justify-between px-3 py-2.5 text-xs font-medium transition-colors text-left",
-                                selectedModel === m.value
-                                  ? "text-violet-500 bg-violet-500/10"
-                                  : isDark ? "text-zinc-300 hover:bg-zinc-800" : "text-zinc-700 hover:bg-zinc-50"
-                              )}>
-                              {m.label}
-                              {m.badge && (
-                                <span className={cn("px-1.5 py-0.5 rounded-md text-[10px] font-semibold",
-                                  m.badge === "Best" ? "bg-violet-500/15 text-violet-500" : "bg-green-500/15 text-green-500"
-                                )}>{m.badge}</span>
-                              )}
-                            </button>
-                          ))}
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                  ))}
                 </div>
+              </div>
 
-                {/* Num images */}
-                <div className="flex flex-col gap-2">
-                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Jumlah</label>
-                  <div className="grid grid-cols-4 gap-1.5">
-                    {[1, 2, 3, 4].map((n) => (
-                      <button key={n} onClick={() => setNumImages(n)}
-                        className={cn(
-                          "py-2 rounded-xl border text-xs font-semibold transition-all",
-                          numImages === n
-                            ? "bg-violet-500/15 text-violet-500 border-violet-500/30"
-                            : isDark ? "bg-zinc-800/60 text-zinc-400 border-zinc-700/50 hover:border-zinc-600" : "bg-zinc-50 text-zinc-600 border-zinc-200 hover:border-zinc-300"
-                        )}>
-                        {n}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              {/* Auto-model info */}
+              <div className={cn(
+                "flex items-center gap-2 px-3 py-2.5 rounded-xl border text-xs",
+                isDark ? "bg-zinc-800/50 border-zinc-700/40 text-zinc-400" : "bg-zinc-50 border-zinc-200 text-zinc-500"
+              )}>
+                <Cpu className="w-3.5 h-3.5 shrink-0 text-violet-400" />
+                <span>Model dipilih otomatis · sistem akan coba model terbaik yang tersedia</span>
               </div>
 
               {/* Error */}
@@ -467,7 +455,7 @@ export default function ImageStudio() {
                 {isGenerating ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    {progress || "Generating..."} (Batalkan)
+                    {progress || "Generating..."} · Batalkan
                   </>
                 ) : (
                   <>
@@ -496,19 +484,35 @@ export default function ImageStudio() {
                 </div>
                 <p className="text-base font-semibold text-foreground mb-1.5">Belum ada gambar</p>
                 <p className="text-sm text-muted-foreground max-w-xs">
-                  Tulis prompt di kiri, pilih gaya & ukuran, lalu klik Generate.
+                  Tulis prompt di kiri, pilih gaya &amp; ukuran, lalu klik Generate.
+                </p>
+                <p className="text-xs text-muted-foreground/50 mt-2 max-w-xs">
+                  Model terbaik akan dipilih otomatis oleh sistem.
                 </p>
               </div>
             ) : (
               <div className="p-5">
+                {/* Active model badge */}
+                {activeModelName && !isGenerating && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className={cn(
+                      "flex items-center gap-1.5 mb-4 px-3 py-2 rounded-lg border w-fit text-xs font-medium",
+                      isDark ? "bg-violet-500/10 border-violet-500/20 text-violet-400" : "bg-violet-50 border-violet-200 text-violet-600"
+                    )}>
+                    <Cpu className="w-3 h-3" />
+                    Dibuat dengan {activeModelName}
+                  </motion.div>
+                )}
+
                 {isGenerating && results.length === 0 && (
                   <div className="flex flex-col items-center justify-center py-20 gap-4">
-                    <div className="relative">
-                      <div className="w-16 h-16 rounded-full border-2 border-violet-500/20 flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
-                      </div>
+                    <div className="w-16 h-16 rounded-full border-2 border-violet-500/20 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 text-violet-500 animate-spin" />
                     </div>
-                    <p className="text-sm font-medium text-muted-foreground">{progress || "Memproses..."}</p>
+                    <div className="text-center">
+                      <p className="text-sm font-medium text-muted-foreground">{progress || "Memproses..."}</p>
+                      <p className="text-xs text-muted-foreground/50 mt-1">Sistem memilih model terbaik untukmu</p>
+                    </div>
                   </div>
                 )}
 
@@ -529,6 +533,12 @@ export default function ImageStudio() {
                       className="break-inside-avoid group relative rounded-xl overflow-hidden cursor-pointer"
                       onClick={() => setLightboxUrl(img.url)}>
                       <img src={img.url} alt={img.prompt} className="w-full object-cover rounded-xl" loading="lazy" />
+                      {/* Model badge on image */}
+                      <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-black/60 text-white/80">
+                          {MODEL_LABELS[img.model] ?? img.model}
+                        </span>
+                      </div>
                       <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors rounded-xl flex items-end justify-end p-2.5 opacity-0 group-hover:opacity-100">
                         <div className="flex gap-1.5">
                           <button
@@ -552,60 +562,28 @@ export default function ImageStudio() {
             )}
           </div>
         </div>
-
-        {/* Mobile results (below controls) */}
-        <div className={cn(
-          "md:hidden border-t",
-          isDark ? "border-white/[0.06]" : "border-black/[0.06]"
-        )}>
-          {isGenerating ? (
-            <div className="flex items-center justify-center gap-2 py-6 text-muted-foreground text-sm">
-              <Loader2 className="w-4 h-4 animate-spin text-violet-500" />
-              {progress || "Generating..."}
-            </div>
-          ) : results.length > 0 ? (
-            <div className="p-4 grid grid-cols-2 gap-2">
-              {results.slice(0, 6).map((img, i) => (
-                <div key={i} className="relative rounded-xl overflow-hidden group cursor-pointer"
-                  onClick={() => setLightboxUrl(img.url)}>
-                  <img src={img.url} alt={img.prompt} className="w-full aspect-square object-cover" loading="lazy" />
-                  <button
-                    onClick={(e) => { e.stopPropagation(); downloadImage(img.url, i); }}
-                    className="absolute bottom-1.5 right-1.5 p-1.5 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </div>
       </div>
 
       {/* Lightbox */}
       <AnimatePresence>
         {lightboxUrl && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4"
+            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
             onClick={() => setLightboxUrl(null)}>
-            <button
-              onClick={() => setLightboxUrl(null)}
-              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors">
-              <X className="w-5 h-5" />
-            </button>
             <motion.img
               initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
-              src={lightboxUrl}
-              alt=""
-              className="max-h-[90vh] max-w-[90vw] rounded-2xl shadow-2xl object-contain"
+              src={lightboxUrl} alt="Preview"
+              className="max-w-full max-h-full rounded-xl object-contain shadow-2xl"
               onClick={(e) => e.stopPropagation()}
             />
-            <div className="absolute bottom-5 flex gap-2">
-              <button
-                onClick={(e) => { e.stopPropagation(); downloadImage(lightboxUrl, 0); }}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors text-sm font-medium">
-                <Download className="w-4 h-4" /> Download
-              </button>
-            </div>
+            <button onClick={() => setLightboxUrl(null)}
+              className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors">
+              <X className="w-5 h-5" />
+            </button>
+            <button onClick={() => { downloadImage(lightboxUrl, 0); }}
+              className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-medium transition-colors">
+              <Download className="w-4 h-4" /> Download
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
