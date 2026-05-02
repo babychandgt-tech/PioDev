@@ -5,7 +5,7 @@ import {
   Menu, Plus,
   Send, Square, Terminal, Cpu, Lightbulb, Code,
   Sun, Moon, X, ImageIcon, FileText, Check, Copy, ArrowDown, RotateCcw,
-  Globe, Brain, ChevronDown, Sparkles, Download,
+  Globe, Brain, ChevronDown, Download,
   MoreHorizontal, Star, Pencil, Trash2, Gift, Lock,
   AudioLines, Library,
 } from "lucide-react";
@@ -152,9 +152,6 @@ export default function ChatPage() {
     localStorage.setItem("pioo-model-tier", tier);
     setIsModelDropdownOpen(false);
   };
-  const [imageGenEnabled, setImageGenEnabled] = useState(false);
-  const [imageGenQuota, setImageGenQuota] = useState<{ remaining: number; limit: number } | null>(null);
-
   // Multi-attachment state
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
@@ -331,25 +328,6 @@ export default function ChatPage() {
     }
   }, [premiumStatus, isAdmin, modelTier]);
 
-  // Fetch kuota image gen harian
-  useEffect(() => {
-    if (!user?.id) return;
-    const fetchQuota = async () => {
-      try {
-        const { data: { session } } = await (await import("@/lib/supabase")).supabase.auth.getSession();
-        const token = session?.access_token ?? "";
-        const res = await fetch("/api/image-gen-quota", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setImageGenQuota({ remaining: data.remaining, limit: data.limit });
-        }
-      } catch {}
-    };
-    fetchQuota();
-  }, [user?.id]);
-
   const handleInputInput = () => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -479,15 +457,11 @@ export default function ChatPage() {
       input.trim(),
       attachedImages.length ? attachedImages : undefined,
       attachedFiles.length ? attachedFiles : undefined,
-      { webSearch: webSearchEnabled, thinking: thinkingEnabled, imageGen: imageGenEnabled, modelTier },
+      { webSearch: webSearchEnabled, thinking: thinkingEnabled, modelTier },
     );
-    if (imageGenEnabled && imageGenQuota) {
-      setImageGenQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
-    }
     setInput("");
     setAttachedImages([]);
     setAttachedFiles([]);
-    setImageGenEnabled(false);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
   };
 
@@ -1089,7 +1063,7 @@ export default function ChatPage() {
                   onInput={handleInputInput}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}
-                  placeholder={imageGenEnabled ? "Deskripsikan gambar yang ingin dibuat..." : "Tulis pesan..."}
+                  placeholder="Tulis pesan..."
                   className="w-full max-h-[120px] bg-transparent border-0 pt-3.5 pb-1 px-4 text-[15px] focus:outline-none resize-none placeholder:text-muted-foreground/70"
                   rows={1}
                 />
@@ -1180,26 +1154,6 @@ export default function ChatPage() {
                   >
                     <Brain className="w-3.5 h-3.5 shrink-0" />
                     <span className="hidden sm:inline">Think</span>
-                  </button>
-
-                  {/* Image Generation toggle */}
-                  <button
-                    onClick={() => setImageGenEnabled((v) => !v)}
-                    className={cn(
-                      "flex items-center gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
-                      imageGenEnabled
-                        ? "bg-violet-500/15 text-violet-500"
-                        : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                    )}
-                    title={imageGenQuota ? `Generate Gambar (${imageGenQuota.remaining}/${imageGenQuota.limit} tersisa hari ini)` : "Generate Gambar"}
-                  >
-                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
-                    <span className="hidden sm:inline">Image</span>
-                    {imageGenQuota && !isAdmin && (
-                      <span className="hidden sm:inline text-[10px] opacity-60">
-                        {imageGenQuota.remaining}/{imageGenQuota.limit}
-                      </span>
-                    )}
                   </button>
 
                   <div className="flex-1" />
