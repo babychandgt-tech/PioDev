@@ -20,28 +20,62 @@ type StylePreset = { label: string; suffix: string };
 type GeneratedImage = { url: string; prompt: string; model: string; size: string };
 
 // ── Model fallback chain — system tries each in order, best → fallback ─────────
-// All verified working on /api/v1/services/aigc/text2image/image-synthesis (intl).
-// Models returning "url error" on that endpoint are excluded (they need a different
-// API path not yet available: qwen-image-2.0-pro, qwen-image-max, wan2.7-*, wan2.6-*,
-// qwen-image-2.0, z-image-turbo).
+// Two endpoint types:
+//   MULTIMODAL  → /multimodal-generation/generation  (sync, returns image URL directly)
+//   TEXT2IMAGE  → /text2image/image-synthesis        (async task polling)
 const MODEL_CHAIN = [
-  "qwen-image-plus",     // ✅ Best accessible quality — flagship on this endpoint
-  "qwen-image",          // ✅ Balanced quality & speed
-  "wan2.2-t2i-plus",     // ✅ Wan 2.2 — high artistic quality
-  "wan2.5-t2i-preview",  // ✅ Wan 2.5 preview — newer generation
-  "wan2.2-t2i-flash",    // ✅ Wan 2.2 — fast
-  "wan2.1-t2i-plus",     // ✅ Wan 2.1 Plus
-  "wan2.1-t2i-turbo",    // ✅ Wan 2.1 Turbo — fastest stable fallback
+  // ── Multimodal sync endpoint (best quality) ─────────────────────────────
+  "qwen-image-2.0-pro",   // Qwen Image 2.0 Pro  — best quality + text rendering
+  "qwen-image-max",       // Qwen Image Max       — high realism, fewer AI artifacts
+  "qwen-image-2.0",       // Qwen Image 2.0       — balanced quality & speed
+  // ── Text2Image async endpoint (confirmed working) ───────────────────────
+  "qwen-image-plus",      // Qwen Image Plus      — diverse styles + text rendering
+  "qwen-image",           // Qwen Image           — balanced
+  "wan2.2-t2i-plus",      // Wan 2.2 Plus         — high artistic quality
+  "wan2.5-t2i-preview",   // Wan 2.5 Preview      — newer generation
+  "wan2.2-t2i-flash",     // Wan 2.2 Flash        — fast
+  "wan2.1-t2i-plus",      // Wan 2.1 Plus
+  "wan2.1-t2i-turbo",     // Wan 2.1 Turbo        — fastest stable fallback
 ];
 
 const MODEL_LABELS: Record<string, string> = {
-  "qwen-image-plus":    "Qwen Image Plus",
-  "qwen-image":         "Qwen Image",
-  "wan2.2-t2i-plus":    "Wan 2.2 Plus",
-  "wan2.5-t2i-preview": "Wan 2.5 Preview",
-  "wan2.2-t2i-flash":   "Wan 2.2 Flash",
-  "wan2.1-t2i-plus":    "Wan 2.1 Plus",
-  "wan2.1-t2i-turbo":   "Wan 2.1 Turbo",
+  "qwen-image-2.0-pro":   "Qwen Image 2.0 Pro",
+  "qwen-image-max":       "Qwen Image Max",
+  "qwen-image-2.0":       "Qwen Image 2.0",
+  "qwen-image-plus":      "Qwen Image Plus",
+  "qwen-image":           "Qwen Image",
+  "wan2.2-t2i-plus":      "Wan 2.2 Plus",
+  "wan2.5-t2i-preview":   "Wan 2.5 Preview",
+  "wan2.2-t2i-flash":     "Wan 2.2 Flash",
+  "wan2.1-t2i-plus":      "Wan 2.1 Plus",
+  "wan2.1-t2i-turbo":     "Wan 2.1 Turbo",
+};
+
+// Models that use the multimodal-generation/generation sync endpoint
+const MULTIMODAL_MODELS = new Set([
+  "qwen-image-2.0-pro",
+  "qwen-image-2.0-pro-2026-04-22",
+  "qwen-image-2.0-pro-2026-03-03",
+  "qwen-image-max",
+  "qwen-image-max-2025-12-30",
+  "qwen-image-2.0",
+  "qwen-image-2.0-2026-03-03",
+]);
+
+// Size mapping: UI size value → multimodal endpoint size per model group
+// qwen-image-2.0 series: up to 2048*2048
+const MM_SIZES_V2: Record<string, string> = {
+  "1024*1024": "2048*2048",
+  "1280*720":  "2688*1536",
+  "720*1280":  "1536*2688",
+  "1024*768":  "2368*1728",
+};
+// qwen-image-max / qwen-image-plus series (on multimodal endpoint)
+const MM_SIZES_MAXPLUS: Record<string, string> = {
+  "1024*1024": "1328*1328",
+  "1280*720":  "1664*928",
+  "720*1280":  "928*1664",
+  "1024*768":  "1472*1104",
 };
 
 const SIZES: GenSize[] = [
@@ -128,9 +162,9 @@ export default function ImageStudio() {
     setActiveModelName(null);
     setProgress("Mencari model terbaik...");
 
-    const styleObj  = STYLE_PRESETS[selectedStyle];
+    const styleObj   = STYLE_PRESETS[selectedStyle];
     const fullPrompt = prompt.trim() + styleObj.suffix;
-    const token     = await getToken();
+    const token      = await getToken();
 
     let succeeded = false;
 
@@ -140,108 +174,157 @@ export default function ImageStudio() {
       setProgress(`Mencoba ${MODEL_LABELS[model] ?? model}...`);
 
       try {
-        const submitRes = await fetch("/api/dashscope/api/v1/services/aigc/text2image/image-synthesis", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json",
-            "X-DashScope-Async": "enable",
-          },
-          body: JSON.stringify({
-            model,
-            input: { prompt: fullPrompt },
-            parameters: { size: selectedSize, n: numImages },
-          }),
-          signal: abortRef.current.signal,
-        });
+        // ── Branch: choose endpoint & payload based on model type ─────────
+        if (MULTIMODAL_MODELS.has(model)) {
+          // ── Multimodal sync endpoint ─────────────────────────────────────
+          // qwen-image-2.0-pro/max/2.0 use /multimodal-generation/generation
+          // Size must be remapped to the correct resolution for this endpoint.
+          const isV2 = model.startsWith("qwen-image-2.0");
+          const mappedSize = (isV2 ? MM_SIZES_V2 : MM_SIZES_MAXPLUS)[selectedSize] ?? selectedSize;
 
-        // Quota hit (our own quota gate) — stop entirely
-        if (submitRes.status === 429) {
-          const body = await submitRes.json().catch(() => ({}));
-          throw new Error(body.error ?? "Kuota generate gambar habis.");
-        }
+          const mmRes = await fetch("/api/dashscope/api/v1/services/aigc/multimodal-generation/generation", {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model,
+              input: { messages: [{ role: "user", content: [{ text: fullPrompt }] }] },
+              parameters: { size: mappedSize, n: 1, watermark: false },
+            }),
+            signal: abortRef.current.signal,
+          });
 
-        // Model-level error — log and try next model
-        if (!submitRes.ok) {
-          const errBody = await submitRes.json().catch(() => ({}));
-          console.warn(`[ImageChain] ${model} submit failed — HTTP ${submitRes.status}:`, errBody);
-          continue;
-        }
+          if (mmRes.status === 429) {
+            const body = await mmRes.json().catch(() => ({}));
+            // Our own quota gate — stop entirely; DashScope 429 — try next model
+            if (body.error) throw new Error(body.error);
+            console.warn(`[ImageChain] ${model} DashScope rate-limit — skip`);
+            continue;
+          }
 
-        const submitData = await submitRes.json();
-        console.log(`[ImageChain] ${model} submit OK:`, JSON.stringify(submitData).slice(0, 300));
+          if (!mmRes.ok) {
+            const errBody = await mmRes.json().catch(() => ({}));
+            console.warn(`[ImageChain] ${model} multimodal failed — HTTP ${mmRes.status}:`, errBody);
+            continue;
+          }
 
-        // ── Handle SYNC response (newer models return results immediately) ──
-        const syncUrls: string[] = (submitData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
-        if (syncUrls.length > 0) {
-          console.log(`[ImageChain] ${model} returned sync results (${syncUrls.length} images)`);
-          const newImages: GeneratedImage[] = syncUrls.map((url) => ({
-            url, prompt: prompt.trim(), model, size: selectedSize,
-          }));
-          setResults((prev) => [...newImages, ...prev]);
+          const mmData = await mmRes.json();
+          console.log(`[ImageChain] ${model} multimodal OK:`, JSON.stringify(mmData).slice(0, 300));
+
+          // Response: output.choices[0].message.content[].image
+          const choices  = mmData.output?.choices ?? [];
+          const imageUrl = choices[0]?.message?.content?.find((c: any) => c.image)?.image;
+          if (!imageUrl) {
+            console.warn(`[ImageChain] ${model} — no image URL in multimodal response:`, mmData);
+            continue;
+          }
+
+          setResults((prev) => [{ url: imageUrl, prompt: prompt.trim(), model, size: selectedSize }, ...prev]);
           setActiveModelName(MODEL_LABELS[model] ?? model);
           if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
           succeeded = true;
           break;
-        }
 
-        // ── Handle ASYNC response (task polling) ───────────────────────────
-        const taskId = submitData.output?.task_id;
-        if (!taskId) {
-          console.warn(`[ImageChain] ${model} — no task_id and no sync results:`, submitData);
-          continue;
-        }
-
-        // Poll for result
-        setProgress(`Memproses dengan ${MODEL_LABELS[model] ?? model}...`);
-        let taskSucceeded = false;
-
-        for (let i = 0; i < 45; i++) {
-          if (abortRef.current.signal.aborted) throw new DOMException("Aborted", "AbortError");
-          await new Promise((r) => setTimeout(r, 2000));
-          setProgress(`${MODEL_LABELS[model] ?? model} · ${(i + 1) * 2}s...`);
-
-          const pollRes = await fetch(`/api/dashscope/api/v1/tasks/${taskId}`, {
-            headers: { Authorization: `Bearer ${token}` },
+        } else {
+          // ── Text2Image async endpoint ────────────────────────────────────
+          const submitRes = await fetch("/api/dashscope/api/v1/services/aigc/text2image/image-synthesis", {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Content-Type": "application/json",
+              "X-DashScope-Async": "enable",
+            },
+            body: JSON.stringify({
+              model,
+              input: { prompt: fullPrompt },
+              parameters: { size: selectedSize, n: numImages },
+            }),
             signal: abortRef.current.signal,
           });
-          if (!pollRes.ok) continue;
 
-          const pollData = await pollRes.json();
-          const status   = pollData.output?.task_status;
-          console.log(`[ImageChain] ${model} poll ${i + 1} → status: ${status}`);
+          if (submitRes.status === 429) {
+            const body = await submitRes.json().catch(() => ({}));
+            if (body.error) throw new Error(body.error);
+            console.warn(`[ImageChain] ${model} DashScope rate-limit — skip`);
+            continue;
+          }
 
-          if (status === "SUCCEEDED") {
-            const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
-            if (urls.length === 0) break;
-            const newImages: GeneratedImage[] = urls.map((url) => ({
+          if (!submitRes.ok) {
+            const errBody = await submitRes.json().catch(() => ({}));
+            console.warn(`[ImageChain] ${model} submit failed — HTTP ${submitRes.status}:`, errBody);
+            continue;
+          }
+
+          const submitData = await submitRes.json();
+          console.log(`[ImageChain] ${model} submit OK:`, JSON.stringify(submitData).slice(0, 300));
+
+          // Handle immediate sync result (some models)
+          const syncUrls: string[] = (submitData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
+          if (syncUrls.length > 0) {
+            const newImages: GeneratedImage[] = syncUrls.map((url) => ({
               url, prompt: prompt.trim(), model, size: selectedSize,
             }));
             setResults((prev) => [...newImages, ...prev]);
             setActiveModelName(MODEL_LABELS[model] ?? model);
             if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
-            taskSucceeded = true;
             succeeded = true;
             break;
           }
 
-          if (status === "FAILED" || status === "CANCELED") {
-            console.warn(`[ImageChain] ${model} task ${status}:`, pollData);
-            break;
+          // Poll for task result
+          const taskId = submitData.output?.task_id;
+          if (!taskId) {
+            console.warn(`[ImageChain] ${model} — no task_id and no sync results:`, submitData);
+            continue;
           }
-        }
 
-        if (succeeded) break;
-        if (!taskSucceeded) continue;
+          setProgress(`Memproses dengan ${MODEL_LABELS[model] ?? model}...`);
+          let taskSucceeded = false;
+
+          for (let i = 0; i < 45; i++) {
+            if (abortRef.current.signal.aborted) throw new DOMException("Aborted", "AbortError");
+            await new Promise((r) => setTimeout(r, 2000));
+            setProgress(`${MODEL_LABELS[model] ?? model} · ${(i + 1) * 2}s...`);
+
+            const pollRes = await fetch(`/api/dashscope/api/v1/tasks/${taskId}`, {
+              headers: { Authorization: `Bearer ${token}` },
+              signal: abortRef.current.signal,
+            });
+            if (!pollRes.ok) continue;
+
+            const pollData = await pollRes.json();
+            const status   = pollData.output?.task_status;
+            console.log(`[ImageChain] ${model} poll ${i + 1} → status: ${status}`);
+
+            if (status === "SUCCEEDED") {
+              const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
+              if (urls.length === 0) break;
+              const newImages: GeneratedImage[] = urls.map((url) => ({
+                url, prompt: prompt.trim(), model, size: selectedSize,
+              }));
+              setResults((prev) => [...newImages, ...prev]);
+              setActiveModelName(MODEL_LABELS[model] ?? model);
+              if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
+              taskSucceeded = true;
+              succeeded = true;
+              break;
+            }
+
+            if (status === "FAILED" || status === "CANCELED") {
+              console.warn(`[ImageChain] ${model} task ${status}:`, pollData);
+              break;
+            }
+          }
+
+          if (succeeded) break;
+          if (!taskSucceeded) continue;
+        }
 
       } catch (err: any) {
         if (err?.name === "AbortError") break;
-        // Hard error (quota) — stop chain
         if (err?.message?.includes("Kuota")) {
           setError(err.message);
           break;
         }
-        // Other error — try next model
         continue;
       }
     }

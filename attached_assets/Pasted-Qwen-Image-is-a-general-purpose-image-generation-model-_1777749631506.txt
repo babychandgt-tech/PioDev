@@ -1,0 +1,964 @@
+Qwen-Image is a general-purpose image generation model that supports multiple artistic styles and excels at complex text rendering. The model supports multi-line layouts, paragraph-level text generation, and fine-grained detail rendering.
+
+Quick access: User guide | Try it online (Singapore | Beijing) | Technical blog (more examples)
+
+Examples
+
+
+Prompt
+
+Generated image
+
+A healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” appears prominently at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere.
+
+image
+
+Model overview
+
+
+
+Model
+
+Description
+
+Output image specifications
+
+qwen-image-2.0-pro Recommended
+
+Same capabilities as qwen-image-2.0-pro-2026-03-03
+Qwen Pro series for image generation and editing. Offers stronger text rendering, realistic texture, and semantic adherence.
+
+For image editing, see Qwen-Image Editing.
+Resolution: Set width and height freely. Total pixels must be between 512*512 and 2048*2048. Default resolution is 2048*2048.
+
+Format: PNG
+
+Number of images: 1–6
+
+qwen-image-2.0-pro-2026-04-22 Recommended
+
+qwen-image-2.0-pro-2026-03-03
+
+qwen-image-2.0 Recommended
+
+Same capabilities as qwen-image-2.0-2026-03-03
+Qwen accelerated series for image generation and editing. Balances quality and response speed.
+
+For image editing, see Qwen-Image Editing.
+qwen-image-2.0-2026-03-03 Recommended
+
+qwen-image-max
+
+Same capabilities as qwen-image-max-2025-12-30
+Qwen Max series for image generation. Delivers higher realism and naturalness, with fewer AI-generation artifacts.
+
+Resolution: See size parameter settings for supported resolutions and aspect ratios.
+
+Format: PNG
+
+Number of images: Fixed at 1
+
+qwen-image-max-2025-12-30
+
+qwen-image-plus
+
+Same capabilities as qwen-image
+Qwen Plus series for image generation. Excels at diverse artistic styles and text rendering.
+
+qwen-image-plus-2026-01-09
+
+qwen-image
+
+Only qwen-image-plus and qwen-image support asynchronous calls.
+Note
+Before calling the API, check the supported models list for your region.
+
+Prerequisites
+Before making a call, get an API key and export the API key as an environment variable. To make calls using the SDK, install the DashScope SDK.
+
+Important
+The Beijing and Singapore regions have separate API keys and request endpoints. They cannot be used interchangeably. Cross-region calls lead to authentication failures or service errors.
+
+Synchronous API (recommended)
+HTTP
+Qwen-Image supports synchronous calls, returning results in a single request.
+
+Singapore: POST https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+
+Beijing: POST https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+
+Request parameters
+Text-to-image
+ 
+curl --location 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation' \
+--header 'Content-Type: application/json' \
+--header "Authorization: Bearer $DASHSCOPE_API_KEY" \
+--data '{
+    "model": "qwen-image-2.0-pro",
+    "input": {
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "text": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere."
+            }
+          ]
+        }
+      ]
+    },
+    "parameters": {
+      "negative_prompt": "Low resolution, low quality, distorted limbs, malformed fingers, oversaturated colors, wax-figure appearance, lack of facial detail, excessive smoothness, AI-looking artifacts, chaotic composition, blurry or warped text.",
+      "prompt_extend": true,
+      "watermark": false,
+      "size": "2048*2048"
+    }
+}'
+Request headers
+Content-Type string (Required)
+
+The content type of the request. Must be application/json.
+
+Authorization string (Required)
+
+Authenticates the request with a Model Studio API key. Example: Bearer sk-xxxx.
+
+Request body
+model string (required)
+
+Model name. Example: qwen-image-2.0-pro.
+
+input object (required)
+
+Input information.
+
+Properties
+
+messages array (required)
+
+Array of message objects. Only single-turn conversations are supported, so the array must contain exactly one element.
+
+Properties
+
+role string (required)
+
+Message role. Set to user.
+
+content array (required)
+
+Array of message content objects.
+
+Properties
+
+text string (required)
+
+A positive prompt describing the image content, style, and composition you want.
+
+Supports Chinese and English. Maximum length is 800 characters. Each Chinese character, letter, digit, or symbol counts as one character. Excess characters are truncated automatically.
+
+Example: A sitting orange cat with a joyful expression, lively and adorable, highly realistic.
+
+Note: Only one text field is allowed. Omitting it or providing more than one returns an error.
+
+parameters object (optional)
+
+Image processing parameters.
+
+Properties
+
+negative_prompt string (optional)
+
+A negative prompt describing what you do not want in the image.
+
+Supports Chinese and English. Maximum length is 500 characters. Excess characters are truncated automatically.
+
+Example: Low resolution, low quality, distorted limbs, malformed fingers, oversaturated colors, wax-like appearance, no facial details, overly smooth surfaces, AI-generated look. Chaotic composition. Blurry or distorted text.
+
+size string (optional)
+
+Output image resolution, formatted as width*height.
+
+qwen-image-2.0 series models: Total pixels must be between 512*512 and 2048*2048. Default resolution is 2048*2048. Recommended resolutions:
+
+2688*1536: 16:9
+
+1536*2688: 9:16
+
+2048*2048 (default): 1:1
+
+2368*1728: 4:3
+
+1728*2368: 3:4
+
+qwen-image-max and qwen-image-plus series models: Default resolution is 1664*928. Supported resolutions and their aspect ratios:
+
+1664*928 (default): 16:9
+
+1472*1104: 4:3
+
+1328*1328: 1:1
+
+1104*1472: 3:4
+
+928*1664: 9:16
+
+n integer (optional)
+
+Number of output images. Default is 1.
+
+For qwen-image-2.0 series models, you can choose 1–6 images.
+
+For qwen-image-max and qwen-image-plus series models, this value is fixed at 1. Setting any other value returns an error.
+
+prompt_extend bool (optional)
+
+Enable smart prompt rewriting. The model optimizes the positive prompt. Does not affect the negative prompt.
+
+true: Default. Enables rewriting. Use this for more diverse image content; the model adds details.
+
+false: Disables rewriting. Use this for tighter control over image details. For best results, optimize your prompts based on Text-to-image prompt guide.
+
+View rewriting examples
+
+watermark bool (optional)
+
+Adds a “Qwen-Image” watermark to the bottom-right corner of the image. Default: false. Watermark style: 1
+
+seed integer (optional)
+
+Random number seed. Valid range: [0,2147483647].
+
+Using the same seed yields similar outputs. If omitted, the algorithm uses a random seed.
+
+Note: Image generation is probabilistic. Even with the same seed, results may vary.
+
+Response parameters
+Task succeededTask failed
+Image URLs are valid for only 24 hours and then automatically purged. Save generated images promptly.
+
+ 
+{
+    "output": {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "content": [
+                        {
+                            "image": "https://dashscope-result-sh.oss-cn-shanghai.aliyuncs.com/xxx.png?Expires=xxx"
+                        }
+                    ],
+                    "role": "assistant"
+                }
+            }
+        ]
+    },
+    "usage": {
+        "height": 2048,
+        "image_count": 1,
+        "width": 2048
+    },
+    "request_id": "d0250a3d-b07f-49e1-bdc8-6793f4929xxx"
+}
+output object
+
+Task output information.
+
+Properties
+
+choices array
+
+Model output. This array contains exactly one element.
+
+Properties
+
+finish_reason string
+
+Reason the task stopped. Value is stop for natural stops.
+
+message object
+
+Model response message.
+
+Properties
+
+role string
+
+Message role. Fixed value: assistant.
+
+content array
+
+Properties
+
+image string
+
+URL of the generated image (PNG format). Expires after 24 hours. Download and save it promptly.
+
+task_metric object
+
+Task result statistics. Not returned for qwen-image-2.0 series models.
+
+Properties
+
+TOTAL integer
+
+Total number of tasks.
+
+SUCCEEDED integer
+
+Number of successful tasks.
+
+FAILED integer
+
+Number of failed tasks.
+
+usage object
+
+Output statistics. Counts only successful results.
+
+Properties
+
+image_count integer
+
+Number of generated images. Fixed at 1.
+
+width integer
+
+Width of the generated image, in pixels.
+
+height integer
+
+Height of the generated image, in pixels.
+
+request_id string
+
+Unique request identifier for tracing and troubleshooting.
+
+code string
+
+Error code. Returned only for failed requests. See Error messages.
+
+message string
+
+Detailed error message. Returned only for failed requests. See Error messages.
+
+DashScope SDK call
+The DashScope SDK supports Python and Java.
+
+The parameter names in the SDK closely match the HTTP parameters, and the parameter structures follow language-specific conventions. For synchronous call parameters, see HTTP.
+
+PythonJava
+Note
+You must install the latest DashScope Python SDK. Otherwise, runtime errors may occur: Install SDK.
+
+Request example
+ 
+import json
+import os
+import dashscope
+from dashscope import MultiModalConversation
+
+# Use this URL for Singapore region. For Beijing region, replace with: https://dashscope.aliyuncs.com/api/v1
+dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
+
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"text": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere."}
+        ]
+    }
+]
+
+# API keys differ between Beijing and Singapore regions. Get your API key: https://www.alibabacloud.com/help/zh/model-studio/get-api-key
+# If you haven't set the environment variable, replace the line below with: api_key="sk-xxx"
+api_key = os.getenv("DASHSCOPE_API_KEY")
+
+response = MultiModalConversation.call(
+    api_key=api_key,
+    model="qwen-image-2.0-pro",
+    messages=messages,
+    result_format='message',
+    stream=False,
+    watermark=False,
+    prompt_extend=True,
+    negative_prompt="Low resolution, low quality, distorted limbs, malformed fingers, oversaturated colors, wax-figure appearance, lack of facial detail, excessive smoothness, AI-looking artifacts, chaotic composition, blurry or warped text.",
+    size='2048*2048'
+)
+
+if response.status_code == 200:
+    print(json.dumps(response, ensure_ascii=False))
+else:
+    print(f"HTTP status code: {response.status_code}")
+    print(f"Error code: {response.code}")
+    print(f"Error message: {response.message}")
+    print("See documentation: https://www.alibabacloud.com/help/zh/model-studio/error-code")
+Response example
+Image URLs expire after 24 hours. Download the images promptly.
+ 
+{
+    "status_code": 200,
+    "request_id": "d2d1a8c0-325f-9b9d-8b90-xxxxxx",
+    "code": "",
+    "message": "",
+    "output": {
+        "text": null,
+        "finish_reason": null,
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "image": "https://dashscope-result-wlcb.oss-cn-wulanchabu.aliyuncs.com/xxx.png?Expires=xxx"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "width": 2048,
+        "image_count": 1,
+        "height": 2048
+    }
+}
+Asynchronous API
+Important
+Only qwen-image-plus and qwen-image support asynchronous calls.
+
+HTTP
+Qwen-Image also supports asynchronous calls. The HTTP workflow has two steps:
+
+Create a task to get a task ID: Send a request to create a task. The response returns a task ID (task_id).
+
+Poll for results using the task ID: You can use the task_id to poll the task status until it completes and returns an image URL.
+
+Step 1: Create a task to get a task ID
+Singapore: POST https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis
+
+Beijing: POST https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis
+
+Note
+After the task is created, use the returned task_id to query the result. The task_id is valid for 24 hours. Do not create duplicate tasks. Instead, use polling to retrieve the result.
+
+For guidance for beginners, see Postman.
+
+Request parameters
+Text-to-image
+Only qwen-image-plus and qwen-image support asynchronous calls.
+
+ 
+curl -X POST https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis \
+    -H 'X-DashScope-Async: enable' \
+    -H "Authorization: Bearer $DASHSCOPE_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+    "model": "qwen-image-plus",
+    "input": {
+        "prompt": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere."
+    },
+    "parameters": {
+        "negative_prompt":" ",
+        "size": "1664*928",
+        "n": 1,
+        "prompt_extend": true,
+        "watermark": false
+    }
+}'        
+Request headers
+Content-Type string (Required)
+
+The content type of the request. Must be application/json.
+
+Authorization string (Required)
+
+Authenticates the request with a Model Studio API key. Example: Bearer sk-xxxx.
+
+X-DashScope-Async string (Required)
+
+Enables asynchronous processing. HTTP requests support only asynchronous calls. Must be enable.
+
+Important
+If this request header is missing, the error "current user api does not support synchronous calls" is returned.
+
+Request body
+model string (required)
+
+Model name. Only qwen-image-plus and qwen-image support asynchronous calls.
+
+Example: qwen-image-plus.
+
+input object (required)
+
+Input information.
+
+Properties
+
+prompt string (required)
+
+A positive prompt describing the visual elements and characteristics you want in the generated image.
+
+Supports Chinese and English. Maximum length is 800 characters. Each Chinese character, letter, digit, or symbol counts as one character. Excess characters are truncated automatically.
+
+Example: A sitting orange cat with a joyful expression, lively and adorable, highly realistic.
+
+negative_prompt string (optional)
+
+A negative prompt describing what you do not want in the image.
+
+Supports Chinese and English. Maximum length is 500 characters. Excess characters are truncated automatically.
+
+Example: Low resolution, low quality, distorted limbs, malformed fingers, oversaturated colors, wax-like appearance, no facial details, overly smooth surfaces, AI-generated look. Chaotic composition. Blurry or distorted text.
+
+parameters object (optional)
+
+Image processing parameters.
+
+Properties
+
+size string (optional)
+
+Output image resolution, formatted as width*height.
+
+qwen-image-2.0 series models: Total pixels must be between 512*512 and 2048*2048. Default resolution is 2048*2048. Recommended resolutions:
+
+2688*1536: 16:9
+
+1536*2688: 9:16
+
+2048*2048 (default): 1:1
+
+2368*1728: 4:3
+
+1728*2368: 3:4
+
+qwen-image-max and qwen-image-plus series models: Default resolution is 1664*928. Supported resolutions and their aspect ratios:
+
+1664*928 (default): 16:9
+
+1472*1104: 4:3
+
+1328*1328: 1:1
+
+1104*1472: 3:4
+
+928*1664: 9:16
+
+n integer (optional)
+
+Number of generated images. This value is fixed at 1. Setting any other value returns an error.
+
+prompt_extend bool (optional)
+
+Enable smart prompt rewriting. The model optimizes the positive prompt. Does not affect the negative prompt.
+
+true: Default. Enables rewriting. Use this for more diverse image content; the model adds details.
+
+false: Disables rewriting. Use this for tighter control over image details. For best results, optimize your prompts based on Text-to-image prompt guide.
+
+View rewriting examples
+
+watermark bool (optional)
+
+Adds a “Qwen-Image” watermark to the bottom-right corner of the image. Default: false. Watermark style: 1
+
+seed integer (optional)
+
+Random number seed. Valid range: [0,2147483647].
+
+Using the same seed yields similar outputs. If omitted, the algorithm uses a random seed.
+
+Note: Image generation is probabilistic. Even with the same seed, results may vary.
+
+Response parameters
+Successful responseError response
+Save the task_id to query the task status and result.
+
+ 
+{
+    "output": {
+        "task_status": "PENDING",
+        "task_id": "0385dc79-5ff8-4d82-bcb6-xxxxxx"
+    },
+    "request_id": "4909100c-7b5a-9f92-bfe5-xxxxxx"
+}
+output object
+
+Task output information.
+
+Properties
+
+task_id string
+
+The task ID. Valid for queries for 24 hours.
+
+task_status string
+
+The status of the task.
+
+Enumeration values
+
+PENDING
+
+RUNNING
+
+SUCCEEDED
+
+FAILED
+
+CANCELED
+
+UNKNOWN: The task does not exist or its status is unknown.
+
+request_id string
+
+Unique request identifier for tracing and troubleshooting.
+
+code string
+
+Error code. Returned only for failed requests. See Error messages.
+
+message string
+
+Detailed error message. Returned only for failed requests. See Error messages.
+
+Step 2: Poll for results using the task ID
+SingaporeBeijing
+GET https://dashscope-intl.aliyuncs.com/api/v1/tasks/{task_id}
+
+Note
+Polling recommendation: Image generation is time-consuming. Use a polling mechanism with a reasonable interval, such as 10 seconds.
+
+Task state transition: PENDING → RUNNING → SUCCEEDED or FAILED.
+
+Result link: After a task succeeds, an image URL valid for 24 hours is returned. Download and save the image to permanent storage, such as OSS.
+
+Request parameters
+Poll for task results
+Replace {task_id} with the task_id value returned by the previous API call. The task_id is valid for queries for 24 hours.
+
+ 
+curl -X GET https://dashscope-intl.aliyuncs.com/api/v1/tasks/{task_id} \
+--header "Authorization: Bearer $DASHSCOPE_API_KEY"
+Request headers
+Authorization string (Required)
+
+Authenticates the request with a Model Studio API key. Example: Bearer sk-xxxx.
+
+URL path parameters
+task_id string (Required)
+
+The ID of the task.
+
+Response parameters
+Task succeededTask failed
+Task data (task status and image URLs) is retained for only 24 hours and then automatically purged. Save generated images promptly.
+
+ 
+{
+    "request_id": "7434edb2-3cba-44e6-a772-xxxxxx",
+    "output": {
+        "task_id": "878f591e-ebdf-4e45-97eb-xxxxxx",
+        "task_status": "SUCCEEDED",
+        "submit_time": "2025-09-09 11:38:54.741",
+        "scheduled_time": "2025-09-09 11:38:54.781",
+        "end_time": "2025-09-09 11:39:19.484",
+        "results": [
+            {
+                "orig_prompt": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere.",
+                "actual_prompt": "Childhood-inspired hand-drawn poster design: Three playful puppies joyfully interact with a colorful ball on a vibrant patch of lush green grass. Delicate decorative elements including fluttering birds and twinkling stars are scattered throughout. At the top center, the bold, blue cartoon-style title “Come Play Ball!” stands out prominently. Directly beneath, the subtitle “Come [Show Off Your Skills]!” is rendered in cheerful green lettering. A whimsical speech bubble near one of the puppies contains the playful text: “Hehe, watch me amaze my little friends next!” At the bottom edge, smaller supplementary text reads: “We get to play ball with our friends again!” The color palette is centered on fresh greens and sky blues, accented with pops of bright pink and sunny yellow, enhancing the cheerful, childlike atmosphere. Style evokes nostalgic, hand-inked illustrations with soft textures, gentle linework, and a whimsical, storybook-like composition.",
+                "url": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/7d/xxx.png?Expires=xxxx"
+            }
+        ]
+    },
+    "usage": {
+        "image_count": 1
+    }
+}
+output object
+
+Task output information.
+
+Properties
+
+task_id string
+
+The task ID. Valid for queries for 24 hours.
+
+task_status string
+
+The status of the task.
+
+Enumeration values
+
+PENDING
+
+RUNNING
+
+SUCCEEDED
+
+FAILED
+
+CANCELED
+
+UNKNOWN: The task does not exist or its status is unknown.
+
+submit_time string
+
+The time when the task was submitted. The time is in UTC+8 and the format is YYYY-MM-DD HH:mm:ss.SSS.
+
+scheduled_time string
+
+The time when the task was executed. The time is in UTC+8 and the format is YYYY-MM-DD HH:mm:ss.SSS.
+
+end_time string
+
+The time when the task was completed. The time is in UTC+8 and the format is YYYY-MM-DD HH:mm:ss.SSS.
+
+results array
+
+List of task results, including image URLs, prompts, and error messages for failed tasks.
+
+Properties
+
+orig_prompt string
+
+The original input prompt, corresponding to the request parameter prompt.
+
+actual_prompt string
+
+The optimized prompt used when prompt rewriting is enabled. Not returned when disabled.
+
+url string
+
+URL of the generated image. Expires after 24 hours. Download and save the image promptly.
+
+code string
+
+Error code. Returned only for failed requests. See Error messages.
+
+message string
+
+Detailed error message. Returned only for failed requests. See Error messages.
+
+usage object
+
+Output statistics. Counts only successful results.
+
+Properties
+
+image_count integer
+
+Number of generated images. Fixed at 1.
+
+request_id string
+
+Unique request identifier for tracing and troubleshooting.
+
+DashScope SDK
+The DashScope SDK supports Python and Java.
+
+SDK parameter names closely match their corresponding HTTP parameters. Parameter structures follow language-specific conventions. For details about asynchronous call parameters, see HTTP.
+
+Because image models require longer processing times, the underlying service uses asynchronous execution. The SDK provides two modes to handle this:
+
+Synchronous call (blocking mode): The SDK waits for the task to complete and returns the final result. This behavior matches that of standard synchronous calls.
+
+Asynchronous call (non-blocking mode): The call returns immediately with a task ID. You must poll for the task status and final result using that ID.
+
+Python SDK
+Note
+You must install the latest DashScope Python SDK. Otherwise, runtime errors may occur: Install SDK.
+
+SynchronousAsynchronous
+Request example
+ 
+from http import HTTPStatus
+from urllib.parse import urlparse, unquote
+from pathlib import PurePosixPath
+import requests
+from dashscope import ImageSynthesis
+import os
+import dashscope
+
+# Use this URL for Singapore region. For Beijing region, replace with: https://dashscope.aliyuncs.com/api/v1
+dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
+
+prompt = "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere."
+
+# API keys differ between Beijing and Singapore regions. Get your API key: https://www.alibabacloud.com/help/zh/model-studio/get-api-key
+# If you haven't set the environment variable, replace the line below with: api_key="sk-xxx"
+api_key = os.getenv("DASHSCOPE_API_KEY")
+
+print('----Sync call, please wait a moment----')
+rsp = ImageSynthesis.call(api_key=api_key,
+                          model="qwen-image-plus", # Only qwen-image-plus and qwen-image support asynchronous calls
+                          prompt=prompt,
+                          negative_prompt=" ",
+                          n=1,
+                          size='1664*928',
+                          prompt_extend=True,
+                          watermark=False)
+print(f'response: {rsp}')
+if rsp.status_code == HTTPStatus.OK:
+    # Save image in current directory
+    for result in rsp.output.results:
+        file_name = PurePosixPath(unquote(urlparse(result.url).path)).parts[-1]
+        with open('./%s' % file_name, 'wb+') as f:
+            f.write(requests.get(result.url).content)
+else:
+    print(f'Sync call failed, status_code: {rsp.status_code}, code: {rsp.code}, message: {rsp.message}')
+Response example
+URLs expire after 24 hours. Download images promptly.
+ 
+{
+    "status_code": 200,
+    "request_id": "a47b1a65-7041-4565-9068-xxxxxx",
+    "code": null,
+    "message": "",
+    "output": {
+        "task_id": "91093132-475e-43cf-b94e-xxxxxx",
+        "task_status": "SUCCEEDED",
+        "results": [
+            {
+                "url": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxxxxx",
+                "orig_prompt": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere.",
+                "actual_prompt": "Childhood-inspired hand-drawn poster design: Three playful puppies joyfully interact with a colorful ball on a vibrant patch of lush green grass. Delicate decorative elements including fluttering birds and twinkling stars are scattered throughout. At the top center, the bold, blue cartoon-style title “Come Play Ball!” stands out prominently. Directly beneath, the subtitle “Come [Show Off Your Skills]!” is rendered in cheerful green lettering. A whimsical speech bubble near one of the puppies contains the playful text: “Hehe, watch me amaze my little friends next!” At the bottom edge, smaller supplementary text reads: “We get to play ball with our friends again!” The color palette is centered on fresh greens and sky blues, accented with pops of bright pink and sunny yellow, enhancing the cheerful, childlike atmosphere. Style evokes nostalgic, hand-inked illustrations with soft textures, gentle linework, and a whimsical, storybook-like composition."
+            }
+        ],
+        "submit_time": "2025-09-09 13:39:20.659",
+        "scheduled_time": "2025-09-09 13:39:20.717",
+        "end_time": "2025-09-09 13:39:45.233"
+    },
+    "usage": {
+        "image_count": 1
+    }
+}
+Java SDK
+Note
+You must install the latest DashScope Java SDK. Otherwise, runtime errors may occur: Install SDK.
+
+SynchronousAsynchronous
+Request example
+ 
+// Copyright (c) Alibaba, Inc. and its affiliates.
+
+import com.alibaba.dashscope.aigc.imagesynthesis.ImageSynthesis;
+import com.alibaba.dashscope.aigc.imagesynthesis.ImageSynthesisListResult;
+import com.alibaba.dashscope.aigc.imagesynthesis.ImageSynthesisParam;
+import com.alibaba.dashscope.aigc.imagesynthesis.ImageSynthesisResult;
+import com.alibaba.dashscope.exception.ApiException;
+import com.alibaba.dashscope.exception.NoApiKeyException;
+import com.alibaba.dashscope.task.AsyncTaskListParam;
+import com.alibaba.dashscope.utils.Constants;
+import com.alibaba.dashscope.utils.JsonUtils;
+import java.util.HashMap;
+import java.util.Map;
+
+public class Text2Image {
+    static {
+        // Use this URL for Singapore region. For Beijing region, replace with: https://dashscope.aliyuncs.com/api/v1
+        Constants.baseHttpApiUrl = "https://dashscope-intl.aliyuncs.com/api/v1";
+    }
+
+    // API keys differ between Beijing and Singapore regions. Get your API key: https://www.alibabacloud.com/help/zh/model-studio/get-api-key
+    // If you haven't set the environment variable, replace the line below with: static String apiKey = "sk-xxx"
+    static String apiKey = System.getenv("DASHSCOPE_API_KEY");
+
+    public static void basicCall() throws ApiException, NoApiKeyException {
+        String prompt = "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere.";
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("prompt_extend", true);
+        parameters.put("watermark", false);
+        parameters.put("negative_prompt", " ");
+        ImageSynthesisParam param =
+                ImageSynthesisParam.builder()
+                        .apiKey(apiKey)
+                        // Only qwen-image-plus and qwen-image support asynchronous calls
+                        .model("qwen-image-plus")
+                        .prompt(prompt)
+                        .n(1)
+                        .size("1664*928")
+                        .parameters(parameters)
+                        .build();
+
+        ImageSynthesis imageSynthesis = new ImageSynthesis();
+        ImageSynthesisResult result = null;
+        try {
+            System.out.println("---Sync call, please wait a moment----");
+            result = imageSynthesis.call(param);
+        } catch (ApiException | NoApiKeyException e){
+            throw new RuntimeException(e.getMessage());
+        }
+        System.out.println(JsonUtils.toJson(result));
+    }
+
+    public static void main(String[] args){
+        try{
+            basicCall();
+        }catch(ApiException|NoApiKeyException e){
+            System.out.println(e.getMessage());
+        }
+    }
+}
+Response example
+URLs expire after 24 hours. Download images promptly.
+ 
+{
+    "request_id": "9f3044ba-528f-4606-8830-xxxxxx",
+    "output": {
+        "task_id": "fecf4c7f-3508-45f4-8454-xxxxxx",
+        "task_status": "SUCCEEDED",
+        "results": [
+            {
+                "orig_prompt": "Healing-style hand-drawn poster featuring three puppies playing with a ball on lush green grass, adorned with decorative elements such as birds and stars. The main title “Come Play Ball!” is prominently displayed at the top in bold, blue cartoon font. Below it, the subtitle “Come [Show Off Your Skills]!” appears in green font. A speech bubble adds playful charm with the text: “Hehe, watch me amaze my little friends next!” At the bottom, supplementary text reads: “We get to play ball with our friends again!” The color palette centers on fresh greens and blues, accented with bright pink and yellow tones to highlight a cheerful, childlike atmosphere.",
+                "actual_prompt": "Childhood-inspired hand-drawn poster design: Three playful puppies joyfully interact with a colorful ball on a vibrant patch of lush green grass. Delicate decorative elements including fluttering birds and twinkling stars are scattered throughout. At the top center, the bold, blue cartoon-style title “Come Play Ball!” stands out prominently. Directly beneath, the subtitle “Come [Show Off Your Skills]!” is rendered in cheerful green lettering. A whimsical speech bubble near one of the puppies contains the playful text: “Hehe, watch me amaze my little friends next!” At the bottom edge, smaller supplementary text reads: “We get to play ball with our friends again!” The color palette is centered on fresh greens and sky blues, accented with pops of bright pink and sunny yellow, enhancing the cheerful, childlike atmosphere. Style evokes nostalgic, hand-inked illustrations with soft textures, gentle linework, and a whimsical, storybook-like composition.",
+                "url": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxxx"
+            }
+        ]
+    },
+    "usage": {
+        "image_count": 1
+    }
+}
+Billing and rate limiting
+For free quotas and pricing, see Model pricing.
+
+For rate limits, see Qwen (Qwen-Image).
+
+Billing details: You are billed per successfully generated image. Failed calls or processing errors do not incur charges or consume your new user free quota.
+
+Error codes
+If the model call fails and returns an error message, see Error messages for resolution.
+
+FAQ
+Q: Should I enable or disable the prompt_extend parameter?
+A: Enable this option (default) if you want more diverse image content and for the model to add details. Disable it if you need tighter control over image details, and optimize your prompts using the Text-to-Image Prompt Guide.
+
+Q: What are the differences between qwen-image, qwen-image-plus, qwen-image-max, qwen-image-2.0, and qwen-image-edit?
+A:
+
+Combined image generation and editing models: Support both text-to-image and image editing.
+
+qwen-image-2.0-pro and qwen-image-2.0-pro-2026-03-03: Same capabilities. The Pro series delivers more professional text rendering, finer realistic textures, detailed realistic scenes, and stronger semantic adherence. Supports synchronous calls only.
+
+qwen-image-2.0 and qwen-image-2.0-2026-03-03: Same capabilities. The accelerated version balances model performance and quality. Supports synchronous calls only.
+
+Text-to-image models: Generate images from text descriptions.
+
+qwen-image-max and qwen-image-max-2025-12-30: Same capabilities. Compared with qwen-image-plus, they deliver improved realism and naturalness, with better results for character textures, details, and text rendering.
+
+qwen-image and qwen-image-plus: Same capabilities, but qwen-image-plus is more cost-effective.
+
+qwen-image-plus-2026-01-09: A new snapshot version of Qwen-Image. It is a distilled and accelerated version of qwen-image-max that supports fast generation of high-quality images.
+
+Image editing model:
+qwen-image-edit: Performs image-to-image transformations, inpainting, and other operations based on an input image and text instructions. For more information, see Qwen - image editing.
+
+Q: How do I get the domain name whitelist for image storage?
+A: Images generated by models are stored in OSS. The API returns a temporary public URL. To configure a firewall whitelist for this download URL, note the following: The underlying storage may change dynamically. This topic does not provide a fixed OSS domain name whitelist to prevent access issues caused by outdated information. If you have security control requirements, contact your account manager to obtain the latest OSS domain name list.
+
