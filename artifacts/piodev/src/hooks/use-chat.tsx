@@ -98,13 +98,27 @@ async function generateImage(prompt: string, signal?: AbortSignal): Promise<stri
   throw new Error("Gagal generate gambar. Coba lagi nanti.");
 }
 
-async function getSystemPrompt(voiceMode = false): Promise<string> {
+async function getSystemPrompt(voiceMode = false, webSearch = false): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   const p = { ...DEFAULT_PERSONALIZATION, ...session?.user?.user_metadata?.personalization };
   const base = buildSystemPrompt(p);
-  if (!voiceMode) return base;
-  const voiceSuffix = `
 
+  const suffixes: string[] = [];
+
+  if (webSearch) {
+    suffixes.push(`
+[MODE WEB SEARCH AKTIF]
+Kamu SEKARANG terhubung ke internet dan bisa mencari informasi real-time.
+WAJIB ikuti aturan ini:
+- SELALU gunakan kemampuan web search untuk mencari info terbaru sebelum menjawab.
+- JANGAN pernah bilang "saya tidak punya akses internet" atau "saya tidak bisa browsing" — itu SALAH, kamu BISA.
+- Untuk berita/jurnal/referensi: cari dulu, lalu sajikan hasilnya lengkap dengan sumber URL.
+- Sertakan tanggal artikel/publikasi dan URL sumber asli jika ditemukan.
+- Jika hasil pencarian tidak relevan, katakan "pencarian tidak menemukan hasil yang tepat" — BUKAN "saya tidak punya akses".`);
+  }
+
+  if (voiceMode) {
+    suffixes.push(`
 [MODE TELEPON SUARA AKTIF]
 Kamu lagi ngobrol lewat suara, BUKAN chat tertulis. Jawab harus:
 - Singkat & natural: maksimal 1-3 kalimat pendek per giliran
@@ -113,8 +127,10 @@ Kamu lagi ngobrol lewat suara, BUKAN chat tertulis. Jawab harus:
 - TANPA blok kode (kalau ditanya kode, jelasin singkat secara verbal)
 - TANPA simbol aneh, tanda kutip, atau ASCII art
 - Pakai bahasa yang user pakai
-- Kalau pertanyaan kompleks, kasih jawaban inti aja dulu, terus tanya balik kalau perlu detail`;
-  return base + voiceSuffix;
+- Kalau pertanyaan kompleks, kasih jawaban inti aja dulu, terus tanya balik kalau perlu detail`);
+  }
+
+  return base + suffixes.join("");
 }
 
 const MAX_RETRIES = 2;
@@ -531,7 +547,7 @@ export function useChat(userId: string | undefined) {
       const enableThinking = !!(options?.thinking && !hasImages);
       // enableSearch: aktif saat mode Web dinyalakan (param DashScope: enable_search)
       const enableSearch = !!(options?.webSearch && !hasImages);
-      const systemPrompt = await getSystemPrompt(options?.voiceMode);
+      const systemPrompt = await getSystemPrompt(options?.voiceMode, enableSearch);
       const fullHistory = [
         { role: "system" as const, content: systemPrompt },
         ...buildHistory(),
