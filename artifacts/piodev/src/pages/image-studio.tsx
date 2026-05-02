@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Image as ImageIcon, Menu, Sparkles, Download, X, Loader2,
   RefreshCw, Sun, Moon, Square, RectangleHorizontal,
-  RectangleVertical, LayoutTemplate, Cpu,
+  RectangleVertical, LayoutTemplate, Cpu, Trash2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -574,103 +574,143 @@ export default function ImageStudio() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hasil</h2>
-                  {activeModelName && !isGenerating && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                      className={cn(
-                        "flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium",
-                        isDark ? "bg-primary/10 border-primary/20 text-primary/80" : "bg-primary/5 border-primary/20 text-primary"
-                      )}>
-                      <Cpu className="w-3 h-3" />
-                      {activeModelName}
-                    </motion.div>
+                  {results.length > 0 && (
+                    <button
+                      onClick={() => setResults([])}
+                      className="text-xs text-muted-foreground/60 hover:text-red-500 transition-colors"
+                    >
+                      Hapus semua
+                    </button>
                   )}
                 </div>
 
-                {isGenerating && results.length === 0 && (
-                  <div className={cn(
-                    "rounded-2xl border flex flex-col items-center justify-center py-16 gap-4",
-                    isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
-                  )}>
-                    <div className="w-14 h-14 rounded-full border-2 border-primary/20 flex items-center justify-center">
-                      <Loader2 className="w-7 h-7 text-primary animate-spin" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-muted-foreground">{progress || "Memproses..."}</p>
-                      <p className="text-xs text-muted-foreground/50 mt-1">Sistem memilih model terbaik untukmu</p>
-                    </div>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                  {isGenerating && results.length > 0 && (
-                    <div className={cn(
-                      "rounded-xl border flex items-center justify-center aspect-square",
-                      isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
-                    )}>
-                      <div className="flex flex-col items-center gap-3">
-                        <Loader2 className="w-7 h-7 text-primary animate-spin" />
-                        <p className="text-xs text-muted-foreground">{progress}</p>
-                      </div>
-                    </div>
-                  )}
-                  {results.map((img, i) => (
-                    <motion.div key={i}
-                      initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                      className={cn(
-                        "group relative rounded-xl overflow-hidden cursor-pointer border",
-                        isDark ? "border-white/[0.06]" : "border-black/[0.06] shadow-sm"
-                      )}
-                      onClick={() => setLightboxUrl(img.url)}>
-                      <img src={img.url} alt={img.prompt} className="w-full aspect-square object-cover" loading="lazy" />
-                      <div className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-black/60 text-white/80">
-                          {MODEL_LABELS[img.model] ?? img.model}
-                        </span>
-                      </div>
-                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-colors rounded-xl flex items-end justify-end p-2.5 opacity-0 group-hover:opacity-100">
-                        <div className="flex gap-1.5">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); downloadImage(img.url, i); }}
-                            className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                            title="Download">
-                            <Download className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setPrompt(img.prompt);
-                              if (textareaRef.current) {
-                                textareaRef.current.style.height = "auto";
-                                textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
-                              }
-                            }}
-                            className="p-2 rounded-lg bg-black/60 text-white hover:bg-black/80 transition-colors"
-                            title="Gunakan prompt ini">
-                            <RefreshCw className="w-3.5 h-3.5" />
-                          </button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <AnimatePresence mode="popLayout">
+                    {/* Loading card — shown while generating, before first result */}
+                    {isGenerating && (
+                      <motion.div
+                        key="loading-card"
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className={cn(
+                          "rounded-xl border overflow-hidden",
+                          isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+                        )}
+                      >
+                        <div className="aspect-square relative overflow-hidden">
+                          <div className={cn("absolute inset-0", isDark ? "bg-zinc-800/80" : "bg-zinc-100")}>
+                            <div className="absolute inset-0 shimmer-bg" />
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+                              <Loader2 className="w-6 h-6 text-primary animate-spin" />
+                              <span className="text-xs font-medium text-muted-foreground">
+                                {progress || "Memproses..."}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="absolute bottom-0 left-0 right-0 h-1 bg-muted/50">
+                            <motion.div
+                              className="h-full bg-gradient-to-r from-primary to-indigo-400"
+                              initial={{ width: "5%" }}
+                              animate={{ width: "70%" }}
+                              transition={{ duration: 30, ease: "linear" }}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    </motion.div>
-                  ))}
+                        <div className="p-3">
+                          <p className="text-xs text-foreground/50 line-clamp-2 leading-relaxed mb-2 italic">
+                            {prompt || "Generating..."}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-muted-foreground/40">Sistem memilih model terbaik...</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* Result cards */}
+                    {results.map((img, i) => (
+                      <motion.div
+                        key={`${img.url}-${i}`}
+                        layout
+                        initial={{ opacity: 0, scale: 0.95 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className={cn(
+                          "rounded-xl border overflow-hidden group",
+                          isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+                        )}
+                      >
+                        {/* Image — clickable for lightbox */}
+                        <div
+                          className="aspect-square relative overflow-hidden cursor-pointer"
+                          onClick={() => setLightboxUrl(img.url)}
+                        >
+                          <img
+                            src={img.url}
+                            alt={img.prompt}
+                            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                            loading="lazy"
+                          />
+                        </div>
+
+                        {/* Info section — matches Video Studio card bottom */}
+                        <div className="p-3">
+                          <p className="text-xs text-foreground/80 line-clamp-2 leading-relaxed mb-2">
+                            {img.prompt}
+                          </p>
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] text-muted-foreground/50">
+                              {MODEL_LABELS[img.model] ?? img.model}
+                            </span>
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                onClick={() => downloadImage(img.url, i)}
+                                className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                title="Download"
+                              >
+                                <Download className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setPrompt(img.prompt);
+                                  if (textareaRef.current) {
+                                    textareaRef.current.style.height = "auto";
+                                    textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 180)}px`;
+                                  }
+                                }}
+                                className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
+                                title="Pakai prompt ini"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setResults((prev) => prev.filter((_, idx) => idx !== i))}
+                                className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-red-500"
+                                title="Hapus"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
                 </div>
               </div>
             )}
 
-            {/* ── Empty state ── */}
+            {/* ── Empty state — matches Video/Voice Studio ── */}
             {results.length === 0 && !isGenerating && (
-              <div className={cn(
-                "rounded-2xl border flex flex-col items-center justify-center py-20 text-center",
-                isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
-              )}>
-                <div className={cn(
-                  "w-16 h-16 rounded-2xl flex items-center justify-center mb-4",
-                  isDark ? "bg-zinc-800" : "bg-zinc-100"
-                )}>
-                  <ImageIcon className="w-8 h-8 text-muted-foreground/30" />
+              <div className="text-center py-12">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/10 to-indigo-400/10 flex items-center justify-center mx-auto mb-3">
+                  <ImageIcon className="w-7 h-7 text-primary/50" />
                 </div>
-                <p className="text-sm font-semibold text-foreground mb-1">Belum ada gambar</p>
-                <p className="text-xs text-muted-foreground max-w-xs">
-                  Tulis prompt di atas, pilih gaya &amp; ukuran, lalu klik Generate.
+                <h3 className="text-sm font-semibold text-foreground/70 mb-1">Mulai bikin gambar</h3>
+                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                  Deskripsikan gambar yang ingin kamu buat dan klik Generate
                 </p>
               </div>
             )}
