@@ -16,7 +16,7 @@ import { supabase } from "@/lib/supabase";
 // ── Types ──────────────────────────────────────────────────────────────────────
 type GenSize = { label: string; value: string; icon: React.ReactNode; ratio: string };
 type StylePreset = { label: string; suffix: string };
-type GeneratedImage = { url: string; prompt: string; model: string; size: string };
+type GeneratedImage = { id?: string; url: string; prompt: string; model: string; size: string };
 
 // ── Model fallback chain — system tries each in order, best → fallback ─────────
 // Two endpoint types:
@@ -98,6 +98,25 @@ const STYLE_PRESETS: StylePreset[] = [
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ?? "";
+}
+
+async function saveImageToDb(token: string, img: { url: string; prompt: string; model: string; size: string }): Promise<string | null> {
+  try {
+    const res = await fetch("/api/image-jobs", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url: img.url, prompt: img.prompt, model: img.model, size: img.size }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.id ?? null;
+  } catch { return null; }
+}
+
+async function deleteImageFromDb(token: string, id: string): Promise<void> {
+  try {
+    await fetch(`/api/image-jobs/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } });
+  } catch {}
 }
 
 // ── Main component ─────────────────────────────────────────────────────────────
@@ -217,7 +236,8 @@ export default function ImageStudio() {
             continue;
           }
 
-          setResults((prev) => [{ url: imageUrl, prompt: prompt.trim(), model, size: selectedSize }, ...prev]);
+          const savedId = await saveImageToDb(token, { url: imageUrl, prompt: prompt.trim(), model, size: selectedSize });
+          setResults((prev) => [{ id: savedId ?? undefined, url: imageUrl, prompt: prompt.trim(), model, size: selectedSize }, ...prev]);
           setActiveModelName(MODEL_LABELS[model] ?? model);
           if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
           succeeded = true;
@@ -259,10 +279,13 @@ export default function ImageStudio() {
           // Handle immediate sync result (some models)
           const syncUrls: string[] = (submitData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
           if (syncUrls.length > 0) {
-            const newImages: GeneratedImage[] = syncUrls.map((url) => ({
-              url, prompt: prompt.trim(), model, size: selectedSize,
-            }));
-            setResults((prev) => [...newImages, ...prev]);
+            const savedImages: GeneratedImage[] = await Promise.all(
+              syncUrls.map(async (url) => {
+                const savedId = await saveImageToDb(token, { url, prompt: prompt.trim(), model, size: selectedSize });
+                return { id: savedId ?? undefined, url, prompt: prompt.trim(), model, size: selectedSize };
+              })
+            );
+            setResults((prev) => [...savedImages, ...prev]);
             setActiveModelName(MODEL_LABELS[model] ?? model);
             if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
             succeeded = true;
@@ -297,10 +320,13 @@ export default function ImageStudio() {
             if (status === "SUCCEEDED") {
               const urls: string[] = (pollData.output?.results ?? []).map((r: any) => r.url).filter(Boolean);
               if (urls.length === 0) break;
-              const newImages: GeneratedImage[] = urls.map((url) => ({
-                url, prompt: prompt.trim(), model, size: selectedSize,
-              }));
-              setResults((prev) => [...newImages, ...prev]);
+              const savedImages: GeneratedImage[] = await Promise.all(
+                urls.map(async (url) => {
+                  const savedId = await saveImageToDb(token, { url, prompt: prompt.trim(), model, size: selectedSize });
+                  return { id: savedId ?? undefined, url, prompt: prompt.trim(), model, size: selectedSize };
+                })
+              );
+              setResults((prev) => [...savedImages, ...prev]);
               setActiveModelName(MODEL_LABELS[model] ?? model);
               if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
               taskSucceeded = true;
@@ -574,14 +600,12 @@ export default function ImageStudio() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Hasil</h2>
-                  {results.length > 0 && (
-                    <button
-                      onClick={() => setResults([])}
-                      className="text-xs text-muted-foreground/60 hover:text-red-500 transition-colors"
-                    >
-                      Hapus semua
-                    </button>
-                  )}
+                  <button
+                    onClick={() => navigate("/galeri-studio")}
+                    className="text-xs text-primary hover:text-primary/80 transition-colors"
+                  >
+                    Lihat di Galeri Studio →
+                  </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -686,7 +710,13 @@ export default function ImageStudio() {
                                 <RefreshCw className="w-3 h-3" />
                               </button>
                               <button
-                                onClick={() => setResults((prev) => prev.filter((_, idx) => idx !== i))}
+                                onClick={async () => {
+                                  if (img.id) {
+                                    const t = await getToken();
+                                    deleteImageFromDb(t, img.id);
+                                  }
+                                  setResults((prev) => prev.filter((_, idx) => idx !== i));
+                                }}
                                 className="p-1 rounded-md hover:bg-muted transition-colors text-muted-foreground hover:text-red-500"
                                 title="Hapus"
                               >

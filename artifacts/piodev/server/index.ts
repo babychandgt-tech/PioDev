@@ -856,6 +856,48 @@ app.delete("/api/video-jobs", requireAuth, async (req, res) => {
   res.json({ ok: true });
 });
 
+// ── Image Jobs API (Image Studio → Galeri Studio) ──────────────────────────────
+app.get("/api/image-jobs", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const limit = Math.min(Number(req.query.limit) || 100, 200);
+  const { data, error } = await supabaseAdmin
+    .from("image_jobs")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data || []);
+});
+
+app.post("/api/image-jobs", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { prompt, model, size, image_url } = req.body;
+  if (!image_url) { res.status(400).json({ error: "image_url required" }); return; }
+  const { data, error } = await supabaseAdmin
+    .from("image_jobs")
+    .insert({ user_id: userId, prompt: prompt || "", model: model || "", size: size || "", image_url })
+    .select()
+    .single();
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data);
+});
+
+app.delete("/api/image-jobs/:id", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { id } = req.params;
+  const { error } = await supabaseAdmin.from("image_jobs").delete().eq("id", id).eq("user_id", userId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
+app.delete("/api/image-jobs", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { error } = await supabaseAdmin.from("image_jobs").delete().eq("user_id", userId);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // Voice Studio (Qwen TTS / Voice Cloning / Voice Design via DashScope)
 // ═══════════════════════════════════════════════════════════════════════════════

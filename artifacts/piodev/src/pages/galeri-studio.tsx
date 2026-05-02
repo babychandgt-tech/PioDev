@@ -16,6 +16,8 @@ import {
   X,
   CheckSquare,
   Check,
+  Image as ImageIcon,
+  Maximize2,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -24,7 +26,17 @@ import { ChatSidebar } from "@/components/chat-sidebar";
 import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
-type FilterTab = "all" | "video" | "voice";
+type FilterTab = "all" | "image" | "video" | "voice";
+
+interface ImageItem {
+  kind: "image";
+  id: string;
+  prompt: string;
+  model: string;
+  size: string;
+  imageUrl: string;
+  createdAt: string;
+}
 
 interface VideoItem {
   kind: "video";
@@ -50,7 +62,7 @@ interface VoiceItem {
   createdAt: string;
 }
 
-type GalleryItem = VideoItem | VoiceItem;
+type GalleryItem = ImageItem | VideoItem | VoiceItem;
 
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -93,6 +105,7 @@ export default function GaleriStudio() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [filter, setFilter] = useState<FilterTab>("all");
+  const [images, setImages] = useState<ImageItem[]>([]);
   const [videos, setVideos] = useState<VideoItem[]>([]);
   const [voices, setVoices] = useState<VoiceItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -101,6 +114,7 @@ export default function GaleriStudio() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [previewVideo, setPreviewVideo] = useState<VideoItem | null>(null);
   const [previewVoice, setPreviewVoice] = useState<VoiceItem | null>(null);
+  const [previewImage, setPreviewImage] = useState<ImageItem | null>(null);
 
   // Select / batch mode
   const [selectMode, setSelectMode] = useState(false);
@@ -123,19 +137,20 @@ export default function GaleriStudio() {
 
   // Esc key buat tutup modal apapun + keluar dari select mode
   useEffect(() => {
-    if (!previewVideo && !previewVoice && !selectMode) return;
+    if (!previewVideo && !previewVoice && !previewImage && !selectMode) return;
     const handler = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
-      if (previewVideo || previewVoice) {
+      if (previewVideo || previewVoice || previewImage) {
         setPreviewVideo(null);
         setPreviewVoice(null);
+        setPreviewImage(null);
       } else if (selectMode) {
         exitSelectMode();
       }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [previewVideo, previewVoice, selectMode]);
+  }, [previewVideo, previewVoice, previewImage, selectMode]);
 
   const loadAll = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -145,10 +160,26 @@ export default function GaleriStudio() {
       const token = await getToken();
       if (!token) throw new Error("Sesi habis, silakan login lagi");
 
-      const [vidRes, voiceRes] = await Promise.all([
+      const [imgRes, vidRes, voiceRes] = await Promise.all([
+        fetch("/api/image-jobs?limit=100", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/video-jobs", { headers: { Authorization: `Bearer ${token}` } }),
         fetch("/api/voice-studio/history?limit=50", { headers: { Authorization: `Bearer ${token}` } }),
       ]);
+
+      if (imgRes.ok) {
+        const data = await imgRes.json();
+        setImages(
+          (data || []).map((j: any): ImageItem => ({
+            kind: "image",
+            id: j.id,
+            prompt: j.prompt || "",
+            model: j.model || "",
+            size: j.size || "",
+            imageUrl: j.image_url || "",
+            createdAt: j.created_at,
+          })),
+        );
+      }
 
       if (vidRes.ok) {
         const data = await vidRes.json();
@@ -199,16 +230,33 @@ export default function GaleriStudio() {
 
   const items = useMemo<GalleryItem[]>(() => {
     const merged: GalleryItem[] = [];
+    if (filter === "all" || filter === "image") merged.push(...images);
     if (filter === "all" || filter === "video") merged.push(...videos);
     if (filter === "all" || filter === "voice") merged.push(...voices);
     merged.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     return merged;
-  }, [videos, voices, filter]);
+  }, [images, videos, voices, filter]);
 
   const counts = {
-    all: videos.length + voices.length,
+    all: images.length + videos.length + voices.length,
+    image: images.length,
     video: videos.length,
     voice: voices.length,
+  };
+
+  const handleDeleteImage = async (id: string) => {
+    if (!confirm("Hapus gambar ini dari galeri?")) return;
+    setDeletingId(id);
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/image-jobs/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setImages(prev => prev.filter(v => v.id !== id));
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   const handleDeleteVideo = async (id: string) => {
@@ -248,20 +296,24 @@ export default function GaleriStudio() {
   );
 
   const handleBatchDownload = async () => {
-    const downloadable = selectedItems.filter(it =>
-      it.kind === "video" ? it.videoUrl : it.audioUrl,
-    );
+    const downloadable = selectedItems.filter(it => {
+      if (it.kind === "image") return !!it.imageUrl;
+      if (it.kind === "video") return !!it.videoUrl;
+      if (it.kind === "voice") return !!it.audioUrl;
+      return false;
+    });
     if (downloadable.length === 0) return;
     setBatchBusy("download");
     try {
       for (const it of downloadable) {
-        if (it.kind === "video" && it.videoUrl) {
+        if (it.kind === "image" && it.imageUrl) {
+          downloadUrl(it.imageUrl, `pio-image-${it.id}.png`);
+        } else if (it.kind === "video" && it.videoUrl) {
           downloadUrl(it.videoUrl, `pio-video-${it.id}.mp4`);
         } else if (it.kind === "voice" && it.audioUrl) {
           const ext = it.mime?.includes("wav") ? "wav" : "mp3";
           downloadUrl(it.audioUrl, `pio-voice-${it.id}.${ext}`);
         }
-        // Beda jeda antar download biar browser ga tolak
         await new Promise(r => setTimeout(r, 350));
       }
     } finally {
@@ -275,10 +327,14 @@ export default function GaleriStudio() {
     setBatchBusy("delete");
     try {
       const token = await getToken();
+      const imageIds = selectedItems.filter(it => it.kind === "image").map(it => it.id);
       const videoIds = selectedItems.filter(it => it.kind === "video").map(it => it.id);
       const voiceIds = selectedItems.filter(it => it.kind === "voice").map(it => it.id);
 
       const results = await Promise.allSettled([
+        ...imageIds.map(id =>
+          fetch(`/api/image-jobs/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
+        ),
         ...videoIds.map(id =>
           fetch(`/api/video-jobs/${id}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }),
         ),
@@ -287,15 +343,18 @@ export default function GaleriStudio() {
         ),
       ]);
 
+      const okImageIds = new Set<string>();
       const okVideoIds = new Set<string>();
       const okVoiceIds = new Set<string>();
       results.forEach((r, idx) => {
         if (r.status === "fulfilled" && r.value.ok) {
-          if (idx < videoIds.length) okVideoIds.add(videoIds[idx]);
-          else okVoiceIds.add(voiceIds[idx - videoIds.length]);
+          if (idx < imageIds.length) okImageIds.add(imageIds[idx]);
+          else if (idx < imageIds.length + videoIds.length) okVideoIds.add(videoIds[idx - imageIds.length]);
+          else okVoiceIds.add(voiceIds[idx - imageIds.length - videoIds.length]);
         }
       });
 
+      if (okImageIds.size) setImages(prev => prev.filter(v => !okImageIds.has(v.id)));
       if (okVideoIds.size) setVideos(prev => prev.filter(v => !okVideoIds.has(v.id)));
       if (okVoiceIds.size) setVoices(prev => prev.filter(v => !okVoiceIds.has(v.id)));
       exitSelectMode();
@@ -422,6 +481,7 @@ export default function GaleriStudio() {
             <div className="flex items-center gap-2 mb-6 overflow-x-auto pb-1 -mx-1 px-1">
               {([
                 { key: "all" as const, label: "Semua", icon: Sparkles, count: counts.all },
+                { key: "image" as const, label: "Gambar", icon: ImageIcon, count: counts.image },
                 { key: "video" as const, label: "Video", icon: VideoIcon, count: counts.video },
                 { key: "voice" as const, label: "Voice", icon: Mic, count: counts.voice },
               ]).map(tab => {
@@ -481,20 +541,26 @@ export default function GaleriStudio() {
                 </div>
                 <h2 className="text-xl font-bold mb-2">Galeri masih kosong</h2>
                 <p className="text-muted-foreground text-sm leading-relaxed mb-6">
-                  Mulai bikin karya di Voice Studio atau Video Studio, hasilnya bakal otomatis muncul di sini.
+                  Mulai bikin karya di Image Studio, Voice Studio, atau Video Studio — hasilnya bakal otomatis muncul di sini.
                 </p>
                 <div className="flex items-center justify-center gap-2 flex-wrap">
                   <button
-                    onClick={() => navigate("/voice-studio")}
+                    onClick={() => navigate("/image-studio")}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-br from-primary to-indigo-500 text-white text-sm font-medium shadow-sm hover:brightness-110 transition-all"
                   >
-                    <Mic className="w-4 h-4" /> Buka Voice Studio
+                    <ImageIcon className="w-4 h-4" /> Buka Image Studio
+                  </button>
+                  <button
+                    onClick={() => navigate("/voice-studio")}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/70 text-foreground text-sm font-medium transition-colors"
+                  >
+                    <Mic className="w-4 h-4" /> Voice Studio
                   </button>
                   <button
                     onClick={() => navigate("/video-studio")}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-muted hover:bg-muted/70 text-foreground text-sm font-medium transition-colors"
                   >
-                    <VideoIcon className="w-4 h-4" /> Buka Video Studio
+                    <VideoIcon className="w-4 h-4" /> Video Studio
                   </button>
                 </div>
               </div>
@@ -509,6 +575,20 @@ export default function GaleriStudio() {
                 {items.map(item => {
                   const key = itemKey(item);
                   const selected = selectedKeys.has(key);
+                  if (item.kind === "image") {
+                    return (
+                      <ImageCard
+                        key={key}
+                        item={item}
+                        isDeleting={deletingId === item.id}
+                        selectMode={selectMode}
+                        selected={selected}
+                        onToggleSelect={() => toggleSelect(key)}
+                        onPreview={() => setPreviewImage(item)}
+                        onDelete={() => handleDeleteImage(item.id)}
+                      />
+                    );
+                  }
                   return item.kind === "video" ? (
                     <VideoCard
                       key={key}
@@ -734,7 +814,169 @@ export default function GaleriStudio() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ── Image Preview Modal ──────────────────────────────────────────── */}
+      <AnimatePresence>
+        {previewImage && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 sm:p-8"
+            onClick={() => setPreviewImage(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="relative max-w-5xl w-full flex flex-col items-center"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                onClick={() => setPreviewImage(null)}
+                className="absolute -top-12 right-0 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-colors"
+                title="Tutup (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <img
+                src={previewImage.imageUrl}
+                alt={previewImage.prompt}
+                className="max-w-full max-h-[80vh] rounded-2xl shadow-2xl object-contain"
+              />
+              <div className="mt-4 flex items-start justify-between gap-4 text-white w-full max-w-2xl">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm leading-snug line-clamp-3">{previewImage.prompt || "Tanpa prompt"}</p>
+                  <div className="text-[11px] text-white/60 mt-1">
+                    {previewImage.model} · {formatDate(previewImage.createdAt)}
+                  </div>
+                </div>
+                <button
+                  onClick={() => downloadUrl(previewImage.imageUrl, `pio-image-${previewImage.id}.png`)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm font-medium transition-colors shrink-0"
+                >
+                  <Download className="w-4 h-4" /> Download
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+}
+
+// ── Image Card ───────────────────────────────────────────────────────────────
+function ImageCard({
+  item,
+  isDeleting,
+  selectMode,
+  selected,
+  onToggleSelect,
+  onPreview,
+  onDelete,
+}: {
+  item: ImageItem;
+  isDeleting: boolean;
+  selectMode: boolean;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onPreview: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2 }}
+      className={cn(
+        "group rounded-xl sm:rounded-2xl border bg-card overflow-hidden hover:shadow-lg transition-all",
+        selected ? "border-primary ring-2 ring-primary/40" : "border-border/60 hover:border-primary/40"
+      )}
+    >
+      <button
+        type="button"
+        onClick={selectMode ? onToggleSelect : onPreview}
+        className="relative aspect-square w-full bg-gradient-to-br from-primary/10 to-indigo-400/10 overflow-hidden block cursor-pointer"
+      >
+        {item.imageUrl ? (
+          <img
+            src={item.imageUrl}
+            alt={item.prompt}
+            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            loading="lazy"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <ImageIcon className="w-8 h-8 text-primary/30" />
+          </div>
+        )}
+
+        {/* Top badge */}
+        <div className="absolute top-1 left-1 sm:top-2 sm:left-2 inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-black/60 backdrop-blur-sm text-white text-[9px] sm:text-[10px] font-semibold">
+          <ImageIcon className="w-2.5 h-2.5 sm:w-3 sm:h-3" /> Gambar
+        </div>
+
+        {/* Hover overlay with expand icon */}
+        {!selectMode && (
+          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors flex items-center justify-center">
+            <div className="opacity-0 group-hover:opacity-100 transition-opacity w-9 h-9 sm:w-12 sm:h-12 rounded-full bg-white/95 text-black flex items-center justify-center shadow-lg">
+              <Maximize2 className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+          </div>
+        )}
+
+        {/* Select mode overlay */}
+        {selectMode && (
+          <div className={cn(
+            "absolute inset-0 transition-colors",
+            selected ? "bg-primary/30" : "bg-black/20 hover:bg-black/30"
+          )}>
+            <div className={cn(
+              "absolute top-2 right-2 w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all",
+              selected ? "bg-primary border-primary" : "bg-black/40 border-white/70 backdrop-blur-sm"
+            )}>
+              {selected && <Check className="w-3.5 h-3.5 text-white" strokeWidth={3} />}
+            </div>
+          </div>
+        )}
+      </button>
+
+      <div className="p-2 sm:p-3 md:p-3.5">
+        <p className="text-[11px] sm:text-xs md:text-sm font-medium leading-snug line-clamp-2 mb-1 sm:mb-1.5">
+          {item.prompt || "Tanpa prompt"}
+        </p>
+        <div className="flex items-center justify-between gap-1.5">
+          <div className="flex items-center gap-1 text-[9px] sm:text-[10px] text-muted-foreground min-w-0">
+            <span className="truncate hidden sm:inline">{item.model}</span>
+            <span className="hidden sm:inline">·</span>
+            <span className="shrink-0">{formatDate(item.createdAt)}</span>
+          </div>
+          <div className="flex items-center gap-0.5 shrink-0">
+            {item.imageUrl && (
+              <button
+                onClick={() => downloadUrl(item.imageUrl, `pio-image-${item.id}.png`)}
+                className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                title="Download"
+              >
+                <Download className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              </button>
+            )}
+            <button
+              onClick={onDelete}
+              disabled={isDeleting}
+              className="p-1 sm:p-1.5 rounded-md text-muted-foreground hover:text-red-500 hover:bg-red-500/10 transition-colors disabled:opacity-50"
+              title="Hapus"
+            >
+              {isDeleting ? <Loader2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />}
+            </button>
+          </div>
+        </div>
+        <div className="sm:hidden text-[9px] text-muted-foreground mt-0.5">{formatDate(item.createdAt)}</div>
+      </div>
+    </motion.div>
   );
 }
 
