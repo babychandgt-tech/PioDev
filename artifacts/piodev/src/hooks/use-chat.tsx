@@ -486,13 +486,19 @@ export function useChat(userId: string | undefined) {
     }
 
     try {
-      // Smart routing: gambar → vision, web/thinking → thinking chain, else → Plus atau Mini
+      // Smart routing:
+      // - gambar → VISION_CHAIN
+      // - web search → WEB_SEARCH_CHAIN (beda dari thinking — butuh enable_search)
+      // - thinking only → THINKING_CHAIN
+      // - else → Plus / Mini / Coder sesuai tier
       const llmChain = options?.modelTier === "mini" ? MINI_CHAIN : options?.modelTier === "coder" ? CODER_CHAIN : PLUS_CHAIN;
       const chain = hasImages
         ? VISION_CHAIN
-        : (options?.webSearch || options?.thinking)
-          ? THINKING_CHAIN
-          : llmChain;
+        : options?.webSearch
+          ? WEB_SEARCH_CHAIN
+          : options?.thinking
+            ? THINKING_CHAIN
+            : llmChain;
 
       const buildHistory = () => currentMessages.map((m, idx) => {
         const isLast = idx === currentMessages.length - 1;
@@ -521,7 +527,10 @@ export function useChat(userId: string | undefined) {
       });
 
       // ── DIRECT STREAMING ──────────────────────────────────────────────────
-      const enableThinking = !!((options?.webSearch || options?.thinking) && !hasImages);
+      // enableThinking: hanya aktif saat mode Think, BUKAN saat web search
+      const enableThinking = !!(options?.thinking && !hasImages);
+      // enableSearch: aktif saat mode Web dinyalakan (param DashScope: enable_search)
+      const enableSearch = !!(options?.webSearch && !hasImages);
       const systemPrompt = await getSystemPrompt(options?.voiceMode);
       const fullHistory = [
         { role: "system" as const, content: systemPrompt },
@@ -562,6 +571,7 @@ export function useChat(userId: string | undefined) {
                 stream: true,
                 stream_options: { include_usage: true },
                 ...(enableThinking && { enable_thinking: true }),
+                ...(enableSearch && { enable_search: true }),
               }),
               signal: abortControllerRef.current!.signal,
             });
