@@ -7,6 +7,7 @@ import { Check, Copy, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
+import { SourceCitations, parseJsonSources } from "@/components/source-citations";
 
 const LANG_DISPLAY: Record<string, string> = {
   js: "JavaScript", jsx: "JavaScript", ts: "TypeScript", tsx: "TypeScript",
@@ -38,6 +39,11 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
   if (!inline && match) {
     if (lang === "mermaid") {
       return <MermaidDiagram code={codeStr} />;
+    }
+
+    if (lang === "json-sources") {
+      const sources = parseJsonSources(codeStr);
+      return sources.length > 0 ? <SourceCitations sources={sources} /> : null;
     }
 
     return (

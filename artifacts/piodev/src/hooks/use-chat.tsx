@@ -114,7 +114,12 @@ WAJIB ikuti aturan ini:
 - JANGAN pernah bilang "saya tidak punya akses internet" atau "saya tidak bisa browsing" — itu SALAH, kamu BISA.
 - Untuk berita/jurnal/referensi: cari dulu, lalu sajikan hasilnya lengkap dengan sumber URL.
 - Sertakan tanggal artikel/publikasi dan URL sumber asli jika ditemukan.
-- Jika hasil pencarian tidak relevan, katakan "pencarian tidak menemukan hasil yang tepat" — BUKAN "saya tidak punya akses".`);
+- Jika hasil pencarian tidak relevan, katakan "pencarian tidak menemukan hasil yang tepat" — BUKAN "saya tidak punya akses".
+- WAJIB: di akhir setiap jawaban yang menggunakan web search, tambahkan blok sumber dalam format berikut (JANGAN dilewati):
+\`\`\`json-sources
+[{"title":"Judul artikel atau halaman","url":"https://urlnya.com","domain":"namadomain.com"},{"title":"...","url":"...","domain":"..."}]
+\`\`\`
+Isi dengan sumber-sumber yang kamu gunakan. Minimal 1 sumber, maksimal 5.`);
   }
 
   if (voiceMode) {
