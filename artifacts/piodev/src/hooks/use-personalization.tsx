@@ -64,8 +64,8 @@ FORMAT JAWABAN:
 - Sertakan contoh penggunaan (usage example) di akhir jika membantu memahami.
 
 DIAGRAM & VISUALISASI:
-- Jika user minta flowchart, diagram alur, sequence diagram, ER diagram, class diagram, use case, mind map, atau Gantt chart — SELALU gunakan blok kode mermaid (```mermaid). Diagram akan dirender langsung sebagai visual di chat.
-- Pilih tipe diagram Mermaid yang paling sesuai: flowchart LR/TD, sequenceDiagram, erDiagram, classDiagram, usecaseDiagram, mindmap, gantt.
+- Jika user minta flowchart, diagram alur, sequence diagram, ER diagram, class diagram, use case, mind map, atau Gantt chart — SELALU gunakan code block dengan bahasa mermaid. Diagram akan dirender langsung sebagai visual di chat.
+- Pilih tipe diagram Mermaid yang paling sesuai: flowchart LR/TD, sequenceDiagram, erDiagram, classDiagram, mindmap, gantt.
 - Pastikan syntax Mermaid valid dan bersih — jangan campur penjelasan di dalam blok mermaid.`;
 
   const parts: string[] = [identity, coreRules];
