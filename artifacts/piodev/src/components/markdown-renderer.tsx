@@ -23,7 +23,7 @@ const LANG_DISPLAY: Record<string, string> = {
 const CodeBlock = ({ inline, className, children, ...props }: any) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const match = /language-(\w+)/.exec(className || "");
+  const match = /language-([\w-]+)/.exec(className || "");
   const lang = match?.[1]?.toLowerCase() ?? "";
   const displayLang = LANG_DISPLAY[lang] ?? (lang ? lang.toUpperCase() : null);
   const [copied, setCopied] = useState(false);
@@ -108,11 +108,15 @@ const CodeBlock = ({ inline, className, children, ...props }: any) => {
 const StreamingCodeBlock = ({ inline, className, children }: any) => {
   const { theme } = useTheme();
   const isDark = theme === "dark";
-  const match = /language-(\w+)/.exec(className || "");
+  const match = /language-([\w-]+)/.exec(className || "");
   const lang = match?.[1]?.toLowerCase() ?? "";
   const displayLang = LANG_DISPLAY[lang] ?? (lang ? lang.toUpperCase() : null);
 
   if (!inline && match) {
+    if (lang === "json-sources") {
+      const sources = parseJsonSources(String(children).replace(/\n$/, ""));
+      return sources.length > 0 ? <SourceCitations sources={sources} /> : null;
+    }
     return (
       <div className={cn("group relative my-4 rounded-xl overflow-hidden border", isDark ? "bg-[#18181b] border-white/[0.07]" : "bg-zinc-50 border-black/[0.08]")}>
         {displayLang && (
