@@ -9,6 +9,7 @@ function initMermaid(isDark: boolean) {
   mermaid.initialize({
     startOnLoad: false,
     theme: isDark ? "dark" : "default",
+    securityLevel: "loose",
     fontFamily: "ui-sans-serif, system-ui, sans-serif",
     fontSize: 13,
     flowchart: {
@@ -17,6 +18,7 @@ function initMermaid(isDark: boolean) {
       nodeSpacing: 50,
       rankSpacing: 60,
       useMaxWidth: true,
+      htmlLabels: true,
     },
     sequence: { useMaxWidth: true, boxMargin: 8 },
     er: { useMaxWidth: true },
