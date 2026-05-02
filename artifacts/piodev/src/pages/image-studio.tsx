@@ -122,7 +122,7 @@ async function deleteImageFromDb(token: string, id: string): Promise<void> {
 // ── Main component ─────────────────────────────────────────────────────────────
 export default function ImageStudio() {
   const { user, logout } = useAuth();
-  const { theme, setTheme } = useTheme();
+  const { theme, toggleTheme } = useTheme();
   const isDark = theme === "dark";
   const [, navigate] = useLocation();
   const { chats, activeChat, createNewChat, selectChat, deleteChat, updateChatTitle } = useChat(user?.id);
@@ -464,7 +464,7 @@ export default function ImageStudio() {
                 {quota.remaining}/{quota.limit}
               </div>
             )}
-            <button onClick={() => setTheme(isDark ? "light" : "dark")}
+            <button onClick={toggleTheme}
               className="p-2 rounded-lg hover:bg-muted transition-colors text-muted-foreground">
               {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </button>
