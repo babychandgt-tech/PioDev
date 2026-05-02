@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useId } from "react";
+import { useEffect, useRef, useState, useId, useCallback } from "react";
 import { createPortal } from "react-dom";
 import mermaid from "mermaid";
 import { Check, Copy, Download, ZoomIn, ZoomOut, Maximize2, X } from "lucide-react";
@@ -56,12 +56,12 @@ const btnCls = (isDark: boolean) =>
 const dividerCls = (isDark: boolean) =>
   cn("w-px h-3.5 mx-1", isDark ? "bg-white/10" : "bg-black/10");
 
+let renderSeq = 0;
+
 export function MermaidDiagram({ code }: { code: string }) {
   const { theme } = useTheme();
   const isDark = theme === "dark";
   const uid = useId().replace(/:/g, "");
-  const diagramId = `mermaid-${uid}`;
-  const fsId = `mermaid-fs-${uid}`;
 
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
@@ -72,18 +72,31 @@ export function MermaidDiagram({ code }: { code: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    const renderId = `mermaid-${uid}-${++renderSeq}`;
+
+    // Suppress mermaid's own parseError UI output
+    (mermaid as any).parseError = () => {};
+
     async function render() {
+      // Clean up any stale hidden elements mermaid may have left in DOM
+      document.getElementById(renderId)?.remove();
       try {
         initMermaid(isDark);
-        const { svg: rendered } = await mermaid.render(diagramId, code.trim());
+        const { svg: rendered } = await mermaid.render(renderId, code.trim());
         if (!cancelled) { setSvg(rendered); setError(""); }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message ?? "Gagal render diagram");
+        if (!cancelled) {
+          const msg = (e?.message ?? "").replace(/\n.*$/s, "").trim();
+          setError(msg || "Syntax error pada diagram");
+        }
+      } finally {
+        // Always clean up the hidden container mermaid creates
+        document.getElementById(renderId)?.remove();
       }
     }
     render();
-    return () => { cancelled = true; };
-  }, [code, isDark, diagramId]);
+    return () => { cancelled = true; document.getElementById(renderId)?.remove(); };
+  }, [code, isDark, uid]);
 
   useEffect(() => {
     if (!fullscreen) return;
