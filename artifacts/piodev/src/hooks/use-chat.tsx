@@ -103,23 +103,34 @@ async function getSystemPrompt(voiceMode = false, webSearch = false): Promise<st
   const p = { ...DEFAULT_PERSONALIZATION, ...session?.user?.user_metadata?.personalization };
   const base = buildSystemPrompt(p);
 
+  const prefixes: string[] = [];
   const suffixes: string[] = [];
 
   if (webSearch) {
-    suffixes.push(`
-[MODE WEB SEARCH AKTIF]
-Kamu SEKARANG terhubung ke internet dan bisa mencari informasi real-time.
-WAJIB ikuti aturan ini:
-- SELALU gunakan kemampuan web search untuk mencari info terbaru sebelum menjawab.
-- JANGAN pernah bilang "saya tidak punya akses internet" atau "saya tidak bisa browsing" — itu SALAH, kamu BISA.
-- Untuk berita/jurnal/referensi: cari dulu, lalu sajikan hasilnya lengkap dengan sumber URL.
-- Sertakan tanggal artikel/publikasi dan URL sumber asli jika ditemukan.
-- Jika hasil pencarian tidak relevan, katakan "pencarian tidak menemukan hasil yang tepat" — BUKAN "saya tidak punya akses".
-- WAJIB: di akhir setiap jawaban yang menggunakan web search, tambahkan blok sumber dalam format berikut (JANGAN dilewati):
+    prefixes.push(`=== INSTRUKSI PRIORITAS TERTINGGI — WEB SEARCH MODE ===
+Kamu SEKARANG berjalan dalam mode Web Search. Ini adalah instruksi WAJIB yang TIDAK BOLEH diabaikan dalam kondisi apapun.
+
+ATURAN 1 — WAJIB SEARCH:
+Untuk SETIAP pertanyaan yang masuk, kamu HARUS melakukan pencarian web terlebih dahulu, bahkan jika kamu merasa sudah tahu jawabannya. Tujuannya adalah menyajikan informasi yang TERVERIFIKASI dari sumber nyata di internet, bukan hanya dari pengetahuan pelatihan AI. Ini termasuk pertanyaan umum, definisi, tutorial, berita, dan topik teknis.
+
+ATURAN 2 — FORMAT RESPONS WAJIB:
+Setiap respons HARUS memiliki dua bagian:
+Bagian A: Jawaban utama yang menggabungkan hasil pencarian web dengan penjelasan tambahan dari kamu. Mulai dengan menyebutkan data/fakta dari web, lalu tambahkan analisis atau penjelasan yang lebih dalam.
+Bagian B: Blok sumber WAJIB di akhir respons, TANPA TERKECUALI, dalam format persis berikut:
+
 \`\`\`json-sources
-[{"title":"Judul artikel atau halaman","url":"https://urlnya.com","domain":"namadomain.com"},{"title":"...","url":"...","domain":"..."}]
+[{"title":"Judul halaman sumber","url":"https://url-lengkap.com/path","domain":"namadomain.com"},{"title":"Judul sumber kedua","url":"https://url2.com","domain":"domain2.com"}]
 \`\`\`
-Isi dengan sumber-sumber yang kamu gunakan. Minimal 1 sumber, maksimal 5.`);
+
+ATURAN 3 — KUALITAS SUMBER:
+- Gunakan 2-5 sumber per respons
+- Sertakan URL asli yang valid dan dapat dikunjungi
+- Prioritaskan sumber: dokumentasi resmi, artikel teknis terpercaya, jurnal, berita dari media kredibel
+- Jika tidak menemukan sumber relevan dari pencarian, gunakan URL terkait topik yang kamu ketahui dari data pelatihan
+
+ATURAN 4 — JANGAN LEWATI:
+Blok json-sources di akhir adalah WAJIB untuk SETIAP respons saat mode Web aktif. Bahkan jika jawaban singkat. Bahkan jika topik sudah kamu ketahui. Ini bukan opsional.
+=== AKHIR INSTRUKSI PRIORITAS ===`);
   }
 
   if (voiceMode) {
@@ -135,7 +146,11 @@ Kamu lagi ngobrol lewat suara, BUKAN chat tertulis. Jawab harus:
 - Kalau pertanyaan kompleks, kasih jawaban inti aja dulu, terus tanya balik kalau perlu detail`);
   }
 
-  return base + suffixes.join("");
+  const parts: string[] = [];
+  if (prefixes.length > 0) parts.push(prefixes.join("\n\n"));
+  parts.push(base);
+  if (suffixes.length > 0) parts.push(suffixes.join(""));
+  return parts.join("\n\n");
 }
 
 const MAX_RETRIES = 2;
