@@ -1,0 +1,636 @@
+Qwen-Image Edit API reference
+Updated at: 2026-04-23 21:14:48
+Copy as MD
+Product
+The Qwen-Image Edit model supports multiple input and output images. It can precisely modify text within images, add, delete, or move objects, change the actions of subjects, transfer image styles, and enhance image details.
+
+Model overview
+
+
+
+
+Input image 1
+
+Input image 2
+
+Input image 3
+
+Output images (multiple)
+
+image99
+
+image98
+
+image89
+
+image100
+
+imageout2
+
+Prompt: The girl from Image 1 is wearing the black dress from Image 2 and sitting in the pose from Image 3.
+
+
+
+Model name
+
+Model description
+
+Output image specifications
+
+qwen-image-2.0-pro Recommended
+
+It currently has the same capabilities as qwen-image-2.0-pro-2026-03-03
+The Pro series of Qwen image generation and editing models offers enhanced capabilities in text rendering, realistic textures, and semantic adherence.
+
+For image generation, see Qwen-Text to Image.
+Image resolution:
+
+Customizable: The total number of pixels must be between 512 × 512 and 2048 × 2048.
+
+Default: The total number of pixels is close to 1024 × 1024, with an aspect ratio similar to the input image (or the last image in a multi-image input).
+
+Image format: png
+
+Number of images: 1–6
+
+qwen-image-2.0-pro-2026-04-22 Recommended
+
+qwen-image-2.0-pro-2026-03-03
+
+qwen-image-2.0 Recommended
+
+It currently has the same capabilities as qwen-image-2.0-2026-03-03
+This is the accelerated version of the Qwen image generation and editing model, balancing performance and response speed.
+
+For image generation, see Qwen-Text to Image.
+qwen-image-2.0-2026-03-03 Recommended
+
+qwen-image-edit-max
+
+It currently has the same capabilities as qwen-image-edit-max-2026-01-16
+The Max series of Qwen image editing models provides stronger capabilities in industrial design, geometric reasoning, and character consistency.
+
+Image resolution:
+
+Customizable: The width and height can each range from [512, 2048] pixels.
+
+Default: The total number of pixels is close to 1024 × 1024, with an aspect ratio similar to the input image (or the last image in a multi-image input).
+
+Image format: png
+
+Number of images: 1–6
+
+qwen-image-edit-max-2026-01-16
+
+qwen-image-edit-plus
+
+It currently has the same capabilities as qwen-image-edit-plus-2025-10-30
+The Plus series of Qwen image editing models supports multiple image outputs and custom resolutions.
+
+qwen-image-edit-plus-2025-12-15
+
+qwen-image-edit-plus-2025-10-30
+
+qwen-image-edit
+
+This model supports single-image editing and multi-image fusion.
+
+Image resolution: Not customizable. The generation rule is the same as the Default rule described above.
+
+Image format: png
+
+Number of images: Fixed at 1
+
+Note
+Before making a call, check the Model List to see which models are supported in each region.
+
+Prerequisites
+Before making a call, get an API key and export the API key as an environment variable.
+
+To call the API using the SDK, install the DashScope SDK. The SDK is available for Python and Java.
+
+Important
+The Beijing and Singapore regions have separate API keys and request endpoints. They cannot be used interchangeably. Cross-region calls lead to authentication failures or service errors.
+
+HTTP call
+Singapore region:POST https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+
+Beijing region:POST https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation
+
+Request parameters
+Single-image editingMulti-image fusion
+This example uses the qwen-image-2.0-pro model to output two images.
+
+ 
+curl --location 'https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation' \
+--header 'Content-Type: application/json' \
+--header "Authorization: Bearer $DASHSCOPE_API_KEY" \
+--data '{
+    "model": "qwen-image-2.0-pro",
+    "input": {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/fpakfo/image36.webp"
+                    },
+                    {
+                        "text": "Generate an image that matches the depth map, following this description: A red, dilapidated bicycle is parked on a muddy path, with a dense primeval forest in the background."
+                    }
+                ]
+            }
+        ]
+    },
+    "parameters": {
+        "n": 2,
+        "negative_prompt": " ",
+        "prompt_extend": true,
+        "watermark": false,
+        "size": "1536*1024"
+    }
+}'
+Request headers
+Content-Type string (Required)
+
+The content type of the request. Must be application/json.
+
+Authorization string (Required)
+
+Authenticates the request with a Model Studio API key. Example: Bearer sk-xxxx.
+
+Request body
+model string (Required)
+
+The model name. For example: qwen-image-2.0-pro.
+
+input object (Required)
+
+This is the input parameter object. It contains the following field:
+
+Property
+
+messages array (Required)
+
+This array contains the request content. Only single-turn conversations are currently supported, so the array must contain exactly one object. This object includes the role and content properties.
+
+Property
+
+role string (Required)
+
+The role of the message sender. Must be set to user.
+
+content array (Required)
+
+The message content. It includes one to three images in the format {"image": "..."} and a single editing instruction in the format {"text": "..."}.
+
+Property
+
+image string (Required)
+
+The URL or Base64-encoded data of the input image. You can provide one to three images.
+
+For multi-image input, the image order is defined by the array sequence. The aspect ratio of the output image is based on the last image.
+
+Image requirements:
+
+Image format: JPG, JPEG, PNG, BMP, TIFF, WEBP, or GIF.
+
+The output image is in PNG format. For animated GIFs, only the first frame is processed.
+Image resolution: For best results, the image width and height should both be between 384 and 3072 pixels. Low resolution may result in blurry output, while high resolution increases processing time.
+
+Image size: No more than 10 MB.
+
+Supported input formats
+
+Public URL:
+
+Supports HTTP and HTTPS protocols.
+
+For example: https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/fpakfo/image36.webp.
+
+Base64-encoded image string
+
+For example: data:image/jpeg;base64,GDU7MtCZz... (This example is truncated for demonstration purposes.)
+
+For Base64 encoding specifications, see Pass an image using Base64 encoding.
+
+text string (Required)
+
+A positive prompt that describes the desired content, style, and composition of the generated image.
+
+It supports Chinese and English. The length cannot exceed 800 characters. Each Chinese character, letter, number, or symbol counts as one character. Any excess is automatically truncated.
+
+For example: The girl from Image 1 is wearing the black dress from Image 2 and sitting in the pose from Image 3. Keep her clothing, hairstyle, and expression unchanged, and make the action look natural and smooth.
+
+Note: The content array must contain exactly one text object. Otherwise, an error will occur.
+
+parameters object (Optional)
+
+Additional parameters to control image generation.
+
+Property
+
+n integer (Optional)
+
+The number of images to output. The default value is 1.
+
+For the qwen-image-2.0, qwen-image-edit-max, or qwen-image-edit-plus series models, you can choose to output one to six images.
+
+For qwen-image-edit, only one image can be output.
+
+negative_prompt string (Optional)
+
+A negative prompt used to describe content you do not want to see in the image. It can be used to constrain the output.
+
+It supports Chinese and English. The length cannot exceed 500 characters. Each Chinese character, letter, number, or symbol counts as one character. Any excess is automatically truncated.
+
+For example: low resolution, error, worst quality, low quality, disfigured, extra fingers, or bad proportions.
+
+size string (Optional)
+
+This parameter sets the resolution of the output image. The format is width*height. For example, "1024*1536".
+
+qwen-image-2.0 series models:
+
+The total number of pixels must be between 512 × 512 and 2048 × 2048.
+
+By default, the total number of pixels is close to 1024*1024, with an aspect ratio similar to the input image (or the last image in a multi-image input).
+
+qwen-image-edit-max or qwen-image-edit-plus series models:
+
+The width and height can each range from [512, 2048] pixels.
+
+By default, the total number of pixels is close to 1024*1024, with an aspect ratio similar to the input image (or the last image in a multi-image input).
+
+If you specify the size parameter, the system uses the width and height specified by size as the target and adjusts the dimensions of the actual output image to the nearest multiples of 16. For example, if you specify 1033*1032, the output image size is 1040*1024.
+Recommended resolutions for common aspect ratios
+
+1:1: 1024 × 1024, or 1536 × 1536
+
+2:3: 768 × 1152, or 1024 × 1536
+
+3:2: 1152 × 768, or 1536 × 1024
+
+3:4: 960 × 1280, or 1080 × 1440
+
+4:3: 1280 × 960, or 1440 × 1080
+
+9:16: 720 × 1280, or 1080 × 1920
+
+16:9: 1280 × 720, or 1920 × 1080
+
+21:9: 1344 × 576, or 2048 × 872
+
+Supported models: All models except qwen-image-edit.
+
+prompt_extend bool (Optional)
+
+This parameter specifies whether to enable intelligent prompt rewriting. The default value is true. When enabled, the model optimizes the positive prompt (text), which significantly improves results for simple prompts.
+
+Supported models: All models except qwen-image-edit.
+
+watermark bool (Optional)
+
+This parameter specifies whether to add a "Qwen-Image" watermark to the bottom right of the image. The default value is false. The watermark style is as follows:
+
+1
+
+seed integer (Optional)
+
+The random number seed. The value must be in the range [0, 2147483647].
+
+Using the same seed parameter value helps maintain relative stability in the generated content. If not provided, the algorithm uses a random seed automatically.
+
+Note: The model generation process is probabilistic. Even with the same seed, the results are not guaranteed to be identical every time.
+
+Response parameters
+Task successfulTask error
+Task data (task status and image URLs) is retained for only 24 hours and then automatically purged. Save generated images promptly.
+
+ 
+{
+    "output": {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "image": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxx"
+                        },
+                        {
+                            "image": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxx"
+                        }
+                    ]
+                }
+            }
+        ]
+    },
+    "usage": {
+        "width": 1536,
+        "image_count": 2,
+        "height": 1024
+    },
+    "request_id": "bf37ca26-0abe-98e4-8065-xxxxxx"
+}
+output object
+
+This object contains the model's generation results.
+
+Property
+
+choices array
+
+A list of result choices.
+
+Property
+
+finish_reason string
+
+The reason the task stopped. The value is stop for a natural stop.
+
+message object
+
+The message returned by the model.
+
+Property
+
+role string
+
+The role of the message. The value is fixed at assistant.
+
+content array
+
+The message content, which contains the generated image information.
+
+Property
+
+image string
+
+URL of the generated image in PNG format. The link is valid for 24 hours. You can download and save the image promptly.
+
+usage object
+
+The resource usage for this call. This is returned only on a successful call.
+
+Property
+
+image_count integer
+
+The number of generated images.
+
+width integer
+
+The width of the generated image in pixels.
+
+height integer
+
+The height of the generated image in pixels.
+
+request_id string
+
+Unique request identifier for tracing and troubleshooting.
+
+code string
+
+Error code. Returned only for failed requests. See Error messages.
+
+message string
+
+Detailed error message. Returned only for failed requests. See Error messages.
+
+DashScope SDK call
+The parameter names in the SDK are mostly consistent with the HTTP API. The parameter structure is encapsulated based on the language features. For a complete list of parameters, see Qwen API reference.
+
+Python SDK call
+Note
+We recommend installing the latest version of the DashScope Python SDK to avoid potential runtime errors. For more information, see Install or upgrade the SDK.
+
+Asynchronous interfaces are not supported.
+
+Request examples
+Pass an image using a public URLPass an image using Base64 encodingDownload an image from a URL
+ 
+import json
+import os
+import dashscope
+from dashscope import MultiModalConversation
+
+# The following is the URL for the Singapore region. If you use a model in the Beijing region, replace the URL with: https://dashscope.aliyuncs.com/api/v1
+dashscope.base_http_api_url = 'https://dashscope-intl.aliyuncs.com/api/v1'
+
+# The model supports one to three input images.
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/thtclx/input1.png"},
+            {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/iclsnx/input2.png"},
+            {"image": "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/gborgw/input3.png"},
+            {"text": "The girl from Image 1 is wearing the black dress from Image 2 and sitting in the pose from Image 3."}
+        ]
+    }
+]
+
+# The API keys for the Singapore and Beijing regions are different. To get an API key, see https://www.alibabacloud.com/help/en/model-studio/get-api-key.
+# If you have not configured the environment variable, replace the next line with: api_key="sk-xxx"
+api_key = os.getenv("DASHSCOPE_API_KEY")
+
+# The qwen-image-2.0, qwen-image-edit-max, and qwen-image-edit-plus series support one to six output images. This example generates two.
+response = MultiModalConversation.call(
+    api_key=api_key,
+    model="qwen-image-2.0-pro",
+    messages=messages,
+    stream=False,
+    n=2,
+    watermark=False,
+    negative_prompt=" ",
+    prompt_extend=True,
+    size="1024*1536",
+)
+
+if response.status_code == 200:
+    # To view the full response, uncomment the next line.
+    # print(json.dumps(response, ensure_ascii=False))
+    for i, content in enumerate(response.output.choices[0].message.content):
+        print(f"URL of output image {i+1}: {content['image']}")
+else:
+    print(f"HTTP status code: {response.status_code}")
+    print(f"Error code: {response.code}")
+    print(f"Error message: {response.message}")
+    print("For more information, see https://www.alibabacloud.com/help/en/model-studio/error-code")
+Response example
+The image URL is valid for 24 hours. Download the image promptly.
+
+input_tokens, output_tokens, and characters fields are compatible. Their values are currently fixed at 0.
+ 
+{
+    "status_code": 200,
+    "request_id": "fa41f9f9-3cb6-434d-a95d-4ae6b9xxxxxx",
+    "code": "",
+    "message": "",
+    "output": {
+        "text": null,
+        "finish_reason": null,
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "image": "https://dashscope-result-hz.oss-cn-hangzhou.aliyuncs.com/xxx.png?Expires=xxx"
+                        },
+                        {
+                            "image": "https://dashscope-result-hz.oss-cn-hangzhou.aliyuncs.com/xxx.png?Expires=xxx"
+                        }
+                    ]
+                }
+            }
+        ],
+        "audio": null
+    },
+    "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "characters": 0,
+        "height": 1536,
+        "image_count": 2,
+        "width": 1024
+    }
+}
+Call using the Java SDK
+Note
+Install the latest DashScope Java SDK to avoid runtime errors. See Install or upgrade the SDK.
+
+Request examples
+Pass an image using a public URLPass an image using Base64 encodingDownload an image from a URL
+ 
+import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversation;
+import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationParam;
+import com.alibaba.dashscope.aigc.multimodalconversation.MultiModalConversationResult;
+import com.alibaba.dashscope.common.MultiModalMessage;
+import com.alibaba.dashscope.common.Role;
+import com.alibaba.dashscope.exception.ApiException;
+import com.alibaba.dashscope.exception.NoApiKeyException;
+import com.alibaba.dashscope.exception.UploadFileException;
+import com.alibaba.dashscope.utils.JsonUtils;
+import com.alibaba.dashscope.utils.Constants;
+
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+
+public class QwenImageEdit {
+
+    static {
+        // The following URL is for the Singapore region. If you use a model in the Beijing region, replace the URL with https://dashscope.aliyuncs.com/api/v1.
+        Constants.baseHttpApiUrl = "https://dashscope-intl.aliyuncs.com/api/v1";
+    }
+    
+    // The API keys for the Singapore and Beijing regions are different. To obtain an API key, see https://www.alibabacloud.com/help/zh/model-studio/get-api-key.
+    // If you have not configured the environment variable, replace the following line with your DashScope API key: apiKey="sk-xxx".
+    static String apiKey = System.getenv("DASHSCOPE_API_KEY");
+
+    public static void call() throws ApiException, NoApiKeyException, UploadFileException, IOException {
+
+        MultiModalConversation conv = new MultiModalConversation();
+
+        // The model supports one to three input images.
+        MultiModalMessage userMessage = MultiModalMessage.builder().role(Role.USER.getValue())
+                .content(Arrays.asList(
+                        Collections.singletonMap("image", "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/thtclx/input1.png"),
+                        Collections.singletonMap("image", "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/iclsnx/input2.png"),
+                        Collections.singletonMap("image", "https://help-static-aliyun-doc.aliyuncs.com/file-manage-files/zh-CN/20250925/gborgw/input3.png"),
+                        Collections.singletonMap("text", "The girl from Image 1 is wearing the black dress from Image 2 and sitting in the pose from Image 3.")
+                )).build();
+        // The qwen-image-2.0, qwen-image-edit-max, and qwen-image-edit-plus series models support one to six output images. This example generates two images.
+        Map<String, Object> parameters = new HashMap<>();
+        parameters.put("watermark", false);
+        parameters.put("negative_prompt", " ");
+        parameters.put("n", 2);
+        parameters.put("prompt_extend", true);
+        parameters.put("size", "1024*1536");
+
+        MultiModalConversationParam param = MultiModalConversationParam.builder()
+                .apiKey(apiKey)
+                .model("qwen-image-edit-max")
+                .messages(Collections.singletonList(userMessage))
+                .parameters(parameters)
+                .build();
+
+        MultiModalConversationResult result = conv.call(param);
+        // To view the complete response, uncomment the following line.
+        // System.out.println(JsonUtils.toJson(result));
+        List<Map<String, Object>> contentList = result.getOutput().getChoices().get(0).getMessage().getContent();
+        int imageIndex = 1;
+        for (Map<String, Object> content : contentList) {
+            if (content.containsKey("image")) {
+                System.out.println("URL of output image " + imageIndex + ": " + content.get("image"));
+                imageIndex++;
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            call();
+        } catch (ApiException | NoApiKeyException | UploadFileException | IOException e) {
+            System.out.println(e.getMessage());
+        }
+    }
+}
+Response examples
+The image URL is valid for 24 hours. Download the image promptly.
+
+ 
+{
+    "requestId": "46281da9-9e02-941c-ac78-be88b8xxxxxx",
+    "usage": {
+        "image_count": 2,
+        "width": 1024,
+        "height": 1536
+    },
+    "output": {
+        "choices": [
+            {
+                "finish_reason": "stop",
+                "message": {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "image": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxx"
+                        },
+                        {
+                            "image": "https://dashscope-result-sz.oss-cn-shenzhen.aliyuncs.com/xxx.png?Expires=xxx"
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+}
+Error codes
+If the model call fails and returns an error message, see Error messages for resolution.
+
+Billing and rate limiting
+For model free quotas and billing rates, see the Model List.
+
+Refer to Qwen-Image for model rate limiting details.
+
+Billing details: You are billed per successfully generated image. Failed model calls or processing faults incur no charges and do not consume your new-user free quota.
+
+FAQ
+Q: What languages does the Qwen Image Editing model support?
+A: The model currently supports Simplified Chinese and English. You can try other languages, but performance is not guaranteed.
+
+Q: How do I view model invocation metrics?
+A: One hour after a model invocation completes, go to the Monitoring (Singapore) or Monitoring (China (Beijing)) page to view metrics such as invocation count and success rate. For more information, see Bill query and cost management.
+
+Q: How do I get the domain name whitelist for image storage?
+A: Images generated by models are stored in OSS. The API returns a temporary public URL. To configure a firewall whitelist for this download URL, note the following: The underlying storage may change dynamically. This topic does not provide a fixed OSS domain name whitelist to prevent access issues caused by outdated information. If you have security control requirements, contact your account manager to obtain the latest OSS domain name list.

@@ -5,6 +5,7 @@ import {
   Image as ImageIcon, Menu, Sparkles, Download, X, Loader2,
   RefreshCw, Sun, Moon, Square, RectangleHorizontal,
   RectangleVertical, LayoutTemplate, Cpu, Trash2,
+  Upload, Wand2, ImagePlus, PenLine,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
@@ -38,17 +39,31 @@ const MODEL_CHAIN = [
 ];
 
 const MODEL_LABELS: Record<string, string> = {
-  "qwen-image-2.0-pro":   "Qwen Image 2.0 Pro",
-  "qwen-image-max":       "Qwen Image Max",
-  "qwen-image-2.0":       "Qwen Image 2.0",
-  "qwen-image-plus":      "Qwen Image Plus",
-  "qwen-image":           "Qwen Image",
-  "wan2.2-t2i-plus":      "Wan 2.2 Plus",
-  "wan2.5-t2i-preview":   "Wan 2.5 Preview",
-  "wan2.2-t2i-flash":     "Wan 2.2 Flash",
-  "wan2.1-t2i-plus":      "Wan 2.1 Plus",
-  "wan2.1-t2i-turbo":     "Wan 2.1 Turbo",
+  "qwen-image-2.0-pro":      "Qwen Image 2.0 Pro",
+  "qwen-image-max":          "Qwen Image Max",
+  "qwen-image-2.0":          "Qwen Image 2.0",
+  "qwen-image-plus":         "Qwen Image Plus",
+  "qwen-image":              "Qwen Image",
+  "wan2.2-t2i-plus":         "Wan 2.2 Plus",
+  "wan2.5-t2i-preview":      "Wan 2.5 Preview",
+  "wan2.2-t2i-flash":        "Wan 2.2 Flash",
+  "wan2.1-t2i-plus":         "Wan 2.1 Plus",
+  "wan2.1-t2i-turbo":        "Wan 2.1 Turbo",
+  "qwen-image-edit-max":     "Qwen Image Edit Max",
+  "qwen-image-edit-plus":    "Qwen Image Edit Plus",
+  "qwen-image-edit":         "Qwen Image Edit",
 };
+
+// Edit model chain — all use multimodal-generation endpoint
+const EDIT_MODEL_CHAIN = [
+  "qwen-image-2.0-pro",
+  "qwen-image-2.0",
+  "qwen-image-edit-max",
+  "qwen-image-edit-plus",
+  "qwen-image-edit",
+];
+
+type UploadedImage = { dataUrl: string; name: string };
 
 // Models that use the multimodal-generation/generation sync endpoint
 const MULTIMODAL_MODELS = new Set([
@@ -130,6 +145,9 @@ export default function ImageStudio() {
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
+  // Mode
+  const [mode, setMode] = useState<"generate" | "edit">("generate");
+
   // Generation state
   const [prompt, setPrompt]           = useState("");
   const [selectedSize, setSelectedSize]   = useState(SIZES[0].value);
@@ -144,6 +162,12 @@ export default function ImageStudio() {
   const [activeModelName, setActiveModelName] = useState<string | null>(null);
   const abortRef     = useRef<AbortController | null>(null);
   const textareaRef  = useRef<HTMLTextAreaElement>(null);
+  const editFileRef  = useRef<HTMLInputElement>(null);
+
+  // Edit state
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
+  const [editInstruction, setEditInstruction] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
 
   const isAdmin = user?.role === "admin";
 
@@ -366,6 +390,101 @@ export default function ImageStudio() {
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generate();
   };
 
+  // ── Edit mode handlers ──────────────────────────────────────────────────────
+  const handleEditFiles = (files: FileList | null) => {
+    if (!files) return;
+    const remaining = 3 - uploadedImages.length;
+    const toProcess = Array.from(files).slice(0, remaining);
+    toProcess.forEach((file) => {
+      if (!file.type.startsWith("image/")) return;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const dataUrl = e.target?.result as string;
+        setUploadedImages((prev) => [...prev, { dataUrl, name: file.name }].slice(0, 3));
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const generateEdit = useCallback(async () => {
+    if (!editInstruction.trim() || uploadedImages.length === 0 || isGenerating) return;
+    if (!isAdmin && quota && quota.remaining <= 0) {
+      setEditError("Kuota generate gambar hari ini sudah habis. Coba lagi besok!");
+      return;
+    }
+
+    abortRef.current = new AbortController();
+    setIsGenerating(true);
+    setEditError(null);
+    setActiveModelName(null);
+    setProgress("Menyiapkan gambar...");
+
+    const token = await getToken();
+    const contentArray = [
+      ...uploadedImages.map((img) => ({ image: img.dataUrl })),
+      { text: editInstruction.trim() },
+    ];
+
+    let succeeded = false;
+
+    for (const model of EDIT_MODEL_CHAIN) {
+      if (abortRef.current.signal.aborted) break;
+      setProgress(`Mencoba ${MODEL_LABELS[model] ?? model}...`);
+
+      try {
+        const res = await fetch("/api/dashscope/api/v1/services/aigc/multimodal-generation/generation", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model,
+            input: { messages: [{ role: "user", content: contentArray }] },
+            parameters: { n: 1, watermark: false, prompt_extend: false },
+          }),
+          signal: abortRef.current.signal,
+        });
+
+        if (res.status === 429) {
+          const body = await res.json().catch(() => ({}));
+          if (body.error) throw new Error(body.error);
+          console.warn(`[EditChain] ${model} rate-limit — skip`);
+          continue;
+        }
+
+        if (!res.ok) {
+          const errBody = await res.json().catch(() => ({}));
+          console.warn(`[EditChain] ${model} failed HTTP ${res.status}:`, errBody);
+          continue;
+        }
+
+        const data = await res.json();
+        const choices = data.output?.choices ?? [];
+        const imageUrl = choices[0]?.message?.content?.find((c: any) => c.image)?.image;
+
+        if (!imageUrl) {
+          console.warn(`[EditChain] ${model} — no image URL:`, data);
+          continue;
+        }
+
+        const savedId = await saveImageToDb(token, { url: imageUrl, prompt: editInstruction.trim(), model, size: "auto" });
+        setResults((prev) => [{ id: savedId ?? undefined, url: imageUrl, prompt: editInstruction.trim(), model, size: "auto" }, ...prev]);
+        setActiveModelName(MODEL_LABELS[model] ?? model);
+        if (!isAdmin && quota) setQuota((q) => q ? { ...q, remaining: Math.max(0, q.remaining - 1) } : q);
+        succeeded = true;
+        break;
+      } catch (err: any) {
+        if (err.name === "AbortError") { succeeded = true; break; }
+        console.warn(`[EditChain] ${model} error:`, err.message);
+      }
+    }
+
+    if (!succeeded && !abortRef.current.signal.aborted) {
+      setEditError("Semua model sedang tidak tersedia. Coba lagi dalam beberapa saat.");
+    }
+
+    setIsGenerating(false);
+    setProgress("");
+  }, [editInstruction, uploadedImages, isGenerating, isAdmin, quota]);
+
   const downloadImage = async (url: string, idx: number) => {
     try {
       const a = document.createElement("a");
@@ -475,7 +594,37 @@ export default function ImageStudio() {
         <div className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-6">
 
-            {/* ── Main input card ── */}
+            {/* ── Mode tabs ── */}
+            <div className={cn(
+              "inline-flex items-center gap-1 p-1 rounded-xl border",
+              isDark ? "bg-zinc-900/60 border-white/[0.06]" : "bg-zinc-100 border-black/[0.05]"
+            )}>
+              <button
+                onClick={() => setMode("generate")}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+                  mode === "generate"
+                    ? "bg-gradient-to-r from-primary to-indigo-500 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Sparkles className="w-3.5 h-3.5" /> Generate
+              </button>
+              <button
+                onClick={() => setMode("edit")}
+                className={cn(
+                  "flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all",
+                  mode === "edit"
+                    ? "bg-gradient-to-r from-primary to-indigo-500 text-white shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Wand2 className="w-3.5 h-3.5" /> Edit Gambar
+              </button>
+            </div>
+
+            {/* ── Generate card ── */}
+            {mode === "generate" && (
             <div className={cn(
               "rounded-2xl border p-5 space-y-5",
               isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
@@ -594,6 +743,161 @@ export default function ImageStudio() {
                 <p className="text-[11px] text-muted-foreground/50 text-center">{progress || "Memproses..."}</p>
               )}
             </div>
+            )}
+
+            {/* ── Edit card ── */}
+            {mode === "edit" && (
+              <div className={cn(
+                "rounded-2xl border p-5 space-y-5",
+                isDark ? "bg-zinc-900/50 border-white/[0.06]" : "bg-white border-black/[0.06] shadow-sm"
+              )}>
+                {/* Upload zone */}
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
+                    Gambar Input <span className="normal-case font-normal">(maks. 3)</span>
+                  </label>
+
+                  {/* Upload area */}
+                  <div
+                    onClick={() => uploadedImages.length < 3 && editFileRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => { e.preventDefault(); handleEditFiles(e.dataTransfer.files); }}
+                    className={cn(
+                      "rounded-xl border-2 border-dashed transition-all",
+                      uploadedImages.length < 3 ? "cursor-pointer hover:border-primary/50 hover:bg-primary/5" : "cursor-default opacity-60",
+                      isDark ? "border-white/[0.1] bg-zinc-800/20" : "border-black/[0.1] bg-zinc-50"
+                    )}
+                  >
+                    {uploadedImages.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center gap-2 py-8 px-4">
+                        <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary/20 to-indigo-400/20 flex items-center justify-center">
+                          <ImagePlus className="w-5 h-5 text-primary/60" />
+                        </div>
+                        <div className="text-center">
+                          <p className="text-sm font-medium">Upload gambar</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Klik atau drag & drop · JPG, PNG, WEBP · maks. 10 MB</p>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-muted text-xs font-medium">
+                          <Upload className="w-3 h-3" /> Pilih Gambar
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-3 space-y-2">
+                        <div className="flex gap-2 flex-wrap">
+                          {uploadedImages.map((img, i) => (
+                            <div key={i} className="relative group">
+                              <img
+                                src={img.dataUrl}
+                                alt={img.name}
+                                className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg object-cover border"
+                              />
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setUploadedImages(prev => prev.filter((_, idx) => idx !== i)); }}
+                                className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity shadow-sm"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                              {uploadedImages.length > 1 && (
+                                <div className="absolute bottom-1 left-1 px-1 py-0.5 rounded bg-black/60 text-white text-[9px] font-bold">
+                                  Gambar {i + 1}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                          {uploadedImages.length < 3 && (
+                            <div
+                              onClick={() => editFileRef.current?.click()}
+                              className={cn(
+                                "w-20 h-20 sm:w-24 sm:h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors",
+                                isDark ? "border-white/10 hover:border-primary/40 hover:bg-primary/5" : "border-black/10 hover:border-primary/40 hover:bg-primary/5"
+                              )}
+                            >
+                              <ImagePlus className="w-4 h-4 text-muted-foreground" />
+                              <span className="text-[9px] text-muted-foreground font-medium">Tambah</span>
+                            </div>
+                          )}
+                        </div>
+                        {uploadedImages.length >= 2 && (
+                          <p className="text-[10px] text-muted-foreground/60 px-1">
+                            Multi-gambar: AI akan memadukan elemen dari semua gambar sesuai instruksi.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                  <input
+                    ref={editFileRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleEditFiles(e.target.files)}
+                  />
+                </div>
+
+                {/* Instruction */}
+                <div>
+                  <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider mb-2 block">
+                    Instruksi Edit
+                  </label>
+                  <textarea
+                    value={editInstruction}
+                    onChange={(e) => setEditInstruction(e.target.value)}
+                    onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter") generateEdit(); }}
+                    placeholder="Contoh: Hapus background dan ganti dengan pemandangan pantai&#10;Contoh: Ubah gaya menjadi anime, pertahankan wajah&#10;Contoh: Tambahkan efek hujan dan petir di langit"
+                    rows={3}
+                    className={cn(
+                      "w-full resize-none rounded-xl px-4 py-3 text-sm leading-relaxed border transition-all",
+                      "focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/40",
+                      isDark
+                        ? "bg-zinc-800/50 border-white/[0.06] placeholder:text-zinc-600"
+                        : "bg-zinc-50 border-black/[0.06] placeholder:text-zinc-400"
+                    )}
+                  />
+                </div>
+
+                {/* Edit error */}
+                {editError && (
+                  <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+                    className="flex items-start gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+                    <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span>{editError}</span>
+                  </motion.div>
+                )}
+
+                {/* Bottom row */}
+                <div className="flex items-center gap-2 justify-between">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                    <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
+                    <span>Model dipilih otomatis</span>
+                  </div>
+                  <button
+                    onClick={isGenerating
+                      ? () => { abortRef.current?.abort(); setIsGenerating(false); setProgress(""); }
+                      : generateEdit}
+                    disabled={!isGenerating && (uploadedImages.length === 0 || !editInstruction.trim())}
+                    className={cn(
+                      "flex items-center gap-2 px-5 py-2 rounded-lg font-semibold text-xs transition-all shrink-0",
+                      isGenerating
+                        ? "bg-red-500/10 text-red-500 border border-red-500/30 hover:bg-red-500/20"
+                        : uploadedImages.length > 0 && editInstruction.trim()
+                        ? "bg-gradient-to-r from-primary to-indigo-500 text-white shadow-md shadow-primary/20 hover:brightness-110"
+                        : "bg-muted text-muted-foreground cursor-not-allowed opacity-60"
+                    )}
+                  >
+                    {isGenerating ? (
+                      <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Batalkan</>
+                    ) : (
+                      <><Wand2 className="w-3.5 h-3.5" /> Edit Gambar</>
+                    )}
+                  </button>
+                </div>
+
+                {isGenerating && (
+                  <p className="text-[11px] text-muted-foreground/50 text-center">{progress || "Memproses..."}</p>
+                )}
+              </div>
+            )}
 
             {/* ── Results section ── */}
             {(results.length > 0 || isGenerating) && (
@@ -732,16 +1036,27 @@ export default function ImageStudio() {
               </div>
             )}
 
-            {/* ── Empty state — matches Video/Voice Studio ── */}
+            {/* ── Empty state ── */}
             {results.length === 0 && !isGenerating && (
               <div className="text-center py-12">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary/10 to-indigo-400/10 flex items-center justify-center mx-auto mb-3">
-                  <ImageIcon className="w-7 h-7 text-primary/50" />
+                  {mode === "edit" ? <PenLine className="w-7 h-7 text-primary/50" /> : <ImageIcon className="w-7 h-7 text-primary/50" />}
                 </div>
-                <h3 className="text-sm font-semibold text-foreground/70 mb-1">Mulai bikin gambar</h3>
-                <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                  Deskripsikan gambar yang ingin kamu buat dan klik Generate
-                </p>
+                {mode === "edit" ? (
+                  <>
+                    <h3 className="text-sm font-semibold text-foreground/70 mb-1">Edit gambar dengan AI</h3>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                      Upload gambar, tulis instruksi, dan biarkan AI memodifikasinya
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h3 className="text-sm font-semibold text-foreground/70 mb-1">Mulai bikin gambar</h3>
+                    <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                      Deskripsikan gambar yang ingin kamu buat dan klik Generate
+                    </p>
+                  </>
+                )}
               </div>
             )}
 
