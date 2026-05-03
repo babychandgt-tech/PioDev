@@ -566,7 +566,9 @@ export default function ImageStudio() {
             </div>
             <div>
               <h1 className="text-base font-bold">Image Studio</h1>
-              <p className="text-[11px] text-muted-foreground -mt-0.5">Generate gambar dengan AI</p>
+              <p className="text-[11px] text-muted-foreground -mt-0.5">
+                {mode === "edit" ? "Edit & modifikasi gambar dengan AI" : "Generate gambar dengan AI"}
+              </p>
             </div>
           </div>
           <div className="ml-auto flex items-center gap-2">
@@ -711,9 +713,14 @@ export default function ImageStudio() {
 
               {/* Bottom row: auto-model info + generate button */}
               <div className="flex items-center gap-2 justify-between">
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
-                  <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
-                  <span>Model dipilih otomatis</span>
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                    <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
+                    <span>Model generate — dipilih otomatis</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground/40 pl-4">
+                    Qwen Image · Wan 2.x · fallback otomatis
+                  </p>
                 </div>
                 <button
                   onClick={isGenerating
@@ -865,9 +872,14 @@ export default function ImageStudio() {
 
                 {/* Bottom row */}
                 <div className="flex items-center gap-2 justify-between">
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
-                    <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
-                    <span>Model dipilih otomatis</span>
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground/60">
+                      <Cpu className="w-3 h-3 shrink-0 text-primary/50" />
+                      <span>Model edit — dipilih otomatis</span>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground/40 pl-4">
+                      Qwen Image Edit Max · Plus · Base
+                    </p>
                   </div>
                   <button
                     onClick={isGenerating
