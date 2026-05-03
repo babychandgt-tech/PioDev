@@ -226,6 +226,50 @@ const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
   auth: { autoRefreshToken: false, persistSession: false },
 });
 
+// ── Supabase Storage: permanent media upload ──────────────────────────────────
+const STUDIO_IMAGES_BUCKET = "studio-images";
+const STUDIO_VIDEOS_BUCKET = "studio-videos";
+
+async function ensurePublicBucket(bucketId: string, allowedMimes: string[]) {
+  const { data: existing } = await supabaseAdmin.storage.getBucket(bucketId);
+  if (existing) return;
+  const { error } = await supabaseAdmin.storage.createBucket(bucketId, {
+    public: true,
+    allowedMimeTypes: allowedMimes,
+  });
+  if (error) console.warn(`[storage] bucket '${bucketId}' create error:`, error.message);
+  else console.log(`[storage] bucket '${bucketId}' created`);
+}
+
+async function uploadUrlToStorage(
+  sourceUrl: string,
+  bucket: string,
+  storagePath: string,
+  mimeType: string,
+): Promise<string | null> {
+  try {
+    const resp = await fetch(sourceUrl, { signal: AbortSignal.timeout(60_000) });
+    if (!resp.ok) { console.warn("[storage] fetch failed:", resp.status, sourceUrl.slice(0, 80)); return null; }
+    const buffer = Buffer.from(await resp.arrayBuffer());
+    const { error } = await supabaseAdmin.storage.from(bucket).upload(storagePath, buffer, {
+      contentType: mimeType,
+      upsert: true,
+    });
+    if (error) { console.warn("[storage] upload error:", error.message); return null; }
+    const { data } = supabaseAdmin.storage.from(bucket).getPublicUrl(storagePath);
+    return data?.publicUrl ?? null;
+  } catch (e) {
+    console.warn("[storage] uploadUrlToStorage failed:", (e as Error).message);
+    return null;
+  }
+}
+
+// Ensure buckets exist at startup (fire-and-forget)
+Promise.all([
+  ensurePublicBucket(STUDIO_IMAGES_BUCKET, ["image/png", "image/jpeg", "image/webp", "image/gif"]),
+  ensurePublicBucket(STUDIO_VIDEOS_BUCKET, ["video/mp4", "video/webm", "video/quicktime"]),
+]).catch((e) => console.warn("[storage] bucket setup error:", (e as Error).message));
+
 const app = express();
 app.use(express.json());
 app.use(express.raw({
@@ -828,7 +872,21 @@ app.patch("/api/video-jobs/:id", requireAuth, async (req, res) => {
   const { id } = req.params;
   const updates: Record<string, any> = {};
   if (req.body.status !== undefined) updates.status = req.body.status;
-  if (req.body.video_url !== undefined) updates.video_url = req.body.video_url;
+  if (req.body.video_url !== undefined) {
+    const sourceUrl: string = req.body.video_url;
+    if (sourceUrl) {
+      // Upload to permanent Supabase Storage (fall back to original if upload fails)
+      const permanentUrl = await uploadUrlToStorage(
+        sourceUrl,
+        STUDIO_VIDEOS_BUCKET,
+        `${userId}/${id}.mp4`,
+        "video/mp4",
+      );
+      updates.video_url = permanentUrl ?? sourceUrl;
+    } else {
+      updates.video_url = sourceUrl;
+    }
+  }
   if (req.body.error !== undefined) updates.error = req.body.error;
   const { data, error } = await supabaseAdmin
     .from("video_jobs")
@@ -874,9 +932,17 @@ app.post("/api/image-jobs", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
   const { prompt, model, size, image_url } = req.body;
   if (!image_url) { res.status(400).json({ error: "image_url required" }); return; }
+  // Upload to permanent Supabase Storage (fall back to original if upload fails)
+  const jobId = crypto.randomUUID();
+  const permanentUrl = await uploadUrlToStorage(
+    image_url,
+    STUDIO_IMAGES_BUCKET,
+    `${userId}/${jobId}.png`,
+    "image/png",
+  );
   const { data, error } = await supabaseAdmin
     .from("image_jobs")
-    .insert({ user_id: userId, prompt: prompt || "", model: model || "", size: size || "", image_url })
+    .insert({ id: jobId, user_id: userId, prompt: prompt || "", model: model || "", size: size || "", image_url: permanentUrl ?? image_url })
     .select()
     .single();
   if (error) { res.status(500).json({ error: error.message }); return; }
