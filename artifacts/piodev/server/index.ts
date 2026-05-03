@@ -271,7 +271,7 @@ Promise.all([
 ]).catch((e) => console.warn("[storage] bucket setup error:", (e as Error).message));
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "25mb" }));
 app.use(express.raw({
   type: (req: any) => {
     const ct = (req.headers?.["content-type"] || "");

@@ -54,10 +54,8 @@ const MODEL_LABELS: Record<string, string> = {
   "qwen-image-edit":         "Qwen Image Edit",
 };
 
-// Edit model chain — all use multimodal-generation endpoint
+// Edit model chain — dedicated image-edit models only
 const EDIT_MODEL_CHAIN = [
-  "qwen-image-2.0-pro",
-  "qwen-image-2.0",
   "qwen-image-edit-max",
   "qwen-image-edit-plus",
   "qwen-image-edit",
