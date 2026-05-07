@@ -1,0 +1,328 @@
+2026-May-07 17:19:14.494250
+Docker 29.4.3 with BuildKit and Buildx detected on deployment server (localhost).
+2026-May-07 17:19:14.503318
+Starting deployment of piodev-ovhj to localhost.
+2026-May-07 17:19:14.686399
+Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.13
+2026-May-07 17:19:17.299542
+----------------------------------------
+2026-May-07 17:19:17.307497
+Building docker image started.
+2026-May-07 17:19:17.315334
+To check the current progress, click on Show Debug Logs.
+2026-May-07 17:19:57.366767
+========================================
+2026-May-07 17:19:57.378904
+Deployment failed: Command execution failed (exit code 1): docker exec ltha6hnjay3j1hnkbfsynubx bash -c 'bash /artifacts/build.sh'
+2026-May-07 17:19:57.378904
+Error: #0 building with "default" instance using docker driver
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#1 [internal] load build definition from Dockerfile
+2026-May-07 17:19:57.378904
+#1 transferring dockerfile: 1.08kB done
+2026-May-07 17:19:57.378904
+#1 DONE 0.1s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#2 [internal] load metadata for docker.io/library/node:22-alpine
+2026-May-07 17:19:57.378904
+#2 DONE 2.1s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#3 [internal] load .dockerignore
+2026-May-07 17:19:57.378904
+#3 transferring context: 2B done
+2026-May-07 17:19:57.378904
+#3 DONE 0.1s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#4 [1/6] FROM docker.io/library/node:22-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+2026-May-07 17:19:57.378904
+#4 resolve docker.io/library/node:22-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f 0.1s done
+2026-May-07 17:19:57.378904
+#4 DONE 0.3s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#4 [1/6] FROM docker.io/library/node:22-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+2026-May-07 17:19:57.378904
+#4 sha256:8bfa0019f928dcee6004de6c4b85d75774f993212504ac816ede0f3c6ae097de 0B / 445B 0.2s
+2026-May-07 17:19:57.378904
+#4 sha256:4cc15311d45b63612aec3e37d607941ddc636bd3ab45235d8391dc5b2b90faf4 0B / 1.26MB 0.2s
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 0B / 51.96MB 0.2s
+2026-May-07 17:19:57.378904
+#4 sha256:8bfa0019f928dcee6004de6c4b85d75774f993212504ac816ede0f3c6ae097de 445B / 445B 0.5s done
+2026-May-07 17:19:57.378904
+#4 sha256:4cc15311d45b63612aec3e37d607941ddc636bd3ab45235d8391dc5b2b90faf4 1.26MB / 1.26MB 0.8s done
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 14.68MB / 51.96MB 1.1s
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 24.12MB / 51.96MB 1.2s
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 39.85MB / 51.96MB 1.4s
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 51.38MB / 51.96MB 1.5s
+2026-May-07 17:19:57.378904
+#4 sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 51.96MB / 51.96MB 2.0s done
+2026-May-07 17:19:57.378904
+#4 extracting sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5
+2026-May-07 17:19:57.378904
+#4 extracting sha256:9e177ba73d9ff6d235c7d32bf216469630dcce0a52a6cbde08bd868b7a07e7d5 1.4s done
+2026-May-07 17:19:57.378904
+#4 DONE 3.9s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#4 [1/6] FROM docker.io/library/node:22-alpine@sha256:8ea2348b068a9544dae7317b4f3aafcdc032df1647bb7d768a05a5cad1a7683f
+2026-May-07 17:19:57.378904
+#4 extracting sha256:4cc15311d45b63612aec3e37d607941ddc636bd3ab45235d8391dc5b2b90faf4 0.1s done
+2026-May-07 17:19:57.378904
+#4 extracting sha256:8bfa0019f928dcee6004de6c4b85d75774f993212504ac816ede0f3c6ae097de 0.1s done
+2026-May-07 17:19:57.378904
+#4 DONE 4.0s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#5 [2/6] RUN apk add --no-cache git openssh-client
+2026-May-07 17:19:57.378904
+#5 0.516 ( 1/19) Installing brotli-libs (1.2.0-r0)
+2026-May-07 17:19:57.378904
+#5 0.545 ( 2/19) Installing c-ares (1.34.6-r0)
+2026-May-07 17:19:57.378904
+#5 0.550 ( 3/19) Installing libunistring (1.4.1-r0)
+2026-May-07 17:19:57.378904
+#5 0.564 ( 4/19) Installing libidn2 (2.3.8-r0)
+2026-May-07 17:19:57.378904
+#5 0.568 ( 5/19) Installing nghttp2-libs (1.69.0-r0)
+2026-May-07 17:19:57.378904
+#5 0.572 ( 6/19) Installing nghttp3 (1.13.1-r0)
+2026-May-07 17:19:57.378904
+#5 0.575 ( 7/19) Installing libpsl (0.21.5-r3)
+2026-May-07 17:19:57.378904
+#5 0.578 ( 8/19) Installing zstd-libs (1.5.7-r2)
+2026-May-07 17:19:57.378904
+#5 0.587 ( 9/19) Installing libcurl (8.17.0-r1)
+2026-May-07 17:19:57.378904
+#5 0.596 (10/19) Installing libexpat (2.7.5-r0)
+2026-May-07 17:19:57.378904
+#5 0.599 (11/19) Installing pcre2 (10.47-r0)
+2026-May-07 17:19:57.378904
+#5 0.608 (12/19) Installing git (2.52.0-r0)
+2026-May-07 17:19:57.378904
+#5 0.690 (13/19) Installing git-init-template (2.52.0-r0)
+2026-May-07 17:19:57.378904
+#5 0.695 (14/19) Installing openssh-keygen (10.2_p1-r0)
+2026-May-07 17:19:57.378904
+#5 0.701 (15/19) Installing ncurses-terminfo-base (6.5_p20251123-r0)
+2026-May-07 17:19:57.378904
+#5 0.709 (16/19) Installing libncursesw (6.5_p20251123-r0)
+2026-May-07 17:19:57.378904
+#5 0.715 (17/19) Installing libedit (20251016.3.1-r0)
+2026-May-07 17:19:57.378904
+#5 0.719 (18/19) Installing openssh-client-common (10.2_p1-r0)
+2026-May-07 17:19:57.378904
+#5 0.737 (19/19) Installing openssh-client-default (10.2_p1-r0)
+2026-May-07 17:19:57.378904
+#5 0.745 Executing busybox-1.37.0-r30.trigger
+2026-May-07 17:19:57.378904
+#5 0.761 OK: 27.5 MiB in 37 packages
+2026-May-07 17:19:57.378904
+#5 DONE 2.6s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#6 [3/6] RUN corepack enable && corepack prepare pnpm@9 --activate
+2026-May-07 17:19:57.378904
+#6 0.733 Preparing pnpm@9 for immediate activation...
+2026-May-07 17:19:57.378904
+#6 DONE 2.3s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#7 [4/6] RUN git clone --depth=1 --branch main https://github.com/avionikaramdaniswani/piodev.studio.git /app
+2026-May-07 17:19:57.378904
+#7 0.173 Cloning into '/app'...
+2026-May-07 17:19:57.378904
+#7 DONE 2.0s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#8 [5/6] WORKDIR /app
+2026-May-07 17:19:57.378904
+#8 DONE 0.2s
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+#9 [6/6] RUN pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build
+2026-May-07 17:19:57.378904
+#9 0.904 Scope:<REDACTED>@11.0.8" to update.             │
+2026-May-07 17:19:57.378904
+#9 1.268    │                                                                  │
+2026-May-07 17:19:57.378904
+#9 1.268    ╰──────────────────────────────────────────────────────────────────╯
+2026-May-07 17:19:57.378904
+#9 1.268
+2026-May-07 17:19:57.378904
+#9 1.357 Progress: resolved 0, reused 0, downloaded 1, added 0
+2026-May-07 17:19:57.378904
+#9 2.282 artifacts/api-server                     |  WARN  deprecated @types/express-rate-limit@6.0.2
+2026-May-07 17:19:57.378904
+#9 2.359 Progress: resolved 20, reused 0, downloaded 20, added 0
+2026-May-07 17:19:57.378904
+#9 3.359 Progress: resolved 61, reused 0, downloaded 61, added 0
+2026-May-07 17:19:57.378904
+#9 4.361 Progress: resolved 82, reused 0, downloaded 82, added 0
+2026-May-07 17:19:57.378904
+#9 5.361 Progress: resolved 88, reused 0, downloaded 88, added 0
+2026-May-07 17:19:57.378904
+#9 6.361 Progress: resolved 211, reused 0, downloaded 195, added 0
+2026-May-07 17:19:57.378904
+#9 7.366 Progress: resolved 230, reused 0, downloaded 214, added 0
+2026-May-07 17:19:57.378904
+#9 8.366 Progress: resolved 356, reused 0, downloaded 318, added 0
+2026-May-07 17:19:57.378904
+#9 9.367 Progress: resolved 375, reused 0, downloaded 338, added 0
+2026-May-07 17:19:57.378904
+#9 10.42 Progress: resolved 522, reused 0, downloaded 400, added 0
+2026-May-07 17:19:57.378904
+#9 11.42 Progress: resolved 553, reused 0, downloaded 439, added 0
+2026-May-07 17:19:57.378904
+#9 12.42 Progress: resolved 620, reused 0, downloaded 506, added 0
+2026-May-07 17:19:57.378904
+#9 13.42 Progress: resolved 648, reused 0, downloaded 534, added 0
+2026-May-07 17:19:57.378904
+#9 13.64  WARN  2 deprecated subdependencies found: @esbuild-kit/core-utils@3.3.2, @esbuild-kit/esm-loader@2.6.5
+2026-May-07 17:19:57.378904
+#9 13.65 Packages: +142
+2026-May-07 17:19:57.378904
+#9 13.65 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-May-07 17:19:57.378904
+#9 14.42 Progress: resolved 648, reused 0, downloaded 534, added 131
+2026-May-07 17:19:57.378904
+#9 21.43 Progress: resolved 648, reused 0, downloaded 534, added 132
+2026-May-07 17:19:57.378904
+#9 21.47 Progress: resolved 648, reused 0, downloaded 534, added 142, done
+2026-May-07 17:19:57.378904
+#9 21.69 .../core-js@3.49.0/node_modules/core-js postinstall$ node -e "try{require('./postinstall')}catch(e){}"
+2026-May-07 17:19:57.378904
+#9 21.74 .../core-js@3.49.0/node_modules/core-js postinstall: Thank you for using core-js ( https://github.com/zloirock/core-js ) for polyfilling JavaScript standard library!
+2026-May-07 17:19:57.378904
+#9 21.74 .../core-js@3.49.0/node_modules/core-js postinstall:<REDACTED>@3.49.0/node_modules/core-js postinstall: > https://opencollective.com/core-js
+2026-May-07 17:19:57.378904
+#9 21.75 .../core-js@3.49.0/node_modules/core-js postinstall:<REDACTED>@3.49.0/node_modules/core-js postinstall: > https://boosty.to/zloirock
+2026-May-07 17:19:57.378904
+#9 21.75 .../core-js@3.49.0/node_modules/core-js postinstall:<REDACTED>@3.49.0/node_modules/core-js postinstall: I highly recommend reading this: https://github.com/zloirock/core-js/blob/master/docs/2023-02-14-so-whats-next.md
+2026-May-07 17:19:57.378904
+#9 21.75 .../core-js@3.49.0/node_modules/core-js postinstall:<REDACTED>@4.21.0/node_modules/tsx/dist/cli.mjs'
+2026-May-07 17:19:57.378904
+#9 22.14  WARN  Failed to create bin at /app/artifacts/iconvault/node_modules/.bin/yaml. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/yaml@2.8.2/node_modules/yaml/bin.mjs'
+2026-May-07 17:19:57.378904
+#9 22.14  WARN  Failed to create bin at /app/artifacts/iconvault/node_modules/.bin/jiti. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/jiti@2.6.1/node_modules/jiti/lib/jiti-cli.mjs'
+2026-May-07 17:19:57.378904
+#9 22.15  WARN  Failed to create bin at /app/artifacts/mockup-sandbox/node_modules/.bin/tsx. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/tsx@4.21.0/node_modules/tsx/dist/cli.mjs'
+2026-May-07 17:19:57.378904
+#9 22.15  WARN  Failed to create bin at /app/artifacts/mockup-sandbox/node_modules/.bin/yaml. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/yaml@2.8.2/node_modules/yaml/bin.mjs'
+2026-May-07 17:19:57.378904
+#9 22.15  WARN  Failed to create bin at /app/artifacts/mockup-sandbox/node_modules/.bin/jiti. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/jiti@2.6.1/node_modules/jiti/lib/jiti-cli.mjs'
+2026-May-07 17:19:57.378904
+#9 22.16  WARN  Failed to create bin at /app/lib/api-spec/node_modules/.bin/tsc. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsc'
+2026-May-07 17:19:57.378904
+#9 22.16  WARN  Failed to create bin at /app/lib/api-spec/node_modules/.bin/tsserver. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/typescript@5.9.3/node_modules/typescript/bin/tsserver'
+2026-May-07 17:19:57.378904
+#9 22.16  WARN  Failed to create bin at /app/lib/api-spec/node_modules/.bin/prettier. ENOENT: no such file or directory, open '/app/node_modules/.pnpm/prettier@3.8.1/node_modules/prettier/bin/prettier.cjs'
+2026-May-07 17:19:57.378904
+#9 22.29 . preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+2026-May-07 17:19:57.378904
+#9 22.31 . preinstall: Done
+2026-May-07 17:19:57.378904
+#9 22.34
+2026-May-07 17:19:57.378904
+#9 22.34 devDependencies: skipped because NODE_ENV is set to production
+2026-May-07 17:19:57.378904
+#9 22.34
+2026-May-07 17:19:57.378904
+#9 22.34  WARN  Issues with peer dependencies found
+2026-May-07 17:19:57.378904
+#9 22.34 artifacts/api-server
+2026-May-07 17:19:57.378904
+#9 22.34 └─┬ esbuild-plugin-pino 2.3.3
+2026-May-07 17:19:57.378904
+#9 22.34   └── ✕ unmet peer esbuild@">=0.25.0 <=0.25.8": found 0.27.3
+2026-May-07 17:19:57.378904
+#9 22.34
+2026-May-07 17:19:57.378904
+#9 22.36 Done in 22s using pnpm v9.15.9
+2026-May-07 17:19:57.378904
+#9 23.04
+2026-May-07 17:19:57.378904
+#9 23.04 > @workspace/iconvault@0.0.0 build /app/artifacts/iconvault
+2026-May-07 17:19:57.378904
+#9 23.04 > vite build --config vite.config.ts
+2026-May-07 17:19:57.378904
+#9 23.04
+2026-May-07 17:19:57.378904
+#9 23.05 sh: vite: not found
+2026-May-07 17:19:57.378904
+#9 23.05 /app/artifacts/iconvault:
+2026-May-07 17:19:57.378904
+#9 23.05  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/iconvault@0.0.0 build: `vite build --config vite.config.ts`
+2026-May-07 17:19:57.378904
+#9 23.05 spawn ENOENT
+2026-May-07 17:19:57.378904
+#9 ERROR: process "/bin/sh -c pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build" did not complete successfully: exit code: 1
+2026-May-07 17:19:57.378904
+------
+2026-May-07 17:19:57.378904
+> [6/6] RUN pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build:
+2026-May-07 17:19:57.378904
+22.34
+2026-May-07 17:19:57.378904
+22.36 Done in 22s using pnpm v9.15.9
+2026-May-07 17:19:57.378904
+23.04
+2026-May-07 17:19:57.378904
+23.04 > @workspace/iconvault@0.0.0 build /app/artifacts/iconvault
+2026-May-07 17:19:57.378904
+23.04 > vite build --config vite.config.ts
+2026-May-07 17:19:57.378904
+23.04
+2026-May-07 17:19:57.378904
+23.05 sh: vite: not found
+2026-May-07 17:19:57.378904
+23.05 /app/artifacts/iconvault:
+2026-May-07 17:19:57.378904
+23.05  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/iconvault@0.0.0 build: `vite build --config vite.config.ts`
+2026-May-07 17:19:57.378904
+23.05 spawn ENOENT
+2026-May-07 17:19:57.378904
+------
+2026-May-07 17:19:57.378904
+2026-May-07 17:19:57.378904
+3 warnings found (use docker --debug to expand):
+2026-May-07 17:19:57.378904
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SESSION_SECRET") (line 4)
+2026-May-07 17:19:57.378904
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SUPABASE_ANON_KEY") (line 6)
+2026-May-07 17:19:57.378904
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "VITE_SUPABASE_ANON_KEY") (line 7)
+2026-May-07 17:19:57.378904
+Dockerfile:21
+2026-May-07 17:19:57.378904
+--------------------
+2026-May-07 17:19:57.378904
+19 |     RUN git clone --depth=1 --branch main https://github.com/avionikaramdaniswani/piodev.studio.git /app
+2026-May-07 17:19:57.378904
+20 |     WORKDIR /app
+2026-May-07 17:19:57.378904
+21 | >>> RUN pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build
+2026-May-07 17:19:57.378904
+22 |     EXPOSE 4173
+2026-May-07 17:19:57.378904
+23 |     CMD ["sh", "-c", "pnpm --filter @workspace/iconvault run serve"]
+2026-May-07 17:19:57.378904
+--------------------
+2026-May-07 17:19:57.378904
+ERROR:<REDACTED>@workspace/iconvault run build" did not complete successfully: exit code: 1
+2026-May-07 17:19:57.378904
+exit status 1
+2026-May-07 17:19:57.486354
+========================================
+2026-May-07 17:19:57.495902
+Deployment failed. Removing the new version of your application.
+2026-May-07 17:19:57.888630
+Gracefully shutting down build container: ltha6hnjay3j1hnkbfsynubx

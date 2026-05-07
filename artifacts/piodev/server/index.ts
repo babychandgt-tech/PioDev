@@ -4073,10 +4073,12 @@ function generateNodeDockerfile(
   port: number,
   userEnvVars: Record<string, string> = {},
 ): string {
+  // NODE_ENV is intentionally NOT set here — pnpm skips devDependencies when
+  // NODE_ENV=production, which breaks the build (vite, tailwind etc are in devDeps).
+  // Coolify injects NODE_ENV=production at runtime automatically.
   const mergedVars: Record<string, string> = {
     PORT: String(port),
     BASE_PATH: "/",
-    NODE_ENV: "production",
     ...userEnvVars,
   };
   // ARG + ENV block so vars are available both at build time (RUN steps) and runtime
