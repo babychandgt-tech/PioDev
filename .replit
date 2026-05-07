@@ -56,13 +56,5 @@ API_KEY_ENCRYPTION_SECRET = "sEerATto9VuS/j3OWtb/OJfVefYLgXq45QzINKqrQ74="
 COOLIFY_API_URL = "http://20.212.54.127:8000"
 COOLIFY_BASE_DOMAIN = "app.pio.codes"
 
-[[ports]]
-localPort = 3000
-externalPort = 3000
-
-[[ports]]
-localPort = 5000
-externalPort = 8000
-
 [nix]
 channel = "stable-25_05"
