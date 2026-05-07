@@ -134,7 +134,7 @@ export default function HostingPage() {
   const [detectAttempted, setDetectAttempted] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
   const [workspacePackages, setWorkspacePackages] = useState<{ name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number; isDeployable?: boolean }[]>([]);
-  const [selectedWorkspacePkg, setSelectedWorkspacePkg] = useState<string | null>(null);
+  const [selectedWorkspacePkgs, setSelectedWorkspacePkgs] = useState<Set<string>>(new Set());
   const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [selectedProject, setSelectedProject] = useState<HostingProject | null>(null);
@@ -317,20 +317,49 @@ export default function HostingPage() {
     if (!form.git_url.trim()) { setFormError("Git URL wajib diisi"); return; }
     setCreating(true);
     try {
-      const res = await authedFetch("/api/hosting/projects", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          port: Number(form.port) || 3000,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) { setFormError(data.error ?? "Gagal membuat proyek"); return; }
-      setProjects(prev => [data.project, ...prev]);
-      setHostingStatus(prev => prev ? { ...prev, projectCount: prev.projectCount + 1 } : prev);
-      setShowCreate(false);
-      setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
-      toast({ title: "Proyek berhasil dibuat!", description: "Klik Deploy untuk mulai deployment pertama." });
+      const multiPkgs = workspacePackages.filter(p => selectedWorkspacePkgs.has(p.path));
+      if (multiPkgs.length > 1) {
+        // Create one project per selected package in sequence
+        const created: any[] = [];
+        for (const pkg of multiPkgs) {
+          const pkgSuffix = pkg.name.split("/")[1] ?? pkg.path.replace(/\//g, "-");
+          const res = await authedFetch("/api/hosting/projects", {
+            method: "POST",
+            body: JSON.stringify({
+              name: `${form.name.trim()}-${pkgSuffix}`,
+              description: form.description,
+              git_url: form.git_url.trim(),
+              git_branch: form.git_branch || "main",
+              build_command: pkg.buildCommand,
+              start_command: pkg.startCommand,
+              port: pkg.port,
+            }),
+          });
+          const data = await res.json();
+          if (!res.ok) { setFormError(data.error ?? `Gagal membuat proyek ${pkg.name}`); return; }
+          created.push(data.project);
+        }
+        setProjects(prev => [...created.reverse(), ...prev]);
+        setHostingStatus(prev => prev ? { ...prev, projectCount: prev.projectCount + created.length } : prev);
+        setShowCreate(false);
+        setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
+        setSelectedWorkspacePkgs(new Set());
+        toast({ title: `${created.length} proyek berhasil dibuat!`, description: "Klik Deploy pada masing-masing proyek untuk memulai." });
+      } else {
+        // Single project (single selection or manual input)
+        const res = await authedFetch("/api/hosting/projects", {
+          method: "POST",
+          body: JSON.stringify({ ...form, port: Number(form.port) || 3000 }),
+        });
+        const data = await res.json();
+        if (!res.ok) { setFormError(data.error ?? "Gagal membuat proyek"); return; }
+        setProjects(prev => [data.project, ...prev]);
+        setHostingStatus(prev => prev ? { ...prev, projectCount: prev.projectCount + 1 } : prev);
+        setShowCreate(false);
+        setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
+        setSelectedWorkspacePkgs(new Set());
+        toast({ title: "Proyek berhasil dibuat!", description: "Klik Deploy untuk mulai deployment pertama." });
+      }
     } finally {
       setCreating(false);
     }
@@ -1068,60 +1097,97 @@ export default function HostingPage() {
 
                 {workspacePackages.length > 0 && (
                   <div className="space-y-2">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih App</p>
-                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                      {workspacePackages.map(pkg => (
-                        <button
-                          key={pkg.path}
-                          type="button"
-                          onClick={() => {
-                            setSelectedWorkspacePkg(pkg.path);
-                            const filled = new Set<string>(["build_command", "start_command", "port"]);
-                            setForm(f => ({ ...f, build_command: pkg.buildCommand, start_command: pkg.startCommand, port: String(pkg.port) }));
-                            setAutoFilledFields(filled);
-                          }}
-                          className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm transition-all ${selectedWorkspacePkg === pkg.path ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/50 hover:bg-accent"}`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${selectedWorkspacePkg === pkg.path ? "bg-primary" : "bg-muted-foreground"}`} />
-                            <span className="font-mono text-xs truncate">{pkg.name}</span>
-                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{pkg.path}</span>
-                          </div>
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ml-2 ${pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" : pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>
-                            {pkg.framework}
-                          </span>
-                        </button>
-                      ))}
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih App</p>
+                      {selectedWorkspacePkgs.size > 0 && (
+                        <span className="text-[11px] text-primary font-medium">{selectedWorkspacePkgs.size} terpilih</span>
+                      )}
                     </div>
+                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                      {workspacePackages.map(pkg => {
+                        const isSelected = selectedWorkspacePkgs.has(pkg.path);
+                        return (
+                          <button
+                            key={pkg.path}
+                            type="button"
+                            onClick={() => {
+                              setSelectedWorkspacePkgs(prev => {
+                                const next = new Set(prev);
+                                if (next.has(pkg.path)) {
+                                  next.delete(pkg.path);
+                                } else {
+                                  next.add(pkg.path);
+                                }
+                                // If exactly 1 selected, auto-fill the form fields
+                                const remaining = [...next];
+                                if (remaining.length === 1) {
+                                  const single = workspacePackages.find(p => p.path === remaining[0]);
+                                  if (single) {
+                                    setForm(f => ({ ...f, build_command: single.buildCommand, start_command: single.startCommand, port: String(single.port) }));
+                                    setAutoFilledFields(new Set(["build_command", "start_command", "port"]));
+                                  }
+                                } else if (remaining.length !== 1) {
+                                  setAutoFilledFields(new Set());
+                                }
+                                return next;
+                              });
+                            }}
+                            className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm transition-all ${isSelected ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/50 hover:bg-accent"}`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className={`w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center transition-colors ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                                {isSelected && <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                              </span>
+                              <span className="font-mono text-xs truncate">{pkg.name}</span>
+                              <span className="text-[10px] text-muted-foreground flex-shrink-0">{pkg.path}</span>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ml-2 ${pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" : pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>
+                              {pkg.framework}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedWorkspacePkgs.size > 1 && (
+                      <p className="text-[11px] text-muted-foreground bg-accent/50 rounded-lg px-3 py-2">
+                        Akan dibuat <span className="text-foreground font-medium">{selectedWorkspacePkgs.size} proyek terpisah</span> — masing-masing dengan command dan port otomatis. Nama proyek = <span className="font-mono">{form.name || "nama"}-[package]</span>
+                      </p>
+                    )}
                   </div>
                 )}
 
-                <div className="grid grid-cols-2 gap-3">
+                {selectedWorkspacePkgs.size <= 1 && (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
+                      <FormField
+                        label="Port"
+                        placeholder="3000"
+                        value={form.port}
+                        onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("port"); return n; }); setForm(f => ({ ...f, port: v })); }}
+                        type="number"
+                        isAutoDetected={autoFilledFields.has("port")}
+                      />
+                    </div>
+                    <FormField
+                      label="Build Command"
+                      placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                      value={form.build_command}
+                      onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("build_command"); return n; }); setForm(f => ({ ...f, build_command: v })); }}
+                      isAutoDetected={autoFilledFields.has("build_command")}
+                    />
+                    <FormField
+                      label="Start Command"
+                      placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                      value={form.start_command}
+                      onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("start_command"); return n; }); setForm(f => ({ ...f, start_command: v })); }}
+                      isAutoDetected={autoFilledFields.has("start_command")}
+                    />
+                  </>
+                )}
+                {selectedWorkspacePkgs.size > 1 && (
                   <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
-                  <FormField
-                    label="Port"
-                    placeholder="3000"
-                    value={form.port}
-                    onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("port"); return n; }); setForm(f => ({ ...f, port: v })); }}
-                    type="number"
-                    isAutoDetected={autoFilledFields.has("port")}
-                  />
-                </div>
-
-                <FormField
-                  label="Build Command"
-                  placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
-                  value={form.build_command}
-                  onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("build_command"); return n; }); setForm(f => ({ ...f, build_command: v })); }}
-                  isAutoDetected={autoFilledFields.has("build_command")}
-                />
-                <FormField
-                  label="Start Command"
-                  placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
-                  value={form.start_command}
-                  onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("start_command"); return n; }); setForm(f => ({ ...f, start_command: v })); }}
-                  isAutoDetected={autoFilledFields.has("start_command")}
-                />
+                )}
 
                 <p className="text-xs text-muted-foreground">
                   Subdomain akan dibuat otomatis: <span className="font-mono text-primary">{form.name ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes` : "nama-xxxx.app.pio.codes"}</span>
@@ -1129,7 +1195,7 @@ export default function HostingPage() {
               </div>
 
               <div className="flex gap-3 px-5 py-4 border-t border-border">
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkg(null); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkgs(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
                   Batal
                 </button>
                 <button
@@ -1138,7 +1204,7 @@ export default function HostingPage() {
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  Buat Proyek
+                  {selectedWorkspacePkgs.size > 1 ? `Buat ${selectedWorkspacePkgs.size} Proyek` : "Buat Proyek"}
                 </button>
               </div>
             </motion.div>
