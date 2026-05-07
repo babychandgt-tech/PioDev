@@ -4068,8 +4068,11 @@ async function syncCoolifyEnvVars(
   userEnvVars: Record<string, string> = {},
 ): Promise<void> {
   const vars: Record<string, string> = {
-    NODE_VERSION: "22",
+    // nixpkgs snapshot for Node 22 in the Coolify Nixpacks image resolves to 22.11.0
+    // which is older than Vite 7's minimum (22.12+). Using 24 guarantees a newer LTS.
+    NIXPACKS_NODE_VERSION: "24",
     PORT: String(port),
+    BASE_PATH: "/",
     ...userEnvVars,
   };
 

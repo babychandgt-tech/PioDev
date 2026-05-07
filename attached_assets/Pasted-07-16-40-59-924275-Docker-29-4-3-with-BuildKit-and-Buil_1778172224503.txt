@@ -1,0 +1,275 @@
+07 16:40:59.924275
+Docker 29.4.3 with BuildKit and Buildx detected on deployment server (localhost).
+2026-May-07 16:40:59.935287
+Starting deployment of avionikaramdaniswani/piodev.studio.git:main to localhost.
+2026-May-07 16:41:00.254760
+Preparing container with helper image: ghcr.io/coollabsio/coolify-helper:1.0.13
+2026-May-07 16:41:02.402926
+----------------------------------------
+2026-May-07 16:41:02.411802
+Importing avionikaramdaniswani/piodev.studio.git:main (commit sha 60bb92b256945d1d0a49f28c575b686c364c6feb) to /artifacts/tyc67osaoh9c9yfy207l4kf3.
+2026-May-07 16:41:05.386985
+Generating nixpacks configuration with: nixpacks plan -f json --env 'NIXPACKS_NODE_VERSION=22' --env 'COOLIFY_URL=https://piodev-1a1h.app.pio.codes' --env 'COOLIFY_FQDN=piodev-1a1h.app.pio.codes' --env 'COOLIFY_BRANCH=main' --env 'COOLIFY_RESOURCE_UUID=shkqzqwhc1sjbesokwszeuur' --start-cmd 'pnpm --filter @workspace/iconvault run serve' --install-cmd 'pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build' /artifacts/tyc67osaoh9c9yfy207l4kf3
+2026-May-07 16:41:05.834775
+Found application type: node.
+2026-May-07 16:41:05.843789
+If you need further customization, please check the documentation of Nixpacks: https://nixpacks.com/docs/providers/node
+2026-May-07 16:41:06.528645
+----------------------------------------
+2026-May-07 16:41:06.539859
+Building docker image started.
+2026-May-07 16:41:06.549786
+To check the current progress, click on Show Debug Logs.
+2026-May-07 16:43:30.110281
+========================================
+2026-May-07 16:43:30.124302
+Deployment failed: Command execution failed (exit code 1): docker exec tyc67osaoh9c9yfy207l4kf3 bash -c 'bash /artifacts/build.sh'
+2026-May-07 16:43:30.124302
+Error: #0 building with "default" instance using docker driver
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#1 [internal] load build definition from Dockerfile
+2026-May-07 16:43:30.124302
+#1 transferring dockerfile: 1.60kB done
+2026-May-07 16:43:30.124302
+#1 DONE 0.1s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#2 [internal] load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+2026-May-07 16:43:30.124302
+#2 DONE 0.9s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#3 [internal] load .dockerignore
+2026-May-07 16:43:30.124302
+#3 transferring context: 2B done
+2026-May-07 16:43:30.124302
+#3 DONE 0.1s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#4 [internal] load build context
+2026-May-07 16:43:30.124302
+#4 transferring context: 6.14MB 0.1s done
+2026-May-07 16:43:30.124302
+#4 DONE 0.2s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 16:43:30.124302
+#5 resolve ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de 0.1s done
+2026-May-07 16:43:30.124302
+#5 DONE 0.2s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#6 [ 2/11] WORKDIR /app/
+2026-May-07 16:43:30.124302
+#6 CACHED
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#7 [ 3/11] COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix
+2026-May-07 16:43:30.124302
+#7 DONE 0.5s
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+#8 [ 4/11] RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d
+2026-May-07 16:43:30.124302
+#8 0.451 unpacking 'https://github.com/NixOS/nixpkgs/archive/ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.tar.gz' into the Git cache...
+2026-May-07 16:43:30.124302
+#8 64.88 unpacking 'https:<REDACTED>@workspace/iconvault run build
+2026-May-07 16:43:30.124302
+#11 0.806 Scope: all 9 workspace projects
+2026-May-07 16:43:30.124302
+#11 1.239 Progress: resolved 0, reused 0, downloaded 1, added 0
+2026-May-07 16:43:30.124302
+#11 2.249 Progress: resolved 15, reused 0, downloaded 14, added 0
+2026-May-07 16:43:30.124302
+#11 2.432 artifacts/api-server                     |  WARN  deprecated @types/express-rate-limit@6.0.2
+2026-May-07 16:43:30.124302
+#11 3.250 Progress: resolved 55, reused 0, downloaded 54, added 0
+2026-May-07 16:43:30.124302
+#11 4.250 Progress: resolved 68, reused 0, downloaded 67, added 0
+2026-May-07 16:43:30.124302
+#11 5.377 Progress: resolved 71, reused 0, downloaded 70, added 0
+2026-May-07 16:43:30.124302
+#11 6.377 Progress: resolved 102, reused 0, downloaded 92, added 0
+2026-May-07 16:43:30.124302
+#11 7.379 Progress: resolved 209, reused 0, downloaded 193, added 0
+2026-May-07 16:43:30.124302
+#11 8.381 Progress: resolved 222, reused 0, downloaded 206, added 0
+2026-May-07 16:43:30.124302
+#11 9.381 Progress: resolved 271, reused 0, downloaded 255, added 0
+2026-May-07 16:43:30.124302
+#11 10.38 Progress: resolved 399, reused 0, downloaded 321, added 0
+2026-May-07 16:43:30.124302
+#11 11.38 Progress: resolved 460, reused 0, downloaded 331, added 0
+2026-May-07 16:43:30.124302
+#11 12.38 Progress: resolved 499, reused 0, downloaded 384, added 0
+2026-May-07 16:43:30.124302
+#11 13.38 Progress: resolved 608, reused 0, downloaded 494, added 0
+2026-May-07 16:43:30.124302
+#11 14.42  WARN  2 deprecated subdependencies found: @esbuild-kit/core-utils@3.3.2, @esbuild-kit/esm-loader@2.6.5
+2026-May-07 16:43:30.124302
+#11 14.43 Progress: resolved 648, reused 0, downloaded 534, added 0
+2026-May-07 16:43:30.124302
+#11 14.44 Packages: +534
+2026-May-07 16:43:30.124302
+#11 14.44 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-May-07 16:43:30.124302
+#11 15.43 Progress: resolved 648, reused 0, downloaded 534, added 277
+2026-May-07 16:43:30.124302
+#11 16.43 Progress: resolved 648, reused 0, downloaded 534, added 378
+2026-May-07 16:43:30.124302
+#11 24.48 Progress: resolved 648, reused 0, downloaded 534, added 379
+2026-May-07 16:43:30.124302
+#11 24.82 Progress: resolved 648, reused 0, downloaded 534, added 534, done
+2026-May-07 16:43:30.124302
+#11 26.47 .../core-js@3.49.0/node_modules/core-js postinstall$ node -e "try{require('./postinstall')}catch(e){}"
+2026-May-07 16:43:30.124302
+#11 26.52 .../esbuild@0.18.20/node_modules/esbuild postinstall$ node install.js
+2026-May-07 16:43:30.124302
+#11 26.53 .../esbuild@0.27.3/node_modules/esbuild postinstall$ node install.js
+2026-May-07 16:43:30.124302
+#11 26.53 .../esbuild@0.25.12/node_modules/esbuild postinstall$ node install.js
+2026-May-07 16:43:30.124302
+#11 26.65 .../core-js@3.49.0/node_modules/core-js postinstall: Done
+2026-May-07 16:43:30.124302
+#11 26.70 .../esbuild@0.18.20/node_modules/esbuild postinstall: Done
+2026-May-07 16:43:30.124302
+#11 26.72 .../esbuild@0.25.12/node_modules/esbuild postinstall: Done
+2026-May-07 16:43:30.124302
+#11 26.73 .../esbuild@0.27.3/node_modules/esbuild postinstall: Done
+2026-May-07 16:43:30.124302
+#11 28.92 . preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+2026-May-07 16:43:30.124302
+#11 28.95 . preinstall: Done
+2026-May-07 16:43:30.124302
+#11 29.05
+2026-May-07 16:43:30.124302
+#11 29.05 devDependencies:
+2026-May-07 16:43:30.124302
+#11 29.05 + prettier 3.8.1 (3.8.3 is available)
+2026-May-07 16:43:30.124302
+#11 29.05 + typescript 5.9.3 (6.0.3 is available)
+2026-May-07 16:43:30.124302
+#11 29.05
+2026-May-07 16:43:30.124302
+#11 29.06  WARN  Issues with peer dependencies found
+2026-May-07 16:43:30.124302
+#11 29.06 artifacts/api-server
+2026-May-07 16:43:30.124302
+#11 29.06 └─┬ esbuild-plugin-pino 2.3.3
+2026-May-07 16:43:30.124302
+#11 29.06   └── ✕ unmet peer esbuild@">=0.25.0 <=0.25.8": found 0.27.3
+2026-May-07 16:43:30.124302
+#11 29.06
+2026-May-07 16:43:30.124302
+#11 29.08 Done in 28.7s using pnpm v9.15.9
+2026-May-07 16:43:30.124302
+#11 29.66
+2026-May-07 16:43:30.124302
+#11 29.66 > @workspace/iconvault@0.0.0 build /app/artifacts/iconvault
+2026-May-07 16:43:30.124302
+#11 29.66 > vite build --config vite.config.ts
+2026-May-07 16:43:30.124302
+#11 29.66
+2026-May-07 16:43:30.124302
+#11 29.73 You are using Node.js 22.11.0. Vite requires Node.js version 20.19+ or 22.12+. Please upgrade your Node.js version.
+2026-May-07 16:43:30.124302
+#11 30.10 failed to load config from /app/artifacts/iconvault/vite.config.ts
+2026-May-07 16:43:30.124302
+#11 30.11 error during build:
+2026-May-07 16:43:30.124302
+#11 30.11 Error: BASE_PATH environment variable is required but was not provided.
+2026-May-07 16:43:30.124302
+#11 30.11     at file:///app/artifacts/iconvault/node_modules/.vite-temp/vite.config.ts.timestamp-1778172208358-8e60da73d23e2.mjs:20:9
+2026-May-07 16:43:30.124302
+#11 30.11     at ModuleJob.run (node:internal/modules/esm/module_job:268:25)
+2026-May-07 16:43:30.124302
+#11 30.11     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:543:26)
+2026-May-07 16:43:30.124302
+#11 30.11     at async loadConfigFromBundledFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35920:12)
+2026-May-07 16:43:30.124302
+#11 30.11     at async bundleAndLoadConfigFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35808:17)
+2026-May-07 16:43:30.124302
+#11 30.11     at async loadConfigFromFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35775:42)
+2026-May-07 16:43:30.124302
+#11 30.11     at async resolveConfig (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35424:22)
+2026-May-07 16:43:30.124302
+#11 30.11     at async createBuilder (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:33879:19)
+2026-May-07 16:43:30.124302
+#11 30.11     at async CAC.<anonymous> (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/cli.js:629:10)
+2026-May-07 16:43:30.124302
+#11 30.13 /app/artifacts/iconvault:
+2026-May-07 16:43:30.124302
+#11 30.13  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/iconvault@0.0.0 build: `vite build --config vite.config.ts`
+2026-May-07 16:43:30.124302
+#11 30.13 Exit status 1
+2026-May-07 16:43:30.124302
+#11 ERROR: process "/bin/bash -ol pipefail -c pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build" did not complete successfully: exit code: 1
+2026-May-07 16:43:30.124302
+------
+2026-May-07 16:43:30.124302
+> [ 7/11] RUN  pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build:
+2026-May-07 16:43:30.124302
+30.11     at async onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:543:26)
+2026-May-07 16:43:30.124302
+30.11     at async loadConfigFromBundledFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35920:12)
+2026-May-07 16:43:30.124302
+30.11     at async bundleAndLoadConfigFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35808:17)
+2026-May-07 16:43:30.124302
+30.11     at async loadConfigFromFile (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35775:42)
+2026-May-07 16:43:30.124302
+30.11     at async resolveConfig (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:35424:22)
+2026-May-07 16:43:30.124302
+30.11     at async createBuilder (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/chunks/config.js:33879:19)
+2026-May-07 16:43:30.124302
+30.11     at async CAC.<anonymous> (file:///app/node_modules/.pnpm/vite@7.3.2_@types+node@25.3.5_jiti@2.6.1_lightningcss@1.31.1_tsx@4.21.0_yaml@2.8.2/node_modules/vite/dist/node/cli.js:629:10)
+2026-May-07 16:43:30.124302
+30.13 /app/artifacts/iconvault:
+2026-May-07 16:43:30.124302
+30.13  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/iconvault@0.0.0 build: `vite build --config vite.config.ts`
+2026-May-07 16:43:30.124302
+30.13 Exit status 1
+2026-May-07 16:43:30.124302
+------
+2026-May-07 16:43:30.124302
+2026-May-07 16:43:30.124302
+7 warnings found (use docker --debug to expand):
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SESSION_SECRET") (line 11)
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SUPABASE_ANON_KEY") (line 11)
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "VITE_SUPABASE_ANON_KEY") (line 11)
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SESSION_SECRET") (line 12)
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SUPABASE_ANON_KEY") (line 12)
+2026-May-07 16:43:30.124302
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "VITE_SUPABASE_ANON_KEY") (line 12)
+2026-May-07 16:43:30.124302
+- UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)
+2026-May-07 16:43:30.124302
+Dockerfile:20
+2026-May-07 16:43:30.124302
+--------------------
+2026-May-07 16:43:30.124302
+18 |     ENV NIXPACKS_PATH=/app/node_modules/.bin:$NIXPACKS_PATH
+2026-May-07 16:43:30.124302
+19 |     COPY . /app/.
+2026-May-07 16:43:30.124302
+20 | >>> RUN  pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build
+2026-May-07 16:43:30.124302
+21 |
+2026-May-07 16:43:30.124302
+22 |     # build phase
+2026-May-07 16:43:30.124302
+--------------------
+2026-May-07 16:43:30.124302
+ERROR: failed to build: failed to solve: process "/bin/bash -ol pipefail -c pnpm install --no-frozen-lockfile && pnpm --filter @workspace/iconvault run build" did not complete successfully: exit code: 1
+2026-May-07 16:43:30.124302
+exit status 1
+2026-May-07 16:43:30.251480
+========================================
+2026-May-07 16:43:30.264501
+Deployment failed. Removing the new version of your application.
