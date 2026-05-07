@@ -4063,6 +4063,117 @@ function generateSubdomain(name: string): string {
   return `${base}-${suffix}`;
 }
 
+// GET /api/hosting/detect — auto-detect build/start commands from a Git repo
+app.get("/api/hosting/detect", requireAuth, async (req, res) => {
+  const { git_url, branch = "main" } = req.query as { git_url?: string; branch?: string };
+  if (!git_url) { res.status(400).json({ error: "git_url required" }); return; }
+
+  const ghMatch = git_url.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+  if (!ghMatch) {
+    res.json({ detected: false, reason: "Only public GitHub repos are supported for auto-detect" }); return;
+  }
+  const [, owner, repo] = ghMatch;
+
+  async function rawFetch(path: string, b: string) {
+    const r = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${b}/${path}`, { signal: AbortSignal.timeout(5000) });
+    return r.ok ? r.text() : null;
+  }
+
+  const tryBranches = [branch, "main", "master"];
+  let pkgRaw: string | null = null;
+  let detectedBranch = branch;
+  for (const b of tryBranches) {
+    pkgRaw = await rawFetch("package.json", b).catch(() => null);
+    if (pkgRaw) { detectedBranch = b; break; }
+  }
+
+  if (!pkgRaw) {
+    // Check for Python
+    const hasPy = await rawFetch("requirements.txt", detectedBranch).catch(() => null);
+    if (hasPy) {
+      const hasDjango = hasPy.toLowerCase().includes("django");
+      const hasFastapi = hasPy.toLowerCase().includes("fastapi");
+      const hasFlask = hasPy.toLowerCase().includes("flask");
+      res.json({
+        detected: true,
+        framework: hasDjango ? "django" : hasFastapi ? "fastapi" : hasFlask ? "flask" : "python",
+        buildCommand: "pip install -r requirements.txt",
+        startCommand: hasDjango ? "python manage.py runserver 0.0.0.0:8000" : hasFastapi ? "uvicorn main:app --host 0.0.0.0 --port 8000" : "python app.py",
+        port: 8000,
+        packageManager: "pip",
+      }); return;
+    }
+    res.json({ detected: false, reason: "No package.json or requirements.txt found" }); return;
+  }
+
+  let pkg: any = {};
+  try { pkg = JSON.parse(pkgRaw); } catch { res.json({ detected: false, reason: "Could not parse package.json" }); return; }
+
+  const deps = { ...pkg.dependencies, ...pkg.devDependencies } as Record<string, string>;
+  const scripts: Record<string, string> = pkg.scripts || {};
+
+  // Detect package manager
+  let pm = "npm";
+  const [hasPnpm, hasYarn] = await Promise.all([
+    rawFetch("pnpm-lock.yaml", detectedBranch).catch(() => null),
+    rawFetch("yarn.lock", detectedBranch).catch(() => null),
+  ]);
+  if (hasPnpm) pm = "pnpm";
+  else if (hasYarn) pm = "yarn";
+
+  // Check if monorepo
+  const isMonorepo = !!(pkg.workspaces || await rawFetch("pnpm-workspace.yaml", detectedBranch).catch(() => null));
+
+  let framework = "node";
+  let buildCommand = "";
+  let startCommand = "";
+  let port = 3000;
+
+  if (deps["next"]) {
+    framework = "nextjs";
+    buildCommand = `${pm} run build`;
+    startCommand = `${pm} start`;
+    port = 3000;
+  } else if (deps["nuxt"] || deps["nuxt3"]) {
+    framework = "nuxt";
+    buildCommand = `${pm} run build`;
+    startCommand = `node .output/server/index.mjs`;
+    port = 3000;
+  } else if (deps["@sveltejs/kit"] || deps["svelte"]) {
+    framework = "svelte";
+    buildCommand = `${pm} run build`;
+    startCommand = `node build`;
+    port = 3000;
+  } else if (deps["vite"] || deps["@vitejs/plugin-react"] || deps["@vitejs/plugin-vue"]) {
+    framework = "vite";
+    buildCommand = `${pm} run build`;
+    startCommand = scripts["preview"] ? `${pm} run preview` : `${pm} run serve`;
+    port = 4173;
+  } else if (deps["react-scripts"]) {
+    framework = "cra";
+    buildCommand = `${pm} run build`;
+    startCommand = `${pm} start`;
+    port = 3000;
+  } else if (deps["express"] || deps["fastify"] || deps["koa"] || deps["hapi"]) {
+    framework = "node-server";
+    buildCommand = scripts["build"] ? `${pm} run build` : `${pm} install`;
+    startCommand = scripts["start"] ? `${pm} start` : "node index.js";
+    port = 3000;
+  } else {
+    framework = "node";
+    buildCommand = scripts["build"] ? `${pm} run build` : `${pm} install`;
+    startCommand = scripts["start"] ? `${pm} start` : "node index.js";
+    port = 3000;
+  }
+
+  if (isMonorepo) {
+    buildCommand = "";
+    startCommand = "";
+  }
+
+  res.json({ detected: true, framework, packageManager: pm, buildCommand, startCommand, port, isMonorepo, branch: detectedBranch });
+});
+
 // GET /api/hosting/status
 app.get("/api/hosting/status", requireAuth, async (req, res) => {
   const userId = (req as any).userId;

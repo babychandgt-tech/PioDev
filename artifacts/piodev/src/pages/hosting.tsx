@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Globe, Plus, Trash2, RefreshCw, Rocket, GitBranch, ExternalLink,
   Loader2, AlertCircle, CheckCircle2, Clock, X, ChevronRight,
-  Terminal, Copy, Check, Menu, Server, Zap, XCircle,
+  Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
@@ -128,6 +128,10 @@ export default function HostingPage() {
     build_command: "", start_command: "", port: "3000",
   });
   const [formError, setFormError] = useState<string | null>(null);
+  const [detecting, setDetecting] = useState(false);
+  const [detectResult, setDetectResult] = useState<{ framework?: string; isMonorepo?: boolean } | null>(null);
+  const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
+  const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [selectedProject, setSelectedProject] = useState<HostingProject | null>(null);
   const [deployments, setDeployments] = useState<Deployment[]>([]);
@@ -148,6 +152,53 @@ export default function HostingPage() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate("/login");
   }, [authLoading, isAuthenticated]);
+
+  useEffect(() => {
+    const url = form.git_url.trim();
+    if (!url || !url.includes("github.com")) {
+      setDetectResult(null);
+      setAutoFilledFields(new Set());
+      return;
+    }
+    if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
+    detectTimerRef.current = setTimeout(async () => {
+      setDetecting(true);
+      try {
+        const token = await getToken();
+        const params = new URLSearchParams({ git_url: url, branch: form.git_branch || "main" });
+        const res = await fetch(`/api/hosting/detect?${params}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.detected) {
+          setDetectResult({ framework: data.framework, isMonorepo: data.isMonorepo });
+          const filled = new Set<string>();
+          setForm(f => {
+            const next = { ...f };
+            if (data.buildCommand !== undefined && !autoFilledFields.has("build_command") || autoFilledFields.has("build_command")) {
+              next.build_command = data.buildCommand ?? "";
+              filled.add("build_command");
+            }
+            if (data.startCommand !== undefined && !autoFilledFields.has("start_command") || autoFilledFields.has("start_command")) {
+              next.start_command = data.startCommand ?? "";
+              filled.add("start_command");
+            }
+            if (data.port) {
+              next.port = String(data.port);
+              filled.add("port");
+            }
+            return next;
+          });
+          setAutoFilledFields(filled);
+        } else {
+          setDetectResult(null);
+        }
+      } catch {}
+      finally { setDetecting(false); }
+    }, 900);
+    return () => { if (detectTimerRef.current) clearTimeout(detectTimerRef.current); };
+  }, [form.git_url, form.git_branch]);
 
   const loadData = useCallback(async () => {
     try {
@@ -654,7 +705,7 @@ export default function HostingPage() {
                   <h2 className="font-semibold">Proyek Hosting Baru</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Deploy dari Git repository ke VM kamu</p>
                 </div>
-                <button onClick={() => setShowCreate(false)} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setAutoFilledFields(new Set()); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -669,15 +720,61 @@ export default function HostingPage() {
 
                 <FormField label="Nama Proyek *" placeholder="my-web-app" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
                 <FormField label="Deskripsi" placeholder="Opsional" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
-                <FormField label="Git URL *" placeholder="https://github.com/user/repo" value={form.git_url} onChange={v => setForm(f => ({ ...f, git_url: v }))} />
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Git URL *</label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="https://github.com/user/repo"
+                      value={form.git_url}
+                      onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
+                      className="w-full px-3 py-2 pr-8 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
+                    />
+                    {detecting && (
+                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  {detectResult && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <Sparkles className="w-3 h-3 text-violet-400" />
+                      <span className="text-violet-400 font-medium">
+                        {detectResult.isMonorepo
+                          ? "Monorepo terdeteksi — nixpacks akan auto-build"
+                          : `Framework terdeteksi: ${detectResult.framework}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
-                  <FormField label="Port" placeholder="3000" value={form.port} onChange={v => setForm(f => ({ ...f, port: v }))} type="number" />
+                  <FormField
+                    label="Port"
+                    placeholder="3000"
+                    value={form.port}
+                    onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("port"); return n; }); setForm(f => ({ ...f, port: v })); }}
+                    type="number"
+                    isAutoDetected={autoFilledFields.has("port")}
+                  />
                 </div>
 
-                <FormField label="Build Command" placeholder="npm install && npm run build" value={form.build_command} onChange={v => setForm(f => ({ ...f, build_command: v }))} />
-                <FormField label="Start Command" placeholder="npm start" value={form.start_command} onChange={v => setForm(f => ({ ...f, start_command: v }))} />
+                <FormField
+                  label="Build Command"
+                  placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                  value={form.build_command}
+                  onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("build_command"); return n; }); setForm(f => ({ ...f, build_command: v })); }}
+                  isAutoDetected={autoFilledFields.has("build_command")}
+                />
+                <FormField
+                  label="Start Command"
+                  placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                  value={form.start_command}
+                  onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("start_command"); return n; }); setForm(f => ({ ...f, start_command: v })); }}
+                  isAutoDetected={autoFilledFields.has("start_command")}
+                />
 
                 <p className="text-xs text-muted-foreground">
                   Subdomain akan dibuat otomatis: <span className="font-mono text-primary">{form.name ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes` : "nama-xxxx.app.pio.codes"}</span>
@@ -685,7 +782,7 @@ export default function HostingPage() {
               </div>
 
               <div className="flex gap-3 px-5 py-4 border-t border-border">
-                <button onClick={() => setShowCreate(false)} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setAutoFilledFields(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
                   Batal
                 </button>
                 <button
@@ -737,19 +834,32 @@ function InfoCard({ label, value, className }: { label: string; value: string; c
 }
 
 function FormField({
-  label, placeholder, value, onChange, type = "text",
+  label, placeholder, value, onChange, type = "text", isAutoDetected = false,
 }: {
-  label: string; placeholder: string; value: string; onChange: (v: string) => void; type?: string;
+  label: string; placeholder: string; value: string; onChange: (v: string) => void; type?: string; isAutoDetected?: boolean;
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="text-xs font-medium text-muted-foreground">{label}</label>
+      <div className="flex items-center gap-2">
+        <label className="text-xs font-medium text-muted-foreground">{label}</label>
+        {isAutoDetected && (
+          <span className="flex items-center gap-0.5 text-[10px] text-violet-400 font-medium">
+            <Sparkles className="w-2.5 h-2.5" />
+            Auto-detect
+          </span>
+        )}
+      </div>
       <input
         type={type}
         placeholder={placeholder}
         value={value}
         onChange={e => onChange(e.target.value)}
-        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
+        className={cn(
+          "w-full px-3 py-2 rounded-lg bg-background border text-sm focus:outline-none focus:ring-2 placeholder:text-muted-foreground/40 transition-all",
+          isAutoDetected
+            ? "border-violet-500/30 focus:border-violet-500/50 focus:ring-violet-500/10"
+            : "border-border focus:border-primary/50 focus:ring-primary/10"
+        )}
       />
     </div>
   );
