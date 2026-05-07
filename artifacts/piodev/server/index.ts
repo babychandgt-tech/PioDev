@@ -4474,12 +4474,21 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   await supabaseAdmin.from("hosting_projects").update({ status: "deploying", updated_at: new Date().toISOString() }).eq("id", project.id);
   if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
-      // Always sync NODE_VERSION + PORT + user env vars before every deploy
-      await syncCoolifyEnvVars(
-        project.coolify_app_uuid,
-        project.port || 3000,
-        (project.env_vars as Record<string, string>) ?? {},
-      ).catch((e) => console.warn("[Hosting] pre-deploy syncCoolifyEnvVars failed:", (e as Error).message));
+      const deployPort = project.port || 3000;
+      const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
+      const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
+      const deployStartCmd = project.start_command?.trim() || "node server/index.js";
+
+      // Always re-push Dockerfile before every deploy so old nixpacks projects get migrated automatically
+      const dockerfile = generateNodeDockerfile(deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
+      await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+        method: "PATCH",
+        body: JSON.stringify({ build_pack: "dockerfile", dockerfile, ports_exposes: String(deployPort) }),
+      }).catch((e) => console.warn("[Hosting] pre-deploy Dockerfile PATCH failed:", (e as Error).message));
+
+      // Sync runtime env vars (PORT, BASE_PATH, user vars)
+      await syncCoolifyEnvVars(project.coolify_app_uuid, deployPort, deployEnvVars)
+        .catch((e) => console.warn("[Hosting] pre-deploy syncCoolifyEnvVars failed:", (e as Error).message));
 
       const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
       const rawText = await deployRes.text();
