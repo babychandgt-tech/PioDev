@@ -53,6 +53,8 @@ VITE_SUPABASE_URL = "https://rxhjvkzosbpusinydxlu.supabase.co"
 VITE_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ4aGp2a3pvc2JwdXNpbnlkeGx1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM5MjU1MTYsImV4cCI6MjA4OTUwMTUxNn0.NIELk57hXg3GDx9g4NIaEhzBgOsoin9pATCQY-Wg_5E"
 VITE_OPENAI_BASE_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
 API_KEY_ENCRYPTION_SECRET = "sEerATto9VuS/j3OWtb/OJfVefYLgXq45QzINKqrQ74="
+COOLIFY_API_URL = "http://20.212.54.127:8000"
+COOLIFY_BASE_DOMAIN = "app.pio.codes"
 
 [[ports]]
 localPort = 3000
