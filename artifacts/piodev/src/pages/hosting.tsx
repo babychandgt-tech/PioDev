@@ -131,6 +131,7 @@ export default function HostingPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [detecting, setDetecting] = useState(false);
   const [detectResult, setDetectResult] = useState<{ framework?: string; isMonorepo?: boolean } | null>(null);
+  const [detectAttempted, setDetectAttempted] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
   const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -165,52 +166,51 @@ export default function HostingPage() {
     if (!authLoading && !isAuthenticated) navigate("/login");
   }, [authLoading, isAuthenticated]);
 
+  const runDetect = useCallback(async (url: string, branch: string) => {
+    if (!url || !url.includes("github.com")) return;
+    setDetecting(true);
+    setDetectAttempted(false);
+    try {
+      const token = await getToken();
+      const params = new URLSearchParams({ git_url: url, branch: branch || "main" });
+      const res = await fetch(`/api/hosting/detect?${params}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { setDetectResult(null); setDetectAttempted(true); return; }
+      const data = await res.json();
+      if (data.detected) {
+        setDetectResult({ framework: data.framework, isMonorepo: data.isMonorepo });
+        const filled = new Set<string>();
+        setForm(f => {
+          const next = { ...f };
+          next.build_command = data.buildCommand ?? "";
+          filled.add("build_command");
+          next.start_command = data.startCommand ?? "";
+          filled.add("start_command");
+          if (data.port) { next.port = String(data.port); filled.add("port"); }
+          return next;
+        });
+        setAutoFilledFields(filled);
+      } else {
+        setDetectResult(null);
+      }
+      setDetectAttempted(true);
+    } catch { setDetectResult(null); setDetectAttempted(true); }
+    finally { setDetecting(false); }
+  }, []);
+
   useEffect(() => {
     const url = form.git_url.trim();
     if (!url || !url.includes("github.com")) {
       setDetectResult(null);
+      setDetectAttempted(false);
       setAutoFilledFields(new Set());
       return;
     }
     if (detectTimerRef.current) clearTimeout(detectTimerRef.current);
-    detectTimerRef.current = setTimeout(async () => {
-      setDetecting(true);
-      try {
-        const token = await getToken();
-        const params = new URLSearchParams({ git_url: url, branch: form.git_branch || "main" });
-        const res = await fetch(`/api/hosting/detect?${params}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data.detected) {
-          setDetectResult({ framework: data.framework, isMonorepo: data.isMonorepo });
-          const filled = new Set<string>();
-          setForm(f => {
-            const next = { ...f };
-            if (data.buildCommand !== undefined && !autoFilledFields.has("build_command") || autoFilledFields.has("build_command")) {
-              next.build_command = data.buildCommand ?? "";
-              filled.add("build_command");
-            }
-            if (data.startCommand !== undefined && !autoFilledFields.has("start_command") || autoFilledFields.has("start_command")) {
-              next.start_command = data.startCommand ?? "";
-              filled.add("start_command");
-            }
-            if (data.port) {
-              next.port = String(data.port);
-              filled.add("port");
-            }
-            return next;
-          });
-          setAutoFilledFields(filled);
-        } else {
-          setDetectResult(null);
-        }
-      } catch {}
-      finally { setDetecting(false); }
-    }, 900);
+    detectTimerRef.current = setTimeout(() => runDetect(url, form.git_branch), 900);
     return () => { if (detectTimerRef.current) clearTimeout(detectTimerRef.current); };
-  }, [form.git_url, form.git_branch]);
+  }, [form.git_url, form.git_branch, runDetect]);
 
   const loadData = useCallback(async () => {
     try {
@@ -995,7 +995,7 @@ export default function HostingPage() {
                   <h2 className="font-semibold">Proyek Hosting Baru</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Deploy dari Git repository ke VM kamu</p>
                 </div>
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setAutoFilledFields(new Set()); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1013,28 +1013,40 @@ export default function HostingPage() {
 
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Git URL *</label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="https://github.com/user/repo"
-                      value={form.git_url}
-                      onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
-                      className="w-full px-3 py-2 pr-8 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
-                    />
-                    {detecting && (
-                      <div className="absolute right-2.5 top-1/2 -translate-y-1/2">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-                      </div>
-                    )}
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="https://github.com/user/repo"
+                        value={form.git_url}
+                        onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => runDetect(form.git_url.trim(), form.git_branch || "main")}
+                      disabled={detecting || !form.git_url.trim().includes("github.com")}
+                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-accent hover:bg-accent/80 text-xs font-medium transition-colors disabled:opacity-40 whitespace-nowrap"
+                    >
+                      {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-400" />}
+                      {detecting ? "Deteksi..." : "Deteksi"}
+                    </button>
                   </div>
                   {detectResult && (
                     <div className="flex items-center gap-1.5 text-[11px]">
-                      <Sparkles className="w-3 h-3 text-violet-400" />
-                      <span className="text-violet-400 font-medium">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span className="text-emerald-400 font-medium">
                         {detectResult.isMonorepo
-                          ? "Monorepo terdeteksi — nixpacks akan auto-build"
-                          : `Framework terdeteksi: ${detectResult.framework}`}
+                          ? "Monorepo terdeteksi — isi build & start command manual"
+                          : `Framework terdeteksi: ${detectResult.framework} — command sudah diisi otomatis`}
                       </span>
+                    </div>
+                  )}
+                  {detectAttempted && !detectResult && !detecting && form.git_url.trim() && (
+                    <div className="flex items-center gap-1.5 text-[11px]">
+                      <AlertCircle className="w-3 h-3 text-amber-400" />
+                      <span className="text-amber-400">Tidak dapat mendeteksi — pastikan repo publik atau isi command manual</span>
                     </div>
                   )}
                 </div>
@@ -1072,7 +1084,7 @@ export default function HostingPage() {
               </div>
 
               <div className="flex gap-3 px-5 py-4 border-t border-border">
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setAutoFilledFields(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
                   Batal
                 </button>
                 <button
