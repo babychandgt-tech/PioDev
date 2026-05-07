@@ -4068,7 +4068,7 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
   const { git_url, branch = "main" } = req.query as { git_url?: string; branch?: string };
   if (!git_url) { res.status(400).json({ error: "git_url required" }); return; }
 
-  const ghMatch = git_url.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
+  const ghMatch = git_url.match(/github\.com[/:]([^/]+)\/([^/]+?)(?:\.git)?$/);
   if (!ghMatch) {
     res.json({ detected: false, reason: "Only public GitHub repos are supported for auto-detect" }); return;
   }
