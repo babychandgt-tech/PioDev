@@ -4057,6 +4057,48 @@ function hostingSlugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 28) || "app";
 }
 
+/**
+ * Push environment variables to a Coolify application.
+ * Always injects NODE_VERSION=22 and PORT so Nixpacks picks the right
+ * Node.js version and the build step doesn't throw "PORT is required".
+ */
+async function syncCoolifyEnvVars(
+  appUuid: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): Promise<void> {
+  const vars: Record<string, string> = {
+    NODE_VERSION: "22",
+    PORT: String(port),
+    ...userEnvVars,
+  };
+
+  const bulkPayload = {
+    data: Object.entries(vars).map(([key, value]) => ({
+      key,
+      value,
+      is_preview: false,
+    })),
+  };
+
+  // Try bulk endpoint first (Coolify >=4.x)
+  const bulkRes = await coolifyFetch(`/applications/${appUuid}/envs/bulk`, {
+    method: "PATCH",
+    body: JSON.stringify(bulkPayload),
+  });
+
+  if (!bulkRes.ok) {
+    // Fallback: set each var individually
+    for (const [key, value] of Object.entries(vars)) {
+      await coolifyFetch(`/applications/${appUuid}/envs`, {
+        method: "POST",
+        body: JSON.stringify({ key, value, is_preview: false }),
+      }).catch((e) => console.warn(`[Hosting] envVar set ${key} failed:`, (e as Error).message));
+    }
+  }
+  console.log(`[Hosting] Synced ${Object.keys(vars).length} env vars to Coolify app ${appUuid}`);
+}
+
 function generateSubdomain(name: string): string {
   const base = hostingSlugify(name);
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -4329,6 +4371,10 @@ app.post("/api/hosting/projects", requireAuth, async (req, res) => {
         if (appData.uuid) {
           await supabaseAdmin.from("hosting_projects").update({ coolify_app_uuid: appData.uuid }).eq("id", project!.id);
           (project as any).coolify_app_uuid = appData.uuid;
+          // Sync NODE_VERSION, PORT, and user env vars so Nixpacks uses the right Node
+          await syncCoolifyEnvVars(appData.uuid, Number(port) || 3000, env_vars ?? {}).catch((e) =>
+            console.warn("[Hosting] syncCoolifyEnvVars failed:", (e as Error).message)
+          );
         }
       } else {
         console.warn("[Hosting] Coolify create app failed:", appRes.status, await appRes.text().catch(() => ""));
@@ -4380,6 +4426,13 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   await supabaseAdmin.from("hosting_projects").update({ status: "deploying", updated_at: new Date().toISOString() }).eq("id", project.id);
   if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
+      // Always sync NODE_VERSION + PORT + user env vars before every deploy
+      await syncCoolifyEnvVars(
+        project.coolify_app_uuid,
+        project.port || 3000,
+        (project.env_vars as Record<string, string>) ?? {},
+      ).catch((e) => console.warn("[Hosting] pre-deploy syncCoolifyEnvVars failed:", (e as Error).message));
+
       const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
       const rawText = await deployRes.text();
       console.log("[Hosting] Coolify deploy response:", deployRes.status, rawText.slice(0, 500));
@@ -4415,18 +4468,19 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   res.json({ deployment, project: { ...project, status: "deploying" } });
 });
 
-// PATCH /api/hosting/projects/:id — update build/start command, branch, port
+// PATCH /api/hosting/projects/:id — update build/start command, branch, port, env_vars
 app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
   const { data: project } = await supabaseAdmin
     .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
   if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
-  const { build_command, start_command, git_branch, port } = req.body;
-  const updates: Record<string, string | number> = { updated_at: new Date().toISOString() };
+  const { build_command, start_command, git_branch, port, env_vars } = req.body;
+  const updates: Record<string, string | number | object> = { updated_at: new Date().toISOString() };
   if (build_command !== undefined) updates.build_command = build_command?.trim() ?? "";
   if (start_command !== undefined) updates.start_command = start_command?.trim() ?? "";
   if (git_branch !== undefined) updates.git_branch = git_branch?.trim() || "main";
   if (port !== undefined) updates.port = Number(port) || 3000;
+  if (env_vars !== undefined) updates.env_vars = env_vars ?? {};
   await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
   // Push updated commands to Coolify app config
   if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
@@ -4441,6 +4495,12 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
       });
       const patchText = await patchRes.text();
       console.log("[Hosting] Coolify PATCH app:", patchRes.status, patchText.slice(0, 300));
+      // Re-sync env vars (keeps NODE_VERSION/PORT up to date with any port change)
+      const effectivePort = port !== undefined ? Number(port) || 3000 : project.port || 3000;
+      const effectiveEnvVars = env_vars !== undefined ? (env_vars ?? {}) : (project.env_vars ?? {});
+      await syncCoolifyEnvVars(project.coolify_app_uuid, effectivePort, effectiveEnvVars).catch((e) =>
+        console.warn("[Hosting] syncCoolifyEnvVars failed on PATCH:", (e as Error).message)
+      );
     } catch (e) {
       console.warn("[Hosting] Patch Coolify app error:", (e as Error).message);
     }
@@ -4552,16 +4612,12 @@ app.put("/api/hosting/projects/:id/env", requireAuth, async (req, res) => {
   }
   await supabaseAdmin.from("hosting_projects").update({ env_vars, updated_at: new Date().toISOString() }).eq("id", project.id);
   if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
-    try {
-      const coolifyEnv = Object.entries(env_vars as Record<string, string>)
-        .map(([key, value]) => ({ key, value, is_build_time: false }));
-      await coolifyFetch(`/applications/${project.coolify_app_uuid}/envs/bulk`, {
-        method: "PATCH",
-        body: JSON.stringify({ data: coolifyEnv }),
-      });
-    } catch (e) {
-      console.warn("[Hosting] Env push to Coolify error:", (e as Error).message);
-    }
+    // Use syncCoolifyEnvVars so NODE_VERSION and PORT are always injected alongside user vars
+    await syncCoolifyEnvVars(
+      project.coolify_app_uuid,
+      project.port || 3000,
+      env_vars as Record<string, string>,
+    ).catch((e) => console.warn("[Hosting] Env push to Coolify error:", (e as Error).message));
   }
   res.json({ success: true });
 });
