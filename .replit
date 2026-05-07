@@ -58,3 +58,7 @@ COOLIFY_BASE_DOMAIN = "app.pio.codes"
 
 [nix]
 channel = "stable-25_05"
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
