@@ -4146,47 +4146,72 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
       : s["start"] ? `${pm} --filter ${filterName} run start`
       : s["preview"] ? `${pm} --filter ${filterName} run preview`
       : "";
-    return { buildCommand, startCommand, framework, port };
+    const isDeployable = !!(s["build"] || s["start"] || s["serve"] || s["preview"] || d["express"] || d["fastify"] || d["next"] || d["vite"] || d["@vitejs/plugin-react"]);
+    return { buildCommand, startCommand, framework, port, isDeployable };
   }
 
   if (isMonorepo) {
     // Parse workspace patterns
     let patterns: string[] = Array.isArray(pkg.workspaces) ? pkg.workspaces : [];
     if (!patterns.length && wsYamlRaw) {
-      const m = wsYamlRaw.match(/packages:\s*\n((?:\s+-.+\n?)+)/);
-      if (m) patterns = (m[1].match(/-\s+['"]?([^'"]+)['"]?/g) || []).map((x: string) => x.replace(/^-\s+['"]?|['"]?$/g, "").trim());
+      const m = wsYamlRaw.match(/^packages:\s*\n((?:[ \t]+-[^\n]+\n?)*)/m);
+      if (m) {
+        patterns = m[1].split("\n")
+          .map(l => l.replace(/^\s*-\s+['"]?|['"]?\s*$/, "").trim())
+          .filter(l => l.length > 0 && !l.startsWith("#"));
+      }
     }
 
     // Scan each workspace base dir via GitHub API
-    const workspacePackages: { name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number }[] = [];
+    const workspacePackages: { name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number; isDeployable: boolean }[] = [];
     const scanned = new Set<string>();
 
-    for (const pattern of patterns.slice(0, 6)) {
-      const basePath = pattern.replace(/\/\*\*?$/, "").replace(/\*\*?$/, "").replace(/\/$/, "");
-      if (!basePath || scanned.has(basePath)) continue;
-      scanned.add(basePath);
+    const isWildcard = (p: string) => p.includes("*");
 
-      try {
-        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${basePath}?ref=${detectedBranch}`;
-        const apiRes = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
-        if (!apiRes.ok) continue;
-        const entries: { name: string; type: string }[] = await apiRes.json();
-        const dirs = entries.filter(e => e.type === "dir").slice(0, 12);
-
-        for (const dir of dirs) {
-          const subPath = `${basePath}/${dir.name}`;
-          const subPkgRaw = await rawFetch(`${subPath}/package.json`, detectedBranch).catch(() => null);
+    for (const pattern of patterns.slice(0, 8)) {
+      if (isWildcard(pattern)) {
+        // Parent folder — list subdirs via GitHub API
+        const basePath = pattern.replace(/\/\*\*?$/, "").replace(/\*\*?$/, "").replace(/\/$/, "");
+        if (!basePath || scanned.has(basePath)) continue;
+        scanned.add(basePath);
+        try {
+          const apiRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/contents/${basePath}?ref=${detectedBranch}`, { signal: AbortSignal.timeout(7000) });
+          if (!apiRes.ok) continue;
+          const entries: { name: string; type: string }[] = await apiRes.json();
+          if (!Array.isArray(entries)) continue;
+          const dirs = entries.filter(e => e.type === "dir").slice(0, 12);
+          for (const dir of dirs) {
+            const subPath = `${basePath}/${dir.name}`;
+            const subPkgRaw = await rawFetch(`${subPath}/package.json`, detectedBranch).catch(() => null);
+            if (!subPkgRaw) continue;
+            let subPkg: any = {};
+            try { subPkg = JSON.parse(subPkgRaw); } catch { continue; }
+            const filterName = subPkg.name || subPath;
+            const cmds = buildCmdsForPkg(subPkg, filterName, pm, installCmd);
+            workspacePackages.push({ name: subPkg.name || dir.name, path: subPath, ...cmds });
+          }
+        } catch { continue; }
+      } else {
+        // Direct package path (e.g. "scripts")
+        const pkgPath = pattern.replace(/\/$/, "");
+        if (!pkgPath || scanned.has(pkgPath)) continue;
+        scanned.add(pkgPath);
+        try {
+          const subPkgRaw = await rawFetch(`${pkgPath}/package.json`, detectedBranch).catch(() => null);
           if (!subPkgRaw) continue;
           let subPkg: any = {};
           try { subPkg = JSON.parse(subPkgRaw); } catch { continue; }
-          const filterName = subPkg.name || subPath;
+          const filterName = subPkg.name || pkgPath;
           const cmds = buildCmdsForPkg(subPkg, filterName, pm, installCmd);
-          workspacePackages.push({ name: subPkg.name || dir.name, path: subPath, ...cmds });
-        }
-      } catch { continue; }
+          workspacePackages.push({ name: subPkg.name || pkgPath, path: pkgPath, ...cmds });
+        } catch { continue; }
+      }
     }
+    console.log(`[Hosting Detect] ${owner}/${repo}: isMonorepo=true, patterns=${JSON.stringify(patterns)}, packages found=${workspacePackages.length}`);
 
-    res.json({ detected: true, framework: "monorepo", packageManager: pm, buildCommand: "", startCommand: "", port: 3000, isMonorepo: true, workspacePackages, branch: detectedBranch }); return;
+    const deployablePackages = workspacePackages.filter(p => p.isDeployable);
+    const allPackages = [...deployablePackages, ...workspacePackages.filter(p => !p.isDeployable)];
+    res.json({ detected: true, framework: "monorepo", packageManager: pm, buildCommand: "", startCommand: "", port: 3000, isMonorepo: true, workspacePackages: allPackages, branch: detectedBranch }); return;
   }
 
   let framework = "node";

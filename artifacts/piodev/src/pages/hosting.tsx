@@ -133,7 +133,7 @@ export default function HostingPage() {
   const [detectResult, setDetectResult] = useState<{ framework?: string; isMonorepo?: boolean } | null>(null);
   const [detectAttempted, setDetectAttempted] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
-  const [workspacePackages, setWorkspacePackages] = useState<{ name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number }[]>([]);
+  const [workspacePackages, setWorkspacePackages] = useState<{ name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number; isDeployable?: boolean }[]>([]);
   const [selectedWorkspacePkg, setSelectedWorkspacePkg] = useState<string | null>(null);
   const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
