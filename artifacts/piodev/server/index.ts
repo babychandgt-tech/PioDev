@@ -4325,6 +4325,37 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   res.json({ deployment, project: { ...project, status: "deploying" } });
 });
 
+// PATCH /api/hosting/projects/:id — update build/start command, branch, port
+app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const { build_command, start_command, git_branch, port } = req.body;
+  const updates: Record<string, string | number> = { updated_at: new Date().toISOString() };
+  if (build_command !== undefined) updates.build_command = build_command?.trim() ?? "";
+  if (start_command !== undefined) updates.start_command = start_command?.trim() ?? "";
+  if (git_branch !== undefined) updates.git_branch = git_branch?.trim() || "main";
+  if (port !== undefined) updates.port = Number(port) || 3000;
+  await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
+  // Push updated commands to Coolify app config
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      const body: Record<string, string> = {};
+      if (build_command !== undefined) body.install_command = build_command?.trim() ?? "";
+      if (start_command !== undefined) body.start_command = start_command?.trim() ?? "";
+      if (git_branch !== undefined) body.git_branch = git_branch?.trim() || "main";
+      if (port !== undefined) body.ports_exposes = String(Number(port) || 3000);
+      await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+        method: "PATCH", body: JSON.stringify(body),
+      });
+    } catch (e) {
+      console.warn("[Hosting] Patch Coolify app error:", (e as Error).message);
+    }
+  }
+  res.json({ project: { ...project, ...updates } });
+});
+
 // GET /api/hosting/projects/:id/sync
 app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
@@ -4335,16 +4366,53 @@ app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
     res.json({ project, synced: false }); return;
   }
   try {
-    const appRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`);
-    if (appRes.ok) {
-      const appData: { status?: string; fqdn?: string } = await appRes.json();
-      const newStatus = appData.status === "running" ? "running" : appData.status === "exited" ? "stopped" : project.status;
-      const updates: Record<string, string> = { updated_at: new Date().toISOString() };
-      if (newStatus !== project.status) updates.status = newStatus;
-      if (appData.fqdn && appData.fqdn !== project.public_url) updates.public_url = appData.fqdn;
-      await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
-      res.json({ project: { ...project, ...updates }, synced: true }); return;
+    // Check latest deployment status from Coolify deployment history
+    const { data: latestDeploy } = await supabaseAdmin
+      .from("hosting_deployments").select("*").eq("project_id", project.id)
+      .order("created_at", { ascending: false }).limit(1).single();
+
+    const [appRes, deployRes] = await Promise.all([
+      coolifyFetch(`/applications/${project.coolify_app_uuid}`),
+      latestDeploy?.coolify_deployment_uuid
+        ? coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}`)
+        : Promise.resolve(null),
+    ]);
+
+    const updates: Record<string, string> = { updated_at: new Date().toISOString() };
+
+    // Get deployment status first (most accurate for failures)
+    let deployStatus: string | null = null;
+    if (deployRes?.ok) {
+      const dd: { status?: string; finished_at?: string; logs?: string } = await deployRes.json();
+      deployStatus = dd.status ?? null;
+      if (latestDeploy && dd.status) {
+        const deployDbStatus = dd.status === "finished" ? "finished" : dd.status === "failed" ? "failed" : "in_progress";
+        await supabaseAdmin.from("hosting_deployments").update({
+          status: deployDbStatus,
+          ...(dd.finished_at ? { finished_at: dd.finished_at } : {}),
+        }).eq("id", latestDeploy.id);
+      }
     }
+
+    // Determine project status
+    let newStatus: string = project.status;
+    if (deployStatus === "failed") {
+      newStatus = "failed";
+    } else if (deployStatus === "finished") {
+      newStatus = "running";
+    } else if (appRes.ok) {
+      const appData: { status?: string; fqdn?: string } = await appRes.json();
+      if (appData.status === "running") newStatus = "running";
+      else if (appData.status === "exited" || appData.status === "stopped") {
+        // "exited" after a failed deployment = failed; after a successful one = stopped
+        newStatus = deployStatus === "finished" ? "stopped" : "failed";
+      }
+      if (appData.fqdn && appData.fqdn !== project.public_url) updates.public_url = appData.fqdn;
+    }
+
+    if (newStatus !== project.status) updates.status = newStatus;
+    await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
+    res.json({ project: { ...project, ...updates }, synced: true }); return;
   } catch (e) {
     console.warn("[Hosting] Sync error:", (e as Error).message);
   }

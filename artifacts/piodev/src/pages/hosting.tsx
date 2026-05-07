@@ -151,6 +151,10 @@ export default function HostingPage() {
   const [envEditing, setEnvEditing] = useState(false);
   const [savingEnv, setSavingEnv] = useState(false);
 
+  const [editSettings, setEditSettings] = useState(false);
+  const [editForm, setEditForm] = useState({ build_command: "", start_command: "", git_branch: "main", port: "3000" });
+  const [savingSettings, setSavingSettings] = useState(false);
+
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const logsPollRef = useRef<NodeJS.Timeout | null>(null);
@@ -376,6 +380,30 @@ export default function HostingPage() {
     } finally {
       setLogsLoading(false);
       setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 100);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    if (!selectedProject) return;
+    setSavingSettings(true);
+    try {
+      const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({
+          build_command: editForm.build_command,
+          start_command: editForm.start_command,
+          git_branch: editForm.git_branch,
+          port: Number(editForm.port) || 3000,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast({ title: "Gagal simpan settings", variant: "destructive" }); return; }
+      setSelectedProject(prev => prev ? { ...prev, ...data.project } : prev);
+      setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...data.project } : p));
+      setEditSettings(false);
+      toast({ title: "Settings disimpan", description: "Deploy ulang untuk menerapkan perubahan." });
+    } finally {
+      setSavingSettings(false);
     }
   };
 
@@ -628,14 +656,72 @@ export default function HostingPage() {
                   </div>
                 ) : (
                   <>
-                    {/* Info cards */}
-                    <div className="grid grid-cols-2 gap-2">
-                      <InfoCard label="Git URL" value={truncateGitUrl(selectedProject.git_url)} />
-                      <InfoCard label="Branch" value={selectedProject.git_branch} />
-                      <InfoCard label="Port" value={String(selectedProject.port)} />
-                      <InfoCard label="Status" value={selectedProject.status} />
-                      {selectedProject.build_command && <InfoCard label="Build" value={selectedProject.build_command} className="col-span-2" />}
-                      {selectedProject.start_command && <InfoCard label="Start" value={selectedProject.start_command} className="col-span-2" />}
+                    {/* Info cards + Settings */}
+                    <div className="rounded-xl border border-border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2.5 bg-accent/20 border-b border-border">
+                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Konfigurasi</p>
+                        {editSettings ? (
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => setEditSettings(false)} className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">Batal</button>
+                            <button
+                              onClick={handleSaveSettings}
+                              disabled={savingSettings}
+                              className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {savingSettings ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                              Simpan
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setEditForm({
+                                build_command: selectedProject.build_command ?? "",
+                                start_command: selectedProject.start_command ?? "",
+                                git_branch: selectedProject.git_branch ?? "main",
+                                port: String(selectedProject.port ?? 3000),
+                              });
+                              setEditSettings(true);
+                            }}
+                            className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
+                          >Edit</button>
+                        )}
+                      </div>
+                      {editSettings ? (
+                        <div className="p-3 space-y-2.5">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Branch</label>
+                              <input value={editForm.git_branch} onChange={e => setEditForm(f => ({ ...f, git_branch: e.target.value }))}
+                                className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Port</label>
+                              <input type="number" value={editForm.port} onChange={e => setEditForm(f => ({ ...f, port: e.target.value }))}
+                                className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Build Command</label>
+                            <input placeholder="Kosong = auto-detect" value={editForm.build_command} onChange={e => setEditForm(f => ({ ...f, build_command: e.target.value }))}
+                              className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Start Command</label>
+                            <input placeholder="Kosong = auto-detect" value={editForm.start_command} onChange={e => setEditForm(f => ({ ...f, start_command: e.target.value }))}
+                              className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-px bg-border">
+                          <InfoFlat label="Git URL" value={truncateGitUrl(selectedProject.git_url)} />
+                          <InfoFlat label="Branch" value={selectedProject.git_branch} />
+                          <InfoFlat label="Port" value={String(selectedProject.port)} />
+                          <InfoFlat label="Status" value={selectedProject.status} />
+                          {selectedProject.build_command && <InfoFlat label="Build" value={selectedProject.build_command} className="col-span-2" />}
+                          {selectedProject.start_command && <InfoFlat label="Start" value={selectedProject.start_command} className="col-span-2" />}
+                        </div>
+                      )}
                     </div>
 
                     {/* Public URL */}
@@ -970,6 +1056,15 @@ export default function HostingPage() {
 function InfoCard({ label, value, className }: { label: string; value: string; className?: string }) {
   return (
     <div className={cn("p-2.5 rounded-lg bg-accent/30 border border-border", className)}>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</p>
+      <p className="text-xs font-mono text-foreground truncate">{value}</p>
+    </div>
+  );
+}
+
+function InfoFlat({ label, value, className }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={cn("px-3 py-2 bg-background", className)}>
       <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</p>
       <p className="text-xs font-mono text-foreground truncate">{value}</p>
     </div>
