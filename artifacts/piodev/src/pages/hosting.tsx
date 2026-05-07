@@ -5,6 +5,7 @@ import {
   Globe, Plus, Trash2, RefreshCw, Rocket, GitBranch, ExternalLink,
   Loader2, AlertCircle, CheckCircle2, Clock, X, ChevronRight,
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
+  KeyRound, Eye, EyeOff,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
@@ -146,8 +147,13 @@ export default function HostingPage() {
   const [showLogs, setShowLogs] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
+  const [envRows, setEnvRows] = useState<{ key: string; value: string; hidden: boolean }[]>([]);
+  const [envEditing, setEnvEditing] = useState(false);
+  const [savingEnv, setSavingEnv] = useState(false);
+
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const logsPollRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate("/login");
@@ -248,8 +254,43 @@ export default function HostingPage() {
 
   const openProject = async (project: HostingProject) => {
     setSelectedProject(project);
+    setEnvEditing(false);
+    setShowLogs(false);
+    setLogs("");
     await loadDetail(project);
   };
+
+  // Init env rows when project detail loads
+  useEffect(() => {
+    if (!selectedProject) return;
+    const ev = (selectedProject as any).env_vars ?? {};
+    setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true })));
+  }, [selectedProject?.id]);
+
+  // Auto-poll logs while deploying
+  useEffect(() => {
+    if (!selectedProject || selectedProject.status !== "deploying" || !showLogs) {
+      if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
+      return;
+    }
+    const poll = async () => {
+      try {
+        const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}/logs`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.logs) { setLogs(data.logs); setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 50); }
+        if (data.status === "finished" || data.status === "failed") {
+          if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
+          setSelectedProject(prev => prev ? { ...prev, status: data.status === "finished" ? "running" : "failed" } : prev);
+          setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, status: data.status === "finished" ? "running" : "failed" } : p));
+          setDeployments(prev => prev.map(d => d.status === "in_progress" ? { ...d, status: data.status } : d));
+        }
+      } catch {}
+    };
+    poll();
+    logsPollRef.current = setInterval(poll, 3000);
+    return () => { if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; } };
+  }, [selectedProject?.id, selectedProject?.status, showLogs]);
 
   const handleCreate = async () => {
     setFormError(null);
@@ -331,10 +372,28 @@ export default function HostingPage() {
     try {
       const res = await authedFetch(`/api/hosting/projects/${project.id}/logs`);
       const data = await res.json();
-      setLogs(data.logs ?? "Belum ada log.");
+      setLogs(data.logs || "");
     } finally {
       setLogsLoading(false);
       setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 100);
+    }
+  };
+
+  const handleSaveEnv = async () => {
+    if (!selectedProject) return;
+    setSavingEnv(true);
+    try {
+      const env_vars = Object.fromEntries(envRows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
+      const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}/env`, {
+        method: "PUT",
+        body: JSON.stringify({ env_vars }),
+      });
+      if (!res.ok) { toast({ title: "Gagal simpan env vars", variant: "destructive" }); return; }
+      setSelectedProject(prev => prev ? { ...prev, env_vars } as any : prev);
+      setEnvEditing(false);
+      toast({ title: "Env vars disimpan", description: "Deploy ulang untuk menerapkan perubahan." });
+    } finally {
+      setSavingEnv(false);
     }
   };
 
@@ -647,11 +706,95 @@ export default function HostingPage() {
                             ref={logsRef}
                             className="p-3 text-[11px] font-mono text-zinc-300 bg-zinc-950 overflow-auto max-h-64 whitespace-pre-wrap leading-relaxed"
                           >
-                            {logsLoading ? "Memuat logs..." : (logs || "Belum ada log.")}
+                            {logsLoading
+                              ? "Memuat logs..."
+                              : logs || (selectedProject.status === "deploying"
+                                ? "Menunggu output dari VM..."
+                                : "Belum ada log. Klik Deploy untuk mulai.")}
                           </pre>
                         </motion.div>
                       )}
                     </AnimatePresence>
+
+                    {/* Environment Variables */}
+                    <div className="rounded-xl border border-border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2.5 bg-accent/20 border-b border-border">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                          <KeyRound className="w-3.5 h-3.5" />
+                          Environment Variables
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {envEditing ? (
+                            <>
+                              <button
+                                onClick={() => { setEnvEditing(false); const ev = (selectedProject as any).env_vars ?? {}; setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true }))); }}
+                                className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
+                              >Batal</button>
+                              <button
+                                onClick={handleSaveEnv}
+                                disabled={savingEnv}
+                                className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50"
+                              >
+                                {savingEnv ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                Simpan
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setEnvEditing(true)}
+                              className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
+                            >Edit</button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="p-3 space-y-2">
+                        {envRows.length === 0 && !envEditing && (
+                          <p className="text-xs text-muted-foreground text-center py-2">Belum ada env variable. Klik Edit untuk tambah.</p>
+                        )}
+                        {envRows.map((row, i) => (
+                          <div key={i} className="flex items-center gap-1.5">
+                            {envEditing ? (
+                              <>
+                                <input
+                                  placeholder="KEY"
+                                  value={row.key}
+                                  onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, key: e.target.value } : x))}
+                                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                />
+                                <input
+                                  placeholder="VALUE"
+                                  value={row.value}
+                                  onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                />
+                                <button onClick={() => setEnvRows(r => r.filter((_, j) => j !== i))} className="p-1.5 rounded hover:bg-red-500/10 text-red-400 transition-colors shrink-0">
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate text-foreground">{row.key}</span>
+                                <span className={cn("flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate", row.hidden ? "text-muted-foreground" : "text-foreground")}>
+                                  {row.hidden ? "••••••••" : row.value}
+                                </span>
+                                <button onClick={() => setEnvRows(r => r.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x))} className="p-1.5 rounded hover:bg-accent transition-colors shrink-0 text-muted-foreground">
+                                  {row.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        ))}
+                        {envEditing && (
+                          <button
+                            onClick={() => setEnvRows(r => [...r, { key: "", value: "", hidden: false }])}
+                            className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors w-full justify-center py-1.5 rounded-lg border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
+                          >
+                            <Plus className="w-3 h-3" />
+                            Tambah variable
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
                     {/* Deployment history */}
                     <div>

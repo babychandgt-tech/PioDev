@@ -4351,6 +4351,32 @@ app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
   res.json({ project, synced: false });
 });
 
+// PUT /api/hosting/projects/:id/env
+app.put("/api/hosting/projects/:id/env", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const { env_vars } = req.body;
+  if (typeof env_vars !== "object" || Array.isArray(env_vars)) {
+    res.status(400).json({ error: "env_vars harus berupa object key-value" }); return;
+  }
+  await supabaseAdmin.from("hosting_projects").update({ env_vars, updated_at: new Date().toISOString() }).eq("id", project.id);
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      const coolifyEnv = Object.entries(env_vars as Record<string, string>)
+        .map(([key, value]) => ({ key, value, is_build_time: false }));
+      await coolifyFetch(`/applications/${project.coolify_app_uuid}/envs/bulk`, {
+        method: "PATCH",
+        body: JSON.stringify({ data: coolifyEnv }),
+      });
+    } catch (e) {
+      console.warn("[Hosting] Env push to Coolify error:", (e as Error).message);
+    }
+  }
+  res.json({ success: true });
+});
+
 // GET /api/hosting/projects/:id/logs
 app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
