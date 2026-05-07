@@ -150,6 +150,8 @@ export default function HostingPage() {
   const [envRows, setEnvRows] = useState<{ key: string; value: string; hidden: boolean }[]>([]);
   const [envEditing, setEnvEditing] = useState(false);
   const [savingEnv, setSavingEnv] = useState(false);
+  const [envDotMode, setEnvDotMode] = useState(false);
+  const [envDotText, setEnvDotText] = useState("");
 
   const [editSettings, setEditSettings] = useState(false);
   const [editForm, setEditForm] = useState({ build_command: "", start_command: "", git_branch: "main", port: "3000" });
@@ -407,11 +409,32 @@ export default function HostingPage() {
     }
   };
 
+  function rowsToDotEnv(rows: { key: string; value: string }[]): string {
+    return rows.filter(r => r.key.trim()).map(r => {
+      const needsQuotes = /[\s"'`#]/.test(r.value);
+      return `${r.key}=${needsQuotes ? `"${r.value.replace(/"/g, '\\"')}"` : r.value}`;
+    }).join("\n");
+  }
+
+  function dotEnvToRows(text: string): { key: string; value: string; hidden: boolean }[] {
+    return text.split("\n").map(line => line.trim()).filter(line => line && !line.startsWith("#")).map(line => {
+      const eqIdx = line.indexOf("=");
+      if (eqIdx === -1) return null;
+      const key = line.slice(0, eqIdx).trim();
+      let value = line.slice(eqIdx + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1).replace(/\\"/g, '"');
+      }
+      return key ? { key, value, hidden: true } : null;
+    }).filter(Boolean) as { key: string; value: string; hidden: boolean }[];
+  }
+
   const handleSaveEnv = async () => {
     if (!selectedProject) return;
     setSavingEnv(true);
     try {
-      const env_vars = Object.fromEntries(envRows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
+      const rows = envDotMode ? dotEnvToRows(envDotText) : envRows;
+      const env_vars = Object.fromEntries(rows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value]));
       const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}/env`, {
         method: "PUT",
         body: JSON.stringify({ env_vars }),
@@ -813,7 +836,27 @@ export default function HostingPage() {
                           {envEditing ? (
                             <>
                               <button
-                                onClick={() => { setEnvEditing(false); const ev = (selectedProject as any).env_vars ?? {}; setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true }))); }}
+                                onClick={() => {
+                                  if (envDotMode) {
+                                    setEnvDotMode(false);
+                                    const parsed = dotEnvToRows(envDotText);
+                                    setEnvRows(parsed);
+                                  } else {
+                                    setEnvDotMode(true);
+                                    setEnvDotText(rowsToDotEnv(envRows));
+                                  }
+                                }}
+                                className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground border border-border"
+                              >
+                                {envDotMode ? "Form" : "Edit as .env"}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEnvEditing(false);
+                                  setEnvDotMode(false);
+                                  const ev = (selectedProject as any).env_vars ?? {};
+                                  setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true })));
+                                }}
                                 className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
                               >Batal</button>
                               <button
@@ -827,59 +870,77 @@ export default function HostingPage() {
                             </>
                           ) : (
                             <button
-                              onClick={() => setEnvEditing(true)}
+                              onClick={() => {
+                                setEnvEditing(true);
+                                setEnvDotMode(false);
+                              }}
                               className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
                             >Edit</button>
                           )}
                         </div>
                       </div>
-                      <div className="p-3 space-y-2">
-                        {envRows.length === 0 && !envEditing && (
-                          <p className="text-xs text-muted-foreground text-center py-2">Belum ada env variable. Klik Edit untuk tambah.</p>
-                        )}
-                        {envRows.map((row, i) => (
-                          <div key={i} className="flex items-center gap-1.5">
-                            {envEditing ? (
-                              <>
-                                <input
-                                  placeholder="KEY"
-                                  value={row.key}
-                                  onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, key: e.target.value } : x))}
-                                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
-                                />
-                                <input
-                                  placeholder="VALUE"
-                                  value={row.value}
-                                  onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-                                  className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
-                                />
-                                <button onClick={() => setEnvRows(r => r.filter((_, j) => j !== i))} className="p-1.5 rounded hover:bg-red-500/10 text-red-400 transition-colors shrink-0">
-                                  <X className="w-3.5 h-3.5" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <span className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate text-foreground">{row.key}</span>
-                                <span className={cn("flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate", row.hidden ? "text-muted-foreground" : "text-foreground")}>
-                                  {row.hidden ? "••••••••" : row.value}
-                                </span>
-                                <button onClick={() => setEnvRows(r => r.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x))} className="p-1.5 rounded hover:bg-accent transition-colors shrink-0 text-muted-foreground">
-                                  {row.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                        {envEditing && (
-                          <button
-                            onClick={() => setEnvRows(r => [...r, { key: "", value: "", hidden: false }])}
-                            className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors w-full justify-center py-1.5 rounded-lg border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
-                          >
-                            <Plus className="w-3 h-3" />
-                            Tambah variable
-                          </button>
-                        )}
-                      </div>
+
+                      {envEditing && envDotMode ? (
+                        <div className="p-3">
+                          <p className="text-[10px] text-muted-foreground mb-2">Format: <span className="font-mono">KEY=VALUE</span> — satu baris per variable, baris # diabaikan</p>
+                          <textarea
+                            value={envDotText}
+                            onChange={e => setEnvDotText(e.target.value)}
+                            placeholder={"DATABASE_URL=postgres://...\nAPI_KEY=sk-...\nNODE_ENV=production"}
+                            rows={8}
+                            spellCheck={false}
+                            className="w-full px-3 py-2.5 rounded-lg bg-zinc-950 border border-border text-xs font-mono text-zinc-200 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-zinc-600 resize-y leading-relaxed"
+                          />
+                        </div>
+                      ) : (
+                        <div className="p-3 space-y-2">
+                          {envRows.length === 0 && !envEditing && (
+                            <p className="text-xs text-muted-foreground text-center py-2">Belum ada env variable. Klik Edit untuk tambah.</p>
+                          )}
+                          {envRows.map((row, i) => (
+                            <div key={i} className="flex items-center gap-1.5">
+                              {envEditing ? (
+                                <>
+                                  <input
+                                    placeholder="KEY"
+                                    value={row.key}
+                                    onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, key: e.target.value } : x))}
+                                    className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                  />
+                                  <input
+                                    placeholder="VALUE"
+                                    value={row.value}
+                                    onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                                    className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                  />
+                                  <button onClick={() => setEnvRows(r => r.filter((_, j) => j !== i))} className="p-1.5 rounded hover:bg-red-500/10 text-red-400 transition-colors shrink-0">
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <span className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate text-foreground">{row.key}</span>
+                                  <span className={cn("flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate", row.hidden ? "text-muted-foreground" : "text-foreground")}>
+                                    {row.hidden ? "••••••••" : row.value}
+                                  </span>
+                                  <button onClick={() => setEnvRows(r => r.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x))} className="p-1.5 rounded hover:bg-accent transition-colors shrink-0 text-muted-foreground">
+                                    {row.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          ))}
+                          {envEditing && (
+                            <button
+                              onClick={() => setEnvRows(r => [...r, { key: "", value: "", hidden: false }])}
+                              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors w-full justify-center py-1.5 rounded-lg border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
+                            >
+                              <Plus className="w-3 h-3" />
+                              Tambah variable
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Deployment history */}
