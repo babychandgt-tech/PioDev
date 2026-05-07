@@ -4478,19 +4478,58 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
       const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
       const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
       const deployStartCmd = project.start_command?.trim() || "node server/index.js";
-
-      // Always re-push Dockerfile before every deploy so old nixpacks projects get migrated automatically
       const dockerfile = generateNodeDockerfile(deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
-      await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
-        method: "PATCH",
-        body: JSON.stringify({ build_pack: "dockerfile", dockerfile, ports_exposes: String(deployPort) }),
-      }).catch((e) => console.warn("[Hosting] pre-deploy Dockerfile PATCH failed:", (e as Error).message));
+
+      // Coolify API does NOT allow changing build_pack via PATCH after creation.
+      // So we detect if the existing app is still using nixpacks and if so, delete it
+      // and recreate it with build_pack: "dockerfile" (node:22-alpine from Docker Hub).
+      let activeUuid = project.coolify_app_uuid as string;
+      const appInfoRes = await coolifyFetch(`/applications/${activeUuid}`);
+      if (appInfoRes.ok) {
+        const appInfo = await appInfoRes.json() as { build_pack?: string };
+        if (appInfo.build_pack === "nixpacks") {
+          console.log(`[Hosting] Migrating ${activeUuid} from nixpacks → dockerfile...`);
+          // Delete old nixpacks app
+          await coolifyFetch(`/applications/${activeUuid}`, { method: "DELETE" })
+            .catch((e) => console.warn("[Hosting] delete old app failed:", (e as Error).message));
+          // Recreate with dockerfile build_pack
+          const [serverUuid, projectUuid] = await Promise.all([getCoolifyServerUuid(), getCoolifyProjectUuid()]);
+          const newBody = {
+            project_uuid: projectUuid,
+            server_uuid: serverUuid,
+            environment_name: "production",
+            git_repository: project.git_url,
+            git_branch: project.git_branch || "main",
+            build_pack: "dockerfile",
+            dockerfile,
+            name: project.subdomain,
+            domains: project.public_url,
+            ports_exposes: String(deployPort),
+          };
+          const newAppRes = await coolifyFetch("/applications/public", {
+            method: "POST",
+            body: JSON.stringify(newBody),
+          });
+          if (newAppRes.ok) {
+            const newAppData = await newAppRes.json() as { uuid?: string };
+            if (newAppData.uuid) {
+              activeUuid = newAppData.uuid;
+              await supabaseAdmin.from("hosting_projects")
+                .update({ coolify_app_uuid: activeUuid })
+                .eq("id", project.id);
+              console.log(`[Hosting] Recreated Coolify app as ${activeUuid} (dockerfile)`);
+            }
+          } else {
+            console.warn("[Hosting] Recreate app failed:", newAppRes.status, await newAppRes.text().catch(() => ""));
+          }
+        }
+      }
 
       // Sync runtime env vars (PORT, BASE_PATH, user vars)
-      await syncCoolifyEnvVars(project.coolify_app_uuid, deployPort, deployEnvVars)
+      await syncCoolifyEnvVars(activeUuid, deployPort, deployEnvVars)
         .catch((e) => console.warn("[Hosting] pre-deploy syncCoolifyEnvVars failed:", (e as Error).message));
 
-      const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
+      const deployRes = await coolifyFetch(`/deploy?uuid=${activeUuid}&force=false`);
       const rawText = await deployRes.text();
       console.log("[Hosting] Coolify deploy response:", deployRes.status, rawText.slice(0, 500));
       let coolifyDeploymentUuid: string | undefined;
