@@ -1,6 +1,8 @@
 // Animation presets for consistent motion language
 
-import type { Transition, Variants } from 'framer-motion';
+import type { Transition } from 'framer-motion';
+
+type LooseVariants = Record<string, Record<string, unknown>>;
 
 // Spring presets
 export const springs = {
@@ -179,7 +181,7 @@ export const elementAnimations = {
 } as const;
 
 // Character-level animation variants for kinetic typography
-export const charVariants: Variants = {
+export const charVariants: LooseVariants = {
   hidden: { opacity: 0, y: 40, rotateX: -40, transformPerspective: 800 },
   visible: {
     opacity: 1,
@@ -190,7 +192,7 @@ export const charVariants: Variants = {
   },
 };
 
-export const charContainerVariants: Variants = {
+export const charContainerVariants: LooseVariants = {
   hidden: {},
   visible: {
     transition: { staggerChildren: 0.03, delayChildren: 0.1 },
@@ -208,7 +210,7 @@ export const staggerConfigs = {
 } as const;
 
 // Common variants
-export const containerVariants: Variants = {
+export const containerVariants: LooseVariants = {
   hidden: { opacity: 0 },
   visible: {
     opacity: 1,
@@ -216,7 +218,7 @@ export const containerVariants: Variants = {
   },
 };
 
-export const itemVariants: Variants = {
+export const itemVariants: LooseVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
     opacity: 1,

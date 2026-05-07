@@ -4129,39 +4129,41 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
   let startCommand = "";
   let port = 3000;
 
+  const installCmd = pm === "pnpm" ? "pnpm install --no-frozen-lockfile" : `${pm} install`;
+
   if (deps["next"]) {
     framework = "nextjs";
-    buildCommand = `${pm} run build`;
+    buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `${pm} start`;
     port = 3000;
   } else if (deps["nuxt"] || deps["nuxt3"]) {
     framework = "nuxt";
-    buildCommand = `${pm} run build`;
+    buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `node .output/server/index.mjs`;
     port = 3000;
   } else if (deps["@sveltejs/kit"] || deps["svelte"]) {
     framework = "svelte";
-    buildCommand = `${pm} run build`;
+    buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `node build`;
     port = 3000;
   } else if (deps["vite"] || deps["@vitejs/plugin-react"] || deps["@vitejs/plugin-vue"]) {
     framework = "vite";
-    buildCommand = `${pm} run build`;
+    buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = scripts["preview"] ? `${pm} run preview` : `${pm} run serve`;
     port = 4173;
   } else if (deps["react-scripts"]) {
     framework = "cra";
-    buildCommand = `${pm} run build`;
+    buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `${pm} start`;
     port = 3000;
   } else if (deps["express"] || deps["fastify"] || deps["koa"] || deps["hapi"]) {
     framework = "node-server";
-    buildCommand = scripts["build"] ? `${pm} run build` : `${pm} install`;
+    buildCommand = scripts["build"] ? `${installCmd} && ${pm} run build` : installCmd;
     startCommand = scripts["start"] ? `${pm} start` : "node index.js";
     port = 3000;
   } else {
     framework = "node";
-    buildCommand = scripts["build"] ? `${pm} run build` : `${pm} install`;
+    buildCommand = scripts["build"] ? `${installCmd} && ${pm} run build` : installCmd;
     startCommand = scripts["start"] ? `${pm} start` : "node index.js";
     port = 3000;
   }

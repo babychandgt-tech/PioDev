@@ -47,7 +47,7 @@ export default function Scene1() {
               opacity: 1,
               transition: { staggerChildren: 0.15, delayChildren: 1 }
             }
-          }}
+          } as any}
         >
           {tagline.map((word, i) => (
             <motion.span
