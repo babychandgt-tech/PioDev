@@ -1,0 +1,346 @@
+3
+Building docker image started.
+2026-May-07 15:22:16.471638
+To check the current progress, click on Show Debug Logs.
+2026-May-07 15:25:19.446751
+========================================
+2026-May-07 15:25:19.460536
+Deployment failed: Command execution failed (exit code 1): docker exec sl6tcontttmtzj1ohkfp9yxq bash -c 'bash /artifacts/build.sh'
+2026-May-07 15:25:19.460536
+Error: #0 building with "default" instance using docker driver
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#1 [internal] load build definition from Dockerfile
+2026-May-07 15:25:19.460536
+#1 transferring dockerfile:
+2026-May-07 15:25:19.460536
+#1 transferring dockerfile: 1.51kB done
+2026-May-07 15:25:19.460536
+#1 DONE 0.2s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#2 [internal] load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+2026-May-07 15:25:19.460536
+#2 DONE 1.8s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#3 [internal] load .dockerignore
+2026-May-07 15:25:19.460536
+#3 transferring context:
+2026-May-07 15:25:19.460536
+#3 transferring context: 2B done
+2026-May-07 15:25:19.460536
+#3 DONE 0.1s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#4 [internal] load build context
+2026-May-07 15:25:19.460536
+#4 transferring context: 23.89MB 0.3s done
+2026-May-07 15:25:19.460536
+#4 DONE 0.6s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:25:19.460536
+#5 resolve ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de 0.1s done
+2026-May-07 15:25:19.460536
+#5 DONE 0.7s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:25:19.460536
+#5 sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 0B / 335B 0.2s
+2026-May-07 15:25:19.460536
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 0B / 33.30MB 0.2s
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 0B / 75.95MB 0.2s
+2026-May-07 15:25:19.460536
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 0B / 29.72MB 0.2s
+2026-May-07 15:25:19.460536
+#5 sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 335B / 335B 0.3s done
+2026-May-07 15:25:19.460536
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 15.73MB / 33.30MB 0.5s
+2026-May-07 15:25:19.460536
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 29.36MB / 33.30MB 0.6s
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 10.49MB / 75.95MB 0.5s
+2026-May-07 15:25:19.460536
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 8.39MB / 29.72MB 0.5s
+2026-May-07 15:25:19.460536
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 33.30MB / 33.30MB 0.8s
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 20.97MB / 75.95MB 0.6s
+2026-May-07 15:25:19.460536
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 18.87MB / 29.72MB 0.6s
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 33.55MB / 75.95MB 0.8s
+2026-May-07 15:25:19.460536
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 29.72MB / 29.72MB 0.8s
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 53.48MB / 75.95MB 0.9s
+2026-May-07 15:25:19.460536
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 33.30MB / 33.30MB 1.1s done
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 75.95MB / 75.95MB 1.4s
+2026-May-07 15:25:19.460536
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 29.72MB / 29.72MB 1.1s done
+2026-May-07 15:25:19.460536
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 75.95MB / 75.95MB 2.2s done
+2026-May-07 15:25:19.460536
+#5 extracting sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee
+2026-May-07 15:25:19.460536
+#5 extracting sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 2.3s done
+2026-May-07 15:25:19.460536
+#5 extracting sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913
+2026-May-07 15:25:19.460536
+#5 extracting sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 2.7s done
+2026-May-07 15:25:19.460536
+#5 DONE 8.0s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:25:19.460536
+#5 extracting sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06
+2026-May-07 15:25:19.460536
+#5 extracting sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 3.2s done
+2026-May-07 15:25:19.460536
+#5 DONE 11.2s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:25:19.460536
+#5 extracting sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518
+2026-May-07 15:25:19.460536
+#5 extracting sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 0.2s done
+2026-May-07 15:25:19.460536
+#5 DONE 11.4s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#6 [ 2/11] WORKDIR /app/
+2026-May-07 15:25:19.460536
+#6 DONE 2.2s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#7 [ 3/11] COPY .nixpacks/nixpkgs-23f9169c4ccce521379e602cc82ed873a1f1b52b.nix .nixpacks/nixpkgs-23f9169c4ccce521379e602cc82ed873a1f1b52b.nix
+2026-May-07 15:25:19.460536
+#7 DONE 1.2s
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+#8 [ 4/11] RUN nix-env -if .nixpacks/nixpkgs-23f9169c4ccce521379e602cc82ed873a1f1b52b.nix && nix-collect-garbage -d
+2026-May-07 15:25:19.460536
+#8 0.318 unpacking 'https://github.com/NixOS/nixpkgs/archive/23f9169c4ccce521379e602cc82ed873a1f1b52b.tar.gz' into the Git cache...
+2026-May-07 15:25:19.460536
+#8 58.52 unpacking 'https:<REDACTED>@0.27.3/node_modules/esbuild postinstall$ node install.js
+2026-May-07 15:25:19.460536
+#11 17.66 .../esbuild@0.27.3/node_modules/esbuild postinstall: Done
+2026-May-07 15:25:19.460536
+#11 17.91
+2026-May-07 15:25:19.460536
+#11 17.91 devDependencies:
+2026-May-07 15:25:19.460536
+#11 17.91 + prettier 3.8.1
+2026-May-07 15:25:19.460536
+#11 17.91 + typescript 5.9.3
+2026-May-07 15:25:19.460536
+#11 17.91
+2026-May-07 15:25:19.460536
+#11 17.94 . preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+2026-May-07 15:25:19.460536
+#11 17.95 . preinstall: Done
+2026-May-07 15:25:19.460536
+#11 17.96 Done in 16s using pnpm v10.26.1
+2026-May-07 15:25:19.460536
+#11 18.61
+2026-May-07 15:25:19.460536
+#11 18.61 > workspace@0.0.0 build /app
+2026-May-07 15:25:19.460536
+#11 18.61 > pnpm run typecheck && pnpm -r --if-present run build
+2026-May-07 15:25:19.460536
+#11 18.61
+2026-May-07 15:25:19.460536
+#11 18.93
+2026-May-07 15:25:19.460536
+#11 18.93 > workspace@0.0.0 typecheck /app
+2026-May-07 15:25:19.460536
+#11 18.93 > pnpm run typecheck:libs && pnpm -r --filter "./artifacts/**" --filter "./scripts" --if-present run typecheck
+2026-May-07 15:25:19.460536
+#11 18.93
+2026-May-07 15:25:19.460536
+#11 19.25
+2026-May-07 15:25:19.460536
+#11 19.25 > workspace@0.0.0 typecheck:libs /app
+2026-May-07 15:25:19.460536
+#11 19.25 > tsc --build
+2026-May-07 15:25:19.460536
+#11 19.25
+2026-May-07 15:25:19.460536
+#11 19.76 No projects matched the filters "/app/scripts" in "/app"
+2026-May-07 15:25:19.460536
+#11 19.76 Scope: 2 of 3 workspace projects
+2026-May-07 15:25:19.460536
+#11 19.77 artifacts/piodev typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:25:19.460536
+#11 19.77 artifacts/piodev-intro typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:25:19.460536
+#11 25.35 artifacts/piodev-intro typecheck: src/components/video/video_scenes/Scene1.tsx(46,13): error TS2322: Type '{ opacity: number; transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'Variant'.
+2026-May-07 15:25:19.460536
+#11 25.36 artifacts/piodev-intro typecheck:   Type '{ opacity: number; transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'TargetAndTransition'.
+2026-May-07 15:25:19.460536
+#11 25.36 artifacts/piodev-intro typecheck:     Type '{ opacity: number; transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'Target'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:       Type '{ opacity: number; transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'StyleKeyframesDefinition'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:         Property 'transition' is incompatible with index signature.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:           Type '{ staggerChildren: number; delayChildren: number; }' is not assignable to type 'ValueKeyframesDefinition | undefined'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:             Type '{ staggerChildren: number; delayChildren: number; }' is not assignable to type 'undefined'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck: src/hooks/use-mobile.tsx(9,17): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck: src/hooks/use-mobile.tsx(11,19): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck: src/hooks/use-mobile.tsx(14,17): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck: src/lib/video/animations.ts(184,3): error TS2322: Type '{ opacity: number; y: number; rotateX: number; transformPerspective: number; transition: { type: "spring"; stiffness: number; damping: number; }; }' is not assignable to type 'Variant'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:   Type '{ opacity: number; y: number; rotateX: number; transformPerspective: number; transition: { type: "spring"; stiffness: number; damping: number; }; }' is not assignable to type 'TargetAndTransition'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:     Type '{ opacity: number; y: number; rotateX: number; transformPerspective: number; transition: { type: "spring"; stiffness: number; damping: number; }; }' is not assignable to type 'Target'.
+2026-May-07 15:25:19.460536
+#11 25.37 artifacts/piodev-intro typecheck:       Type '{ opacity: number; y: number; rotateX: number; transformPerspective: number; transition: { type: "spring"; stiffness: number; damping: number; }; }' is not assignable to type 'StyleKeyframesDefinition'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:         Property 'transition' is incompatible with index signature.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:           Type '{ type: "spring"; stiffness: number; damping: number; }' is not assignable to type 'ValueKeyframesDefinition | undefined'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:             Type '{ type: "spring"; stiffness: number; damping: number; }' is not assignable to type 'undefined'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck: src/lib/video/animations.ts(195,3): error TS2322: Type '{ transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'Variant'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:   Type '{ transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'TargetAndTransition'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:     Type '{ transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'Target'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:       Type '{ transition: { staggerChildren: number; delayChildren: number; }; }' is not assignable to type 'StyleKeyframesDefinition'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:         Property 'transition' is incompatible with index signature.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:           Type '{ staggerChildren: number; delayChildren: number; }' is not assignable to type 'ValueKeyframesDefinition | undefined'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:             Type '{ staggerChildren: number; delayChildren: number; }' is not assignable to type 'undefined'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck: src/lib/video/animations.ts(213,3): error TS2322: Type '{ opacity: number; transition: { readonly staggerChildren: 0.1; readonly delayChildren: 0.1; }; }' is not assignable to type 'Variant'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:   Type '{ opacity: number; transition: { readonly staggerChildren: 0.1; readonly delayChildren: 0.1; }; }' is not assignable to type 'TargetAndTransition'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:     Type '{ opacity: number; transition: { readonly staggerChildren: 0.1; readonly delayChildren: 0.1; }; }' is not assignable to type 'Target'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:       Type '{ opacity: number; transition: { readonly staggerChildren: 0.1; readonly delayChildren: 0.1; }; }' is not assignable to type 'StyleKeyframesDefinition'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:         Property 'transition' is incompatible with index signature.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck:           Type '{ readonly staggerChildren: 0.1; readonly delayChildren: 0.1; }' is not assignable to type 'ValueKeyframesDefinition | undefined'.
+2026-May-07 15:25:19.460536
+#11 25.38 artifacts/piodev-intro typecheck: src/lib/video/animations.ts(221,3): error TS2322: Type '{ opacity: number; y: number; transition: { duration: number; ease: "circOut"; }; }' is not assignable to type 'Variant'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:   Type '{ opacity: number; y: number; transition: { duration: number; ease: "circOut"; }; }' is not assignable to type 'TargetAndTransition'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:     Type '{ opacity: number; y: number; transition: { duration: number; ease: "circOut"; }; }' is not assignable to type 'Target'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:       Type '{ opacity: number; y: number; transition: { duration: number; ease: "circOut"; }; }' is not assignable to type 'StyleKeyframesDefinition'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:         Property 'transition' is incompatible with index signature.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:           Type '{ duration: number; ease: "circOut"; }' is not assignable to type 'ValueKeyframesDefinition | undefined'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck:             Type '{ duration: number; ease: "circOut"; }' is not assignable to type 'undefined'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck: src/lib/video/hooks.ts(42,5): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck: src/lib/video/hooks.ts(55,11): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+#11 25.39 artifacts/piodev-intro typecheck: src/main.tsx(5,12): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+2026-May-07 15:25:19.460536
+#11 25.42 artifacts/piodev-intro typecheck: Failed
+2026-May-07 15:25:19.460536
+#11 25.45 /app/artifacts/piodev-intro:
+2026-May-07 15:25:19.460536
+#11 25.45  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/piodev-intro@0.0.0 typecheck: `tsc -p tsconfig.json --noEmit`
+2026-May-07 15:25:19.460536
+#11 25.45 Exit status 2
+2026-May-07 15:25:19.460536
+#11 25.50  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:25:19.460536
+#11 25.53  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:25:19.460536
+#11 ERROR: process "/bin/bash -ol pipefail -c pnpm install && pnpm run build" did not complete successfully: exit code: 2
+2026-May-07 15:25:19.460536
+------
+2026-May-07 15:25:19.460536
+> [ 7/11] RUN  pnpm install && pnpm run build:
+2026-May-07 15:25:19.460536
+25.39 artifacts/piodev-intro typecheck:             Type '{ duration: number; ease: "circOut"; }' is not assignable to type 'undefined'.
+2026-May-07 15:25:19.460536
+25.39 artifacts/piodev-intro typecheck: src/lib/video/hooks.ts(42,5): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+25.39 artifacts/piodev-intro typecheck: src/lib/video/hooks.ts(55,11): error TS2304: Cannot find name 'window'.
+2026-May-07 15:25:19.460536
+25.39 artifacts/piodev-intro typecheck: src/main.tsx(5,12): error TS2584: Cannot find name 'document'. Do you need to change your target library? Try changing the 'lib' compiler option to include 'dom'.
+2026-May-07 15:25:19.460536
+25.42 artifacts/piodev-intro typecheck: Failed
+2026-May-07 15:25:19.460536
+25.45 /app/artifacts/piodev-intro:
+2026-May-07 15:25:19.460536
+25.45  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/piodev-intro@0.0.0 typecheck: `tsc -p tsconfig.json --noEmit`
+2026-May-07 15:25:19.460536
+25.45 Exit status 2
+2026-May-07 15:25:19.460536
+25.50  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:25:19.460536
+25.53  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:25:19.460536
+------
+2026-May-07 15:25:19.460536
+2026-May-07 15:25:19.460536
+7 warnings found (use docker --debug to expand):
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SUPABASE_ANON_KEY") (line 12)
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "VITE_SUPABASE_ANON_KEY") (line 12)
+2026-May-07 15:25:19.460536
+- UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SESSION_SECRET") (line 11)
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SUPABASE_ANON_KEY") (line 11)
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "VITE_SUPABASE_ANON_KEY") (line 11)
+2026-May-07 15:25:19.460536
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SESSION_SECRET") (line 12)
+2026-May-07 15:25:19.460536
+Dockerfile:20
+2026-May-07 15:25:19.460536
+--------------------
+2026-May-07 15:25:19.460536
+18 |     ENV NIXPACKS_PATH=/app/node_modules/.bin:$NIXPACKS_PATH
+2026-May-07 15:25:19.460536
+19 |     COPY . /app/.
+2026-May-07 15:25:19.460536
+20 | >>> RUN  pnpm install && pnpm run build
+2026-May-07 15:25:19.460536
+21 |
+2026-May-07 15:25:19.460536
+22 |     # build phase
+2026-May-07 15:25:19.460536
+--------------------
+2026-May-07 15:25:19.460536
+ERROR: failed to build: failed to solve: process "/bin/bash -ol pipefail -c pnpm install && pnpm run build" did not complete successfully: exit code: 2
+2026-May-07 15:25:19.460536
+exit status 1
+2026-May-07 15:25:19.596443
+========================================
+2026-May-07 15:25:19.611918
+Deployment failed. Removing the new version of your application.
+2026-May-07 15:25:20.024000
+Gracefully shutting down build container: sl6tcontttmtzj1ohkfp9yxq
