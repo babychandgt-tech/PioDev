@@ -4309,14 +4309,32 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
       const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
-      if (deployRes.ok) {
-        const deployData: { deployments?: { deployment_uuid?: string }[] } = await deployRes.json();
-        const coolifyDeploymentUuid = deployData.deployments?.[0]?.deployment_uuid;
-        if (coolifyDeploymentUuid && deployment) {
-          await supabaseAdmin.from("hosting_deployments").update({
-            coolify_deployment_uuid: coolifyDeploymentUuid, status: "in_progress",
-          }).eq("id", deployment.id);
+      const rawText = await deployRes.text();
+      console.log("[Hosting] Coolify deploy response:", deployRes.status, rawText.slice(0, 500));
+      let coolifyDeploymentUuid: string | undefined;
+      try {
+        const deployData = JSON.parse(rawText);
+        // Coolify may return { deployments: [{deployment_uuid}] } or { deployment_uuid } directly
+        coolifyDeploymentUuid = deployData.deployments?.[0]?.deployment_uuid
+          ?? deployData.deployment_uuid
+          ?? undefined;
+      } catch {}
+      if (!coolifyDeploymentUuid) {
+        // Fallback: fetch the most recent deployment from Coolify's list
+        await new Promise(r => setTimeout(r, 1500)); // give Coolify a moment to queue it
+        const listRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}/deployments`);
+        if (listRes.ok) {
+          const listData: { uuid?: string; deployment_uuid?: string }[] = await listRes.json();
+          coolifyDeploymentUuid = Array.isArray(listData)
+            ? (listData[0]?.deployment_uuid ?? listData[0]?.uuid)
+            : undefined;
+          console.log("[Hosting] Fallback deployment UUID from list:", coolifyDeploymentUuid);
         }
+      }
+      if (coolifyDeploymentUuid && deployment) {
+        await supabaseAdmin.from("hosting_deployments").update({
+          coolify_deployment_uuid: coolifyDeploymentUuid, status: "in_progress",
+        }).eq("id", deployment.id);
       }
     } catch (e) {
       console.warn("[Hosting] Deploy trigger error:", (e as Error).message);
@@ -4371,10 +4389,26 @@ app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
       .from("hosting_deployments").select("*").eq("project_id", project.id)
       .order("created_at", { ascending: false }).limit(1).single();
 
+    // Resolve coolify UUID — from DB or fallback to Coolify's deployment list
+    let syncCoolifyUuid = latestDeploy?.coolify_deployment_uuid;
+    if (!syncCoolifyUuid) {
+      const listRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}/deployments`);
+      if (listRes.ok) {
+        const listData: { uuid?: string; deployment_uuid?: string }[] = await listRes.json();
+        syncCoolifyUuid = Array.isArray(listData)
+          ? (listData[0]?.deployment_uuid ?? listData[0]?.uuid)
+          : undefined;
+        if (syncCoolifyUuid && latestDeploy) {
+          await supabaseAdmin.from("hosting_deployments").update({ coolify_deployment_uuid: syncCoolifyUuid }).eq("id", latestDeploy.id);
+          console.log("[Hosting] Sync: resolved UUID from list:", syncCoolifyUuid);
+        }
+      }
+    }
+
     const [appRes, deployRes] = await Promise.all([
       coolifyFetch(`/applications/${project.coolify_app_uuid}`),
-      latestDeploy?.coolify_deployment_uuid
-        ? coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}`)
+      syncCoolifyUuid
+        ? coolifyFetch(`/deployments/${syncCoolifyUuid}`)
         : Promise.resolve(null),
     ]);
 
@@ -4454,15 +4488,35 @@ app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
   const { data: latestDeploy } = await supabaseAdmin
     .from("hosting_deployments").select("*").eq("project_id", project.id)
     .order("created_at", { ascending: false }).limit(1).single();
-  if (!latestDeploy?.coolify_deployment_uuid || !COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
+  if (!COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
     res.json({ logs: "", deploymentId: latestDeploy?.id ?? null, status: latestDeploy?.status ?? null }); return;
   }
+  // If we don't have the UUID stored, try to fetch it from Coolify's list
+  let coolifyUuid = latestDeploy?.coolify_deployment_uuid;
+  if (!coolifyUuid && project.coolify_app_uuid) {
+    try {
+      const listRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}/deployments`);
+      if (listRes.ok) {
+        const listData: { uuid?: string; deployment_uuid?: string }[] = await listRes.json();
+        coolifyUuid = Array.isArray(listData)
+          ? (listData[0]?.deployment_uuid ?? listData[0]?.uuid)
+          : undefined;
+        if (coolifyUuid && latestDeploy) {
+          await supabaseAdmin.from("hosting_deployments").update({ coolify_deployment_uuid: coolifyUuid }).eq("id", latestDeploy.id);
+        }
+        console.log("[Hosting] Logs: resolved UUID from list:", coolifyUuid);
+      }
+    } catch {}
+  }
+  if (!coolifyUuid) {
+    res.json({ logs: "Menunggu UUID deployment dari Coolify...", deploymentId: latestDeploy?.id ?? null, status: latestDeploy?.status ?? null }); return;
+  }
   try {
-    const logsRes = await coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}/logs`);
+    const logsRes = await coolifyFetch(`/deployments/${coolifyUuid}/logs`);
     if (logsRes.ok) {
       const logsData: { logs?: string } = await logsRes.json();
       const logs = logsData.logs ?? "";
-      const statusRes = await coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}`);
+      const statusRes = await coolifyFetch(`/deployments/${coolifyUuid}`);
       if (statusRes.ok) {
         const statusData: { status?: string; finished_at?: string } = await statusRes.json();
         const newDeployStatus = statusData.status === "finished" ? "finished" : statusData.status === "failed" ? "failed" : "in_progress";
