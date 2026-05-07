@@ -4360,13 +4360,15 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
   if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
       const body: Record<string, string> = {};
-      if (build_command !== undefined) body.install_command = build_command?.trim() ?? "";
+      if (build_command !== undefined) body.build_command = build_command?.trim() ?? "";
       if (start_command !== undefined) body.start_command = start_command?.trim() ?? "";
       if (git_branch !== undefined) body.git_branch = git_branch?.trim() || "main";
       if (port !== undefined) body.ports_exposes = String(Number(port) || 3000);
-      await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+      const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
         method: "PATCH", body: JSON.stringify(body),
       });
+      const patchText = await patchRes.text();
+      console.log("[Hosting] Coolify PATCH app:", patchRes.status, patchText.slice(0, 300));
     } catch (e) {
       console.warn("[Hosting] Patch Coolify app error:", (e as Error).message);
     }
@@ -4430,18 +4432,31 @@ app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
 
     // Determine project status
     let newStatus: string = project.status;
+    let appStatus: string | undefined;
+    if (appRes.ok) {
+      const appData: { status?: string; fqdn?: string } = await appRes.json();
+      appStatus = appData.status;
+      console.log("[Hosting] Sync app status from Coolify:", appStatus, "deployStatus:", deployStatus);
+      if (appData.fqdn && appData.fqdn !== project.public_url) updates.public_url = appData.fqdn;
+    }
+
     if (deployStatus === "failed") {
       newStatus = "failed";
     } else if (deployStatus === "finished") {
       newStatus = "running";
-    } else if (appRes.ok) {
-      const appData: { status?: string; fqdn?: string } = await appRes.json();
-      if (appData.status === "running") newStatus = "running";
-      else if (appData.status === "exited" || appData.status === "stopped") {
-        // "exited" after a failed deployment = failed; after a successful one = stopped
-        newStatus = deployStatus === "finished" ? "stopped" : "failed";
+    } else if (appStatus === "running") {
+      newStatus = "running";
+    } else if (appStatus === "exited" || appStatus === "stopped") {
+      // exited after a successful build = stopped; otherwise = failed
+      newStatus = deployStatus === "finished" ? "stopped" : "failed";
+    } else if (project.status === "deploying" && !syncCoolifyUuid) {
+      // Stuck in deploying with no UUID found — check if it's been too long
+      const deployedAt = latestDeploy?.created_at ? new Date(latestDeploy.created_at).getTime() : 0;
+      const elapsed = Date.now() - deployedAt;
+      if (elapsed > 30 * 60 * 1000) { // stuck > 30 min → mark failed
+        newStatus = "failed";
+        console.log("[Hosting] Sync: deployment stuck >30min with no UUID, marking failed");
       }
-      if (appData.fqdn && appData.fqdn !== project.public_url) updates.public_url = appData.fqdn;
     }
 
     if (newStatus !== project.status) updates.status = newStatus;
