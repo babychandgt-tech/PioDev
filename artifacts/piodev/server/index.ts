@@ -4004,6 +4004,282 @@ function isPortInUse(port: number): Promise<boolean> {
   });
 }
 
+// ── HOSTING (Coolify integration) ─────────────────────────────────────────────
+const COOLIFY_API_URL = (process.env.COOLIFY_API_URL ?? "").replace(/\/$/, "");
+const COOLIFY_API_TOKEN = process.env.COOLIFY_API_TOKEN ?? "";
+const COOLIFY_BASE_DOMAIN = process.env.COOLIFY_BASE_DOMAIN ?? "app.pio.codes";
+const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 5, pro: 20 };
+
+let _coolifyServerUuid: string | null = null;
+let _coolifyProjectUuid: string | null = null;
+
+async function coolifyFetch(path: string, opts: RequestInit = {}): Promise<Response> {
+  if (!COOLIFY_API_URL || !COOLIFY_API_TOKEN) throw new Error("Coolify not configured");
+  return fetch(`${COOLIFY_API_URL}/api/v1${path}`, {
+    ...opts,
+    headers: {
+      Authorization: `Bearer ${COOLIFY_API_TOKEN}`,
+      "Content-Type": "application/json",
+      ...((opts.headers as Record<string, string>) ?? {}),
+    },
+  });
+}
+
+async function getCoolifyServerUuid(): Promise<string> {
+  if (_coolifyServerUuid) return _coolifyServerUuid;
+  const res = await coolifyFetch("/servers");
+  if (!res.ok) throw new Error(`Coolify servers error: ${res.status}`);
+  const data: { uuid: string }[] = await res.json();
+  if (!data?.length) throw new Error("No Coolify servers found");
+  _coolifyServerUuid = data[0].uuid;
+  return _coolifyServerUuid!;
+}
+
+async function getCoolifyProjectUuid(): Promise<string> {
+  if (_coolifyProjectUuid) return _coolifyProjectUuid;
+  const listRes = await coolifyFetch("/projects");
+  if (listRes.ok) {
+    const projects: { uuid: string; name: string }[] = await listRes.json();
+    const existing = Array.isArray(projects) && projects.find((p) => p.name === "PioCode Hosting");
+    if (existing) { _coolifyProjectUuid = existing.uuid; return _coolifyProjectUuid!; }
+  }
+  const createRes = await coolifyFetch("/projects", {
+    method: "POST",
+    body: JSON.stringify({ name: "PioCode Hosting", description: "Managed by PioCode" }),
+  });
+  if (!createRes.ok) throw new Error(`Coolify project create error: ${createRes.status}`);
+  const created: { uuid: string } = await createRes.json();
+  _coolifyProjectUuid = created.uuid;
+  return _coolifyProjectUuid!;
+}
+
+function hostingSlugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 28) || "app";
+}
+
+function generateSubdomain(name: string): string {
+  const base = hostingSlugify(name);
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `${base}-${suffix}`;
+}
+
+// GET /api/hosting/status
+app.get("/api/hosting/status", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: profile } = await supabaseAdmin.from("profiles").select("tier, role").eq("id", userId).single();
+  const isAdminUser = profile?.role === "admin";
+  const tier: string = isAdminUser ? "pro" : (profile?.tier ?? "free");
+  const { count } = await supabaseAdmin.from("hosting_projects").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  let coolifyOk = false;
+  if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try { const r = await coolifyFetch("/version"); coolifyOk = r.ok; } catch {}
+  }
+  res.json({
+    coolifyConfigured: !!(COOLIFY_API_URL && COOLIFY_API_TOKEN),
+    coolifyReachable: coolifyOk,
+    projectCount: count ?? 0,
+    projectLimit: isAdminUser ? 999 : (HOSTING_LIMITS[tier] ?? 1),
+    tier,
+  });
+});
+
+// GET /api/hosting/projects
+app.get("/api/hosting/projects", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data, error } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("user_id", userId).order("created_at", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ projects: data ?? [] });
+});
+
+// POST /api/hosting/projects
+app.post("/api/hosting/projects", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { name, description, git_url, git_branch, build_command, start_command, port, env_vars } = req.body;
+  if (!name?.trim() || !git_url?.trim()) {
+    res.status(400).json({ error: "name dan git_url wajib diisi" }); return;
+  }
+  const { data: profile } = await supabaseAdmin.from("profiles").select("tier, role").eq("id", userId).single();
+  const isAdminUser = profile?.role === "admin";
+  const tier: string = isAdminUser ? "pro" : (profile?.tier ?? "free");
+  const limit = isAdminUser ? 999 : (HOSTING_LIMITS[tier] ?? 1);
+  const { count } = await supabaseAdmin.from("hosting_projects").select("id", { count: "exact", head: true }).eq("user_id", userId);
+  if ((count ?? 0) >= limit) {
+    res.status(403).json({ error: `Kuota proyek habis (maks ${limit} untuk tier ${tier}). Upgrade untuk lebih banyak.` }); return;
+  }
+  const subdomain = generateSubdomain(name.trim());
+  const publicUrl = `https://${subdomain}.${COOLIFY_BASE_DOMAIN}`;
+  const { data: project, error: dbErr } = await supabaseAdmin.from("hosting_projects").insert({
+    user_id: userId,
+    name: name.trim(),
+    description: description?.trim() ?? "",
+    git_url: git_url.trim(),
+    git_branch: git_branch?.trim() || "main",
+    build_command: build_command?.trim() ?? "",
+    start_command: start_command?.trim() ?? "",
+    port: Number(port) || 3000,
+    env_vars: env_vars ?? {},
+    subdomain,
+    public_url: publicUrl,
+    status: "inactive",
+  }).select().single();
+  if (dbErr) { res.status(500).json({ error: dbErr.message }); return; }
+  if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      const [serverUuid, projectUuid] = await Promise.all([getCoolifyServerUuid(), getCoolifyProjectUuid()]);
+      const body: Record<string, string> = {
+        project_uuid: projectUuid,
+        server_uuid: serverUuid,
+        environment_name: "production",
+        git_repository: git_url.trim(),
+        git_branch: git_branch?.trim() || "main",
+        build_pack: "nixpacks",
+        name: subdomain,
+        domains: publicUrl,
+        ports_exposes: String(Number(port) || 3000),
+      };
+      if (build_command?.trim()) body.install_command = build_command.trim();
+      if (start_command?.trim()) body.start_command = start_command.trim();
+      const appRes = await coolifyFetch("/applications/public", { method: "POST", body: JSON.stringify(body) });
+      if (appRes.ok) {
+        const appData: { uuid?: string } = await appRes.json();
+        if (appData.uuid) {
+          await supabaseAdmin.from("hosting_projects").update({ coolify_app_uuid: appData.uuid }).eq("id", project!.id);
+          (project as any).coolify_app_uuid = appData.uuid;
+        }
+      } else {
+        console.warn("[Hosting] Coolify create app failed:", appRes.status, await appRes.text().catch(() => ""));
+      }
+    } catch (e) {
+      console.warn("[Hosting] Coolify create app error:", (e as Error).message);
+    }
+  }
+  res.status(201).json({ project });
+});
+
+// GET /api/hosting/projects/:id
+app.get("/api/hosting/projects/:id", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project, error } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (error || !project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const { data: deployments } = await supabaseAdmin
+    .from("hosting_deployments").select("*").eq("project_id", project.id)
+    .order("created_at", { ascending: false }).limit(20);
+  res.json({ project, deployments: deployments ?? [] });
+});
+
+// DELETE /api/hosting/projects/:id
+app.delete("/api/hosting/projects/:id", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try { await coolifyFetch(`/applications/${project.coolify_app_uuid}`, { method: "DELETE" }); } catch {}
+  }
+  await supabaseAdmin.from("hosting_projects").delete().eq("id", project.id);
+  res.json({ ok: true });
+});
+
+// POST /api/hosting/projects/:id/deploy
+app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (!project.coolify_app_uuid) {
+    res.status(400).json({ error: "Proyek belum terhubung ke Coolify. Hapus dan buat ulang proyek setelah Coolify dikonfigurasi." }); return;
+  }
+  const { data: deployment } = await supabaseAdmin.from("hosting_deployments").insert({
+    project_id: project.id, user_id: userId, status: "queued", triggered_by: "manual",
+  }).select().single();
+  await supabaseAdmin.from("hosting_projects").update({ status: "deploying", updated_at: new Date().toISOString() }).eq("id", project.id);
+  if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
+      if (deployRes.ok) {
+        const deployData: { deployments?: { deployment_uuid?: string }[] } = await deployRes.json();
+        const coolifyDeploymentUuid = deployData.deployments?.[0]?.deployment_uuid;
+        if (coolifyDeploymentUuid && deployment) {
+          await supabaseAdmin.from("hosting_deployments").update({
+            coolify_deployment_uuid: coolifyDeploymentUuid, status: "in_progress",
+          }).eq("id", deployment.id);
+        }
+      }
+    } catch (e) {
+      console.warn("[Hosting] Deploy trigger error:", (e as Error).message);
+    }
+  }
+  res.json({ deployment, project: { ...project, status: "deploying" } });
+});
+
+// GET /api/hosting/projects/:id/sync
+app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (!project.coolify_app_uuid || !COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
+    res.json({ project, synced: false }); return;
+  }
+  try {
+    const appRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`);
+    if (appRes.ok) {
+      const appData: { status?: string; fqdn?: string } = await appRes.json();
+      const newStatus = appData.status === "running" ? "running" : appData.status === "exited" ? "stopped" : project.status;
+      const updates: Record<string, string> = { updated_at: new Date().toISOString() };
+      if (newStatus !== project.status) updates.status = newStatus;
+      if (appData.fqdn && appData.fqdn !== project.public_url) updates.public_url = appData.fqdn;
+      await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
+      res.json({ project: { ...project, ...updates }, synced: true }); return;
+    }
+  } catch (e) {
+    console.warn("[Hosting] Sync error:", (e as Error).message);
+  }
+  res.json({ project, synced: false });
+});
+
+// GET /api/hosting/projects/:id/logs
+app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const { data: latestDeploy } = await supabaseAdmin
+    .from("hosting_deployments").select("*").eq("project_id", project.id)
+    .order("created_at", { ascending: false }).limit(1).single();
+  if (!latestDeploy?.coolify_deployment_uuid || !COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
+    res.json({ logs: "", deploymentId: latestDeploy?.id ?? null, status: latestDeploy?.status ?? null }); return;
+  }
+  try {
+    const logsRes = await coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}/logs`);
+    if (logsRes.ok) {
+      const logsData: { logs?: string } = await logsRes.json();
+      const logs = logsData.logs ?? "";
+      const statusRes = await coolifyFetch(`/deployments/${latestDeploy.coolify_deployment_uuid}`);
+      if (statusRes.ok) {
+        const statusData: { status?: string; finished_at?: string } = await statusRes.json();
+        const newDeployStatus = statusData.status === "finished" ? "finished" : statusData.status === "failed" ? "failed" : "in_progress";
+        await supabaseAdmin.from("hosting_deployments").update({
+          logs,
+          status: newDeployStatus,
+          ...(statusData.finished_at ? { finished_at: statusData.finished_at } : {}),
+        }).eq("id", latestDeploy.id);
+        if (newDeployStatus === "finished") {
+          await supabaseAdmin.from("hosting_projects").update({ status: "running", updated_at: new Date().toISOString() }).eq("id", project.id);
+        } else if (newDeployStatus === "failed") {
+          await supabaseAdmin.from("hosting_projects").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", project.id);
+        }
+      }
+      res.json({ logs, deploymentId: latestDeploy.id, status: latestDeploy.status }); return;
+    }
+  } catch (e) {
+    console.warn("[Hosting] Logs fetch error:", (e as Error).message);
+  }
+  res.json({ logs: "", deploymentId: latestDeploy.id, status: latestDeploy.status });
+});
+
 // Serve static files in production (dist/public built by Vite)
 if (IS_PRODUCTION) {
   const staticDir = path.join(__dirname, "..", "dist", "public");

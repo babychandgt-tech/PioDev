@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
-import { Plus, Settings, LogOut, MessageSquare, Trash2, Pencil, Search, X, MoreHorizontal, Star, Menu, Shield, Newspaper, Video, Key, Sparkles, Library, ChevronDown, ChevronRight, Mic, Image as ImageIcon, FolderOpen, Wand2 } from "lucide-react";
+import { Plus, Settings, LogOut, MessageSquare, Trash2, Pencil, Search, X, MoreHorizontal, Star, Menu, Shield, Newspaper, Video, Key, Sparkles, Library, ChevronDown, ChevronRight, Mic, Image as ImageIcon, FolderOpen, Globe } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -85,6 +85,7 @@ export function ChatSidebar({
   const isOnGaleriStudio = location === "/galeri-studio";
   const isOnStudio = isOnVideoStudio || isOnVoiceStudio || isOnImageStudio || isOnGaleriStudio;
   const isOnPustaka = location === "/pustaka";
+  const isOnHosting = location === "/hosting";
 
   // Pio Studio collapsible — auto-expand kalo lagi di sub-route Studio
   const [studioExpanded, setStudioExpanded] = useState<boolean>(() => {
@@ -345,6 +346,20 @@ export function ChatSidebar({
           <Library className="w-5 h-5" />
         </button>
 
+        {/* Hosting */}
+        <button
+          onClick={() => navigate("/hosting")}
+          title="Hosting"
+          className={cn(
+            "w-10 h-10 flex items-center justify-center rounded-lg transition-colors",
+            isOnHosting
+              ? "bg-primary/15 text-primary"
+              : "text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          )}
+        >
+          <Globe className="w-5 h-5" />
+        </button>
+
         {/* Search — klik untuk expand */}
         <button
           onClick={onExpand}
@@ -509,7 +524,7 @@ export function ChatSidebar({
       </div>
 
       {/* Pustaka */}
-      <div className="px-3 pb-2">
+      <div className="px-3 pb-1.5">
         <button
           onClick={() => navigate("/pustaka")}
           className={cn(
@@ -521,6 +536,22 @@ export function ChatSidebar({
         >
           <Library className="w-4 h-4" />
           Pustaka
+        </button>
+      </div>
+
+      {/* Hosting */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={() => navigate("/hosting")}
+          className={cn(
+            "w-full flex items-center gap-2 px-3 py-2.5 rounded-xl font-medium transition-colors",
+            isOnHosting
+              ? "bg-primary/10 text-primary border border-primary/10"
+              : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          )}
+        >
+          <Globe className="w-4 h-4" />
+          Hosting
         </button>
       </div>
 
