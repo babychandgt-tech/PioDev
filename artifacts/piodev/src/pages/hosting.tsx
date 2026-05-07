@@ -5,7 +5,8 @@ import {
   Globe, Plus, Trash2, RefreshCw, Rocket, GitBranch, ExternalLink,
   Loader2, AlertCircle, CheckCircle2, Clock, X, ChevronRight,
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
-  KeyRound, Eye, EyeOff,
+  KeyRound, Eye, EyeOff, Settings, LayoutDashboard, History,
+  ArrowUpRight, GitCommit, Package,
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
@@ -55,6 +56,8 @@ interface HostingStatus {
   tier: string;
 }
 
+type DetailTab = "overview" | "logs" | "env" | "settings" | "history";
+
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
   return session?.access_token ?? "";
@@ -91,23 +94,32 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
 }
 
 function DeployStatusBadge({ status }: { status: Deployment["status"] }) {
-  const map = {
-    queued: { label: "Antri", color: "text-zinc-400" },
-    in_progress: { label: "Berjalan", color: "text-blue-400" },
-    finished: { label: "Selesai", color: "text-emerald-400" },
-    failed: { label: "Gagal", color: "text-red-400" },
-    cancelled: { label: "Dibatalkan", color: "text-amber-400" },
+  const map: Record<string, { label: string; color: string; dot: string }> = {
+    queued:      { label: "Antri",     color: "text-zinc-400",   dot: "bg-zinc-400" },
+    in_progress: { label: "Berjalan",  color: "text-blue-400",   dot: "bg-blue-400 animate-pulse" },
+    finished:    { label: "Selesai",   color: "text-emerald-400",dot: "bg-emerald-400" },
+    failed:      { label: "Gagal",     color: "text-red-400",    dot: "bg-red-400" },
+    cancelled:   { label: "Dibatalkan",color: "text-amber-400",  dot: "bg-amber-400" },
   };
   const cfg = map[status] ?? map.queued;
-  return <span className={cn("text-xs font-medium", cfg.color)}>{cfg.label}</span>;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 text-xs font-medium", cfg.color)}>
+      <span className={cn("w-1.5 h-1.5 rounded-full", cfg.dot)} />
+      {cfg.label}
+    </span>
+  );
 }
 
 function formatDate(s: string) {
   return new Date(s).toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
 }
 
+function formatDateShort(s: string) {
+  return new Date(s).toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 function truncateGitUrl(url: string) {
-  return url.replace(/^https?:\/\/(www\.)?/, "").replace(/\.git$/, "").slice(0, 50);
+  return url.replace(/^https?:\/\/(www\.)?github\.com\//, "").replace(/\.git$/, "");
 }
 
 export default function HostingPage() {
@@ -138,6 +150,7 @@ export default function HostingPage() {
   const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [selectedProject, setSelectedProject] = useState<HostingProject | null>(null);
+  const [detailTab, setDetailTab] = useState<DetailTab>("overview");
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [detailLoading, setDetailLoading] = useState(false);
   const [deploying, setDeploying] = useState<string | null>(null);
@@ -147,7 +160,6 @@ export default function HostingPage() {
 
   const [logs, setLogs] = useState<string>("");
   const [logsLoading, setLogsLoading] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   const [envRows, setEnvRows] = useState<{ key: string; value: string; hidden: boolean }[]>([]);
@@ -156,7 +168,6 @@ export default function HostingPage() {
   const [envDotMode, setEnvDotMode] = useState(false);
   const [envDotText, setEnvDotText] = useState("");
 
-  const [editSettings, setEditSettings] = useState(false);
   const [editForm, setEditForm] = useState({ build_command: "", start_command: "", git_branch: "main", port: "3000" });
   const [savingSettings, setSavingSettings] = useState(false);
 
@@ -184,12 +195,12 @@ export default function HostingPage() {
         setDetectResult({ framework: data.framework, isMonorepo: data.isMonorepo });
         if (data.isMonorepo && data.workspacePackages?.length) {
           setWorkspacePackages(data.workspacePackages);
-          setSelectedWorkspacePkg(null);
+          setSelectedWorkspacePkgs(new Set());
           setForm(f => ({ ...f, build_command: "", start_command: "" }));
           setAutoFilledFields(new Set());
         } else {
           setWorkspacePackages([]);
-          setSelectedWorkspacePkg(null);
+          setSelectedWorkspacePkgs(new Set());
           const filled = new Set<string>();
           setForm(f => {
             const next = { ...f };
@@ -205,7 +216,7 @@ export default function HostingPage() {
       } else {
         setDetectResult(null);
         setWorkspacePackages([]);
-        setSelectedWorkspacePkg(null);
+        setSelectedWorkspacePkgs(new Set());
       }
       setDetectAttempted(true);
     } catch { setDetectResult(null); setDetectAttempted(true); }
@@ -258,7 +269,6 @@ export default function HostingPage() {
   const loadDetail = useCallback(async (project: HostingProject) => {
     setDetailLoading(true);
     setLogs("");
-    setShowLogs(false);
     try {
       const res = await authedFetch(`/api/hosting/projects/${project.id}`);
       if (res.ok) {
@@ -273,22 +283,27 @@ export default function HostingPage() {
 
   const openProject = async (project: HostingProject) => {
     setSelectedProject(project);
+    setDetailTab("overview");
     setEnvEditing(false);
-    setShowLogs(false);
     setLogs("");
     await loadDetail(project);
   };
 
-  // Init env rows when project detail loads
   useEffect(() => {
     if (!selectedProject) return;
     const ev = (selectedProject as any).env_vars ?? {};
     setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true })));
+    setEditForm({
+      build_command: selectedProject.build_command ?? "",
+      start_command: selectedProject.start_command ?? "",
+      git_branch: selectedProject.git_branch ?? "main",
+      port: String(selectedProject.port ?? 3000),
+    });
   }, [selectedProject?.id]);
 
-  // Auto-poll logs while deploying
+  // Auto-poll logs while deploying and on logs tab
   useEffect(() => {
-    if (!selectedProject || selectedProject.status !== "deploying" || !showLogs) {
+    if (!selectedProject || selectedProject.status !== "deploying" || detailTab !== "logs") {
       if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
       return;
     }
@@ -300,8 +315,9 @@ export default function HostingPage() {
         if (data.logs) { setLogs(data.logs); setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 50); }
         if (data.status === "finished" || data.status === "failed") {
           if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
-          setSelectedProject(prev => prev ? { ...prev, status: data.status === "finished" ? "running" : "failed" } : prev);
-          setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, status: data.status === "finished" ? "running" : "failed" } : p));
+          const newStatus = data.status === "finished" ? "running" : "failed";
+          setSelectedProject(prev => prev ? { ...prev, status: newStatus } : prev);
+          setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, status: newStatus } : p));
           setDeployments(prev => prev.map(d => d.status === "in_progress" ? { ...d, status: data.status } : d));
         }
       } catch {}
@@ -309,7 +325,18 @@ export default function HostingPage() {
     poll();
     logsPollRef.current = setInterval(poll, 3000);
     return () => { if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; } };
-  }, [selectedProject?.id, selectedProject?.status, showLogs]);
+  }, [selectedProject?.id, selectedProject?.status, detailTab]);
+
+  const resetCreateDialog = () => {
+    setShowCreate(false);
+    setDetectResult(null);
+    setDetectAttempted(false);
+    setAutoFilledFields(new Set());
+    setWorkspacePackages([]);
+    setSelectedWorkspacePkgs(new Set());
+    setFormError(null);
+    setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
+  };
 
   const handleCreate = async () => {
     setFormError(null);
@@ -319,7 +346,6 @@ export default function HostingPage() {
     try {
       const multiPkgs = workspacePackages.filter(p => selectedWorkspacePkgs.has(p.path));
       if (multiPkgs.length > 1) {
-        // Create one project per selected package in sequence
         const created: any[] = [];
         for (const pkg of multiPkgs) {
           const pkgSuffix = pkg.name.split("/")[1] ?? pkg.path.replace(/\//g, "-");
@@ -341,12 +367,9 @@ export default function HostingPage() {
         }
         setProjects(prev => [...created.reverse(), ...prev]);
         setHostingStatus(prev => prev ? { ...prev, projectCount: prev.projectCount + created.length } : prev);
-        setShowCreate(false);
-        setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
-        setSelectedWorkspacePkgs(new Set());
+        resetCreateDialog();
         toast({ title: `${created.length} proyek berhasil dibuat!`, description: "Klik Deploy pada masing-masing proyek untuk memulai." });
       } else {
-        // Single project (single selection or manual input)
         const res = await authedFetch("/api/hosting/projects", {
           method: "POST",
           body: JSON.stringify({ ...form, port: Number(form.port) || 3000 }),
@@ -355,9 +378,7 @@ export default function HostingPage() {
         if (!res.ok) { setFormError(data.error ?? "Gagal membuat proyek"); return; }
         setProjects(prev => [data.project, ...prev]);
         setHostingStatus(prev => prev ? { ...prev, projectCount: prev.projectCount + 1 } : prev);
-        setShowCreate(false);
-        setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
-        setSelectedWorkspacePkgs(new Set());
+        resetCreateDialog();
         toast({ title: "Proyek berhasil dibuat!", description: "Klik Deploy untuk mulai deployment pertama." });
       }
     } finally {
@@ -371,11 +392,12 @@ export default function HostingPage() {
       const res = await authedFetch(`/api/hosting/projects/${project.id}/deploy`, { method: "POST" });
       const data = await res.json();
       if (!res.ok) { toast({ title: "Gagal deploy", description: data.error, variant: "destructive" }); return; }
-      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, status: "deploying" } : p));
+      const updatedStatus: ProjectStatus = "deploying";
+      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, status: updatedStatus } : p));
       if (selectedProject?.id === project.id) {
-        setSelectedProject(prev => prev ? { ...prev, status: "deploying" } : prev);
+        setSelectedProject(prev => prev ? { ...prev, status: updatedStatus } : prev);
         setDeployments(prev => [data.deployment, ...prev]);
-        setShowLogs(true);
+        setDetailTab("logs");
       }
       toast({ title: "Deployment dimulai", description: "Proses build sedang berjalan di VM." });
     } finally {
@@ -414,8 +436,7 @@ export default function HostingPage() {
     }
   };
 
-  const handleViewLogs = async (project: HostingProject) => {
-    setShowLogs(true);
+  const handleLoadLogs = async (project: HostingProject) => {
     setLogsLoading(true);
     try {
       const res = await authedFetch(`/api/hosting/projects/${project.id}/logs`);
@@ -444,7 +465,6 @@ export default function HostingPage() {
       if (!res.ok) { toast({ title: "Gagal simpan settings", variant: "destructive" }); return; }
       setSelectedProject(prev => prev ? { ...prev, ...data.project } : prev);
       setProjects(prev => prev.map(p => p.id === selectedProject.id ? { ...p, ...data.project } : p));
-      setEditSettings(false);
       toast({ title: "Settings disimpan", description: "Deploy ulang untuk menerapkan perubahan." });
     } finally {
       setSavingSettings(false);
@@ -524,6 +544,14 @@ export default function HostingPage() {
     );
   }
 
+  const DETAIL_TABS: { id: DetailTab; label: string; icon: any }[] = [
+    { id: "overview", label: "Overview", icon: LayoutDashboard },
+    { id: "logs",     label: "Logs",     icon: Terminal },
+    { id: "env",      label: "Env Vars", icon: KeyRound },
+    { id: "settings", label: "Settings", icon: Settings },
+    { id: "history",  label: "Riwayat",  icon: History },
+  ];
+
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Desktop sidebar */}
@@ -554,58 +582,61 @@ export default function HostingPage() {
 
       {/* Main content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Projects panel */}
-        <div className={cn("flex flex-col overflow-hidden transition-all duration-200",
-          selectedProject ? "w-full md:w-2/5 lg:w-1/3" : "flex-1")}>
 
+        {/* ── LEFT: Projects list ── */}
+        <div className={cn(
+          "flex flex-col border-r border-border overflow-hidden shrink-0 transition-all duration-200",
+          selectedProject ? "hidden md:flex md:w-72 lg:w-80" : "flex flex-1"
+        )}>
           {/* Header */}
-          <div className="flex items-center gap-3 px-4 py-4 border-b border-border shrink-0">
+          <div className="flex items-center gap-2 px-4 py-3.5 border-b border-border shrink-0">
             <button
-              className="md:hidden p-2 rounded-lg hover:bg-accent transition-colors"
+              className="md:hidden p-1.5 rounded-lg hover:bg-accent transition-colors"
               onClick={() => setIsMobileSidebarOpen(true)}
             >
               <Menu className="w-5 h-5" />
             </button>
-            <div className="flex items-center gap-2 min-w-0">
-              <Globe className="w-5 h-5 text-primary shrink-0" />
-              <h1 className="font-semibold text-base truncate">PioCode Hosting</h1>
-            </div>
-            <div className="ml-auto flex items-center gap-2 shrink-0">
-              {hostingStatus && (
-                <span className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
-                  <span className={cn("w-1.5 h-1.5 rounded-full", hostingStatus.coolifyReachable ? "bg-emerald-400" : "bg-red-400")} />
+            <Globe className="w-4 h-4 text-primary shrink-0" />
+            <h1 className="font-semibold text-sm flex-1">Hosting</h1>
+
+            {/* Coolify status dot */}
+            {hostingStatus && (
+              <div className="flex items-center gap-1.5">
+                <span className={cn("w-1.5 h-1.5 rounded-full", hostingStatus.coolifyReachable ? "bg-emerald-400" : "bg-red-400")} />
+                <span className="text-xs text-muted-foreground hidden sm:inline">
                   {hostingStatus.projectCount}/{hostingStatus.projectLimit === 999 ? "∞" : hostingStatus.projectLimit}
                 </span>
-              )}
-              <button
-                onClick={() => setShowCreate(true)}
-                disabled={!!(hostingStatus && hostingStatus.projectCount >= hostingStatus.projectLimit && hostingStatus.projectLimit !== 999)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">Proyek Baru</span>
-              </button>
-            </div>
+              </div>
+            )}
+
+            <button
+              onClick={() => setShowCreate(true)}
+              disabled={!!(hostingStatus && hostingStatus.projectCount >= hostingStatus.projectLimit && hostingStatus.projectLimit !== 999)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Baru
+            </button>
           </div>
 
           {/* Coolify warning */}
           {hostingStatus && !hostingStatus.coolifyReachable && (
-            <div className="mx-4 mt-3 flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>Coolify tidak terjangkau. Pastikan VM berjalan dan COOLIFY_API_URL/TOKEN sudah dikonfigurasi.</span>
+            <div className="mx-3 mt-3 flex items-start gap-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+              <span>Coolify tidak terjangkau. Cek konfigurasi VM, COOLIFY_API_URL dan TOKEN.</span>
             </div>
           )}
 
-          {/* Project list */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {/* List */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {projects.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-16">
-                <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
-                  <Server className="w-8 h-8 text-primary/60" />
+              <div className="flex flex-col items-center justify-center h-full gap-4 text-center py-20">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center">
+                  <Server className="w-7 h-7 text-primary/50" />
                 </div>
                 <div>
-                  <p className="font-medium text-foreground">Belum ada proyek</p>
-                  <p className="text-sm text-muted-foreground mt-1">Deploy web app kamu dari Git repository</p>
+                  <p className="font-medium text-sm">Belum ada proyek</p>
+                  <p className="text-xs text-muted-foreground mt-1">Deploy web app dari Git repository</p>
                 </div>
                 <button
                   onClick={() => setShowCreate(true)}
@@ -619,19 +650,20 @@ export default function HostingPage() {
               projects.map(project => (
                 <motion.div
                   key={project.id}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   onClick={() => openProject(project)}
                   className={cn(
-                    "group flex flex-col gap-2 p-3.5 rounded-xl border cursor-pointer transition-all",
+                    "group relative flex flex-col gap-2.5 p-3.5 rounded-xl border cursor-pointer transition-all",
                     selectedProject?.id === project.id
-                      ? "border-primary/40 bg-primary/5"
-                      : "border-border hover:border-primary/30 hover:bg-accent/30"
+                      ? "border-primary/50 bg-primary/5 shadow-sm"
+                      : "border-border hover:border-primary/25 hover:bg-accent/40"
                   )}
                 >
+                  {/* Top row */}
                   <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium text-sm truncate">{project.name}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm leading-tight truncate">{project.name}</p>
                       {project.description && (
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{project.description}</p>
                       )}
@@ -639,31 +671,34 @@ export default function HostingPage() {
                     <StatusBadge status={project.status} />
                   </div>
 
-                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {/* Git info */}
+                  <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <GitBranch className="w-3 h-3 shrink-0" />
-                    <span className="truncate">{truncateGitUrl(project.git_url)}</span>
-                    <span className="shrink-0 text-muted-foreground/50">·</span>
+                    <span className="truncate font-mono">{truncateGitUrl(project.git_url)}</span>
+                    <span className="shrink-0 opacity-40">·</span>
                     <span className="shrink-0">{project.git_branch}</span>
                   </div>
 
+                  {/* Running URL */}
                   {project.public_url && project.status === "running" && (
                     <a
                       href={project.public_url}
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={e => e.stopPropagation()}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline truncate"
+                      className="flex items-center gap-1 text-[11px] text-primary hover:underline truncate"
                     >
-                      <ExternalLink className="w-3 h-3 shrink-0" />
+                      <ArrowUpRight className="w-3 h-3 shrink-0" />
                       <span className="truncate">{project.public_url.replace("https://", "")}</span>
                     </a>
                   )}
 
-                  <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  {/* Hover actions */}
+                  <div className="flex items-center gap-1.5 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={e => { e.stopPropagation(); handleDeploy(project); }}
                       disabled={deploying === project.id || project.status === "deploying"}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-primary/10 text-primary text-xs font-medium hover:bg-primary/20 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary/10 text-primary text-[11px] font-medium hover:bg-primary/20 transition-colors disabled:opacity-40"
                     >
                       {deploying === project.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
                       Deploy
@@ -671,14 +706,14 @@ export default function HostingPage() {
                     <button
                       onClick={e => { e.stopPropagation(); handleSync(project); }}
                       disabled={syncing === project.id}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-accent text-accent-foreground text-xs hover:bg-accent/80 transition-colors disabled:opacity-50"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-md bg-accent text-[11px] hover:bg-accent/80 transition-colors disabled:opacity-40"
                     >
                       <RefreshCw className={cn("w-3 h-3", syncing === project.id && "animate-spin")} />
                       Sync
                     </button>
                     <button
                       onClick={e => { e.stopPropagation(); setDeleteTarget(project); }}
-                      className="flex items-center gap-1 px-2 py-1 rounded-md bg-red-500/10 text-red-400 text-xs hover:bg-red-500/20 transition-colors ml-auto"
+                      className="ml-auto flex items-center justify-center w-6 h-6 rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
                     >
                       <Trash2 className="w-3 h-3" />
                     </button>
@@ -689,362 +724,542 @@ export default function HostingPage() {
           </div>
         </div>
 
-        {/* Project detail panel */}
+        {/* ── RIGHT: Project detail with tabs ── */}
         <AnimatePresence>
           {selectedProject && (
             <motion.div
-              initial={{ opacity: 0, x: 40 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: 40 }}
-              transition={{ duration: 0.2 }}
-              className="hidden md:flex flex-col flex-1 border-l border-border overflow-hidden"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15 }}
+              className="flex flex-col flex-1 overflow-hidden"
             >
               {/* Detail header */}
-              <div className="flex items-center gap-3 px-4 py-4 border-b border-border shrink-0">
+              <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border shrink-0">
                 <button
                   onClick={() => setSelectedProject(null)}
-                  className="p-1.5 rounded-lg hover:bg-accent transition-colors"
+                  className="p-1.5 rounded-lg hover:bg-accent transition-colors shrink-0"
                 >
                   <X className="w-4 h-4" />
                 </button>
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-sm truncate">{selectedProject.name}</p>
-                  <p className="text-xs text-muted-foreground truncate">{selectedProject.subdomain}.app.pio.codes</p>
+                  <p className="font-semibold text-sm leading-tight truncate">{selectedProject.name}</p>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {selectedProject.subdomain ? `${selectedProject.subdomain}.app.pio.codes` : "subdomain belum tersedia"}
+                  </p>
                 </div>
                 <StatusBadge status={selectedProject.status} />
+                <button
+                  onClick={() => handleDeploy(selectedProject)}
+                  disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 shrink-0"
+                >
+                  {deploying === selectedProject.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Rocket className="w-3.5 h-3.5" />}
+                  Deploy
+                </button>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Tabs */}
+              <div className="flex items-center gap-0 border-b border-border shrink-0 px-4 overflow-x-auto">
+                {DETAIL_TABS.map(tab => {
+                  const Icon = tab.icon;
+                  const isActive = detailTab === tab.id;
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setDetailTab(tab.id);
+                        if (tab.id === "logs" && !logs && selectedProject) {
+                          handleLoadLogs(selectedProject);
+                        }
+                      }}
+                      className={cn(
+                        "flex items-center gap-1.5 px-3 py-3 text-xs font-medium border-b-2 transition-all whitespace-nowrap",
+                        isActive
+                          ? "border-primary text-primary"
+                          : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      {tab.label}
+                      {tab.id === "history" && deployments.length > 0 && (
+                        <span className="ml-0.5 text-[10px] bg-accent text-muted-foreground px-1.5 py-0.5 rounded-full">{deployments.length}</span>
+                      )}
+                      {tab.id === "env" && envRows.length > 0 && (
+                        <span className="ml-0.5 text-[10px] bg-accent text-muted-foreground px-1.5 py-0.5 rounded-full">{envRows.length}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Tab content */}
+              <div className="flex-1 overflow-y-auto">
                 {detailLoading ? (
-                  <div className="flex items-center justify-center py-12">
+                  <div className="flex items-center justify-center h-full">
                     <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                   </div>
                 ) : (
                   <>
-                    {/* Info cards + Settings */}
-                    <div className="rounded-xl border border-border overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-2.5 bg-accent/20 border-b border-border">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Konfigurasi</p>
-                        {editSettings ? (
+                    {/* ─ Overview tab ─ */}
+                    {detailTab === "overview" && (
+                      <div className="p-4 space-y-4">
+                        {/* Public URL card */}
+                        {selectedProject.public_url ? (
+                          <a
+                            href={selectedProject.public_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-3 p-4 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 transition-colors group"
+                          >
+                            <div className={cn("w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
+                              selectedProject.status === "running" ? "bg-emerald-500/15" : "bg-muted")}>
+                              <Globe className={cn("w-5 h-5", selectedProject.status === "running" ? "text-emerald-400" : "text-muted-foreground")} />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs text-muted-foreground">URL Publik</p>
+                              <p className="text-sm font-medium text-primary truncate">{selectedProject.public_url}</p>
+                            </div>
+                            <ArrowUpRight className="w-4 h-4 text-primary shrink-0 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                          </a>
+                        ) : (
+                          <div className="flex items-center gap-3 p-4 rounded-xl border border-border bg-accent/20">
+                            <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center shrink-0">
+                              <Globe className="w-5 h-5 text-muted-foreground" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">URL Publik</p>
+                              <p className="text-sm text-muted-foreground">Belum tersedia — deploy untuk mendapat URL</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Info grid */}
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { label: "Repository", value: truncateGitUrl(selectedProject.git_url), icon: Package },
+                            { label: "Branch", value: selectedProject.git_branch, icon: GitBranch },
+                            { label: "Port", value: String(selectedProject.port), icon: Server },
+                            { label: "Status", value: selectedProject.status, icon: Zap },
+                          ].map(item => (
+                            <div key={item.label} className="flex items-start gap-2.5 p-3 rounded-lg bg-accent/30 border border-border">
+                              <item.icon className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">{item.label}</p>
+                                <p className="text-xs font-mono text-foreground truncate mt-0.5">{item.value}</p>
+                              </div>
+                            </div>
+                          ))}
+                          {selectedProject.build_command && (
+                            <div className="col-span-2 flex items-start gap-2.5 p-3 rounded-lg bg-accent/30 border border-border">
+                              <Terminal className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Build Command</p>
+                                <p className="text-xs font-mono text-foreground truncate mt-0.5">{selectedProject.build_command}</p>
+                              </div>
+                            </div>
+                          )}
+                          {selectedProject.start_command && (
+                            <div className="col-span-2 flex items-start gap-2.5 p-3 rounded-lg bg-accent/30 border border-border">
+                              <Rocket className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                              <div className="min-w-0">
+                                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Start Command</p>
+                                <p className="text-xs font-mono text-foreground truncate mt-0.5">{selectedProject.start_command}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Quick actions */}
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleDeploy(selectedProject)}
+                            disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
+                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+                          >
+                            {deploying === selectedProject.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                            Deploy
+                          </button>
+                          <button
+                            onClick={() => { setDetailTab("logs"); handleLoadLogs(selectedProject); }}
+                            className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-accent text-sm transition-colors"
+                          >
+                            <Terminal className="w-4 h-4" />
+                            Logs
+                          </button>
+                          <button
+                            onClick={() => handleSync(selectedProject)}
+                            disabled={syncing === selectedProject.id}
+                            className="p-2.5 rounded-xl border border-border hover:bg-accent transition-colors disabled:opacity-50"
+                            title="Sync status"
+                          >
+                            <RefreshCw className={cn("w-4 h-4", syncing === selectedProject.id && "animate-spin")} />
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(selectedProject)}
+                            className="p-2.5 rounded-xl border border-red-500/20 text-red-400 hover:bg-red-500/10 transition-colors"
+                            title="Hapus proyek"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* Last updated */}
+                        <p className="text-[11px] text-muted-foreground text-center">
+                          Dibuat {formatDate(selectedProject.created_at)} · Diperbarui {formatDateShort(selectedProject.updated_at)}
+                        </p>
+                      </div>
+                    )}
+
+                    {/* ─ Logs tab ─ */}
+                    {detailTab === "logs" && (
+                      <div className="flex flex-col h-full">
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Terminal className="w-3.5 h-3.5" />
+                            <span>Build Logs</span>
+                            {(logsLoading || selectedProject.status === "deploying") && (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            )}
+                          </div>
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => setEditSettings(false)} className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground">Batal</button>
                             <button
-                              onClick={handleSaveSettings}
-                              disabled={savingSettings}
-                              className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50"
+                              onClick={() => handleLoadLogs(selectedProject)}
+                              className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors flex items-center gap-1"
                             >
-                              {savingSettings ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                              Simpan
+                              <RefreshCw className="w-3 h-3" />
+                              Refresh
+                            </button>
+                            <button onClick={copyLogs} className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors flex items-center gap-1">
+                              {copiedLogs ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              {copiedLogs ? "Tersalin" : "Salin"}
+                            </button>
+                          </div>
+                        </div>
+                        <pre
+                          ref={logsRef}
+                          className="flex-1 p-4 text-[11px] font-mono text-zinc-300 bg-zinc-950 overflow-auto whitespace-pre-wrap leading-relaxed"
+                        >
+                          {logsLoading
+                            ? "Memuat logs..."
+                            : logs || (selectedProject.status === "deploying"
+                              ? "Menunggu output dari VM..."
+                              : "Belum ada log. Klik Deploy untuk memulai.")}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* ─ Env Vars tab ─ */}
+                    {detailTab === "env" && (
+                      <div className="p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">Environment Variables</p>
+                          <div className="flex items-center gap-1.5">
+                            {envEditing ? (
+                              <>
+                                <button
+                                  onClick={() => {
+                                    if (envDotMode) {
+                                      setEnvDotMode(false);
+                                      setEnvRows(dotEnvToRows(envDotText));
+                                    } else {
+                                      setEnvDotMode(true);
+                                      setEnvDotText(rowsToDotEnv(envRows));
+                                    }
+                                  }}
+                                  className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors"
+                                >
+                                  {envDotMode ? "Mode Form" : "Edit .env"}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    setEnvEditing(false);
+                                    setEnvDotMode(false);
+                                    const ev = (selectedProject as any).env_vars ?? {};
+                                    setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true })));
+                                  }}
+                                  className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors text-muted-foreground"
+                                >Batal</button>
+                                <button
+                                  onClick={handleSaveEnv}
+                                  disabled={savingEnv}
+                                  className="text-xs px-2.5 py-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50"
+                                >
+                                  {savingEnv ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                  Simpan
+                                </button>
+                              </>
+                            ) : (
+                              <button
+                                onClick={() => setEnvEditing(true)}
+                                className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors"
+                              >
+                                Edit
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {envEditing && envDotMode ? (
+                          <div className="space-y-2">
+                            <p className="text-[10px] text-muted-foreground">Format: <span className="font-mono">KEY=VALUE</span> per baris, baris # diabaikan</p>
+                            <textarea
+                              value={envDotText}
+                              onChange={e => setEnvDotText(e.target.value)}
+                              placeholder={"DATABASE_URL=postgres://...\nAPI_KEY=sk-...\nNODE_ENV=production"}
+                              rows={10}
+                              spellCheck={false}
+                              className="w-full px-3 py-3 rounded-xl bg-zinc-950 border border-border text-xs font-mono text-zinc-200 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-zinc-600 resize-y leading-relaxed"
+                            />
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {envRows.length === 0 && !envEditing && (
+                              <div className="text-center py-10 text-xs text-muted-foreground">
+                                <KeyRound className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
+                                Belum ada env variable
+                                <br />
+                                <button onClick={() => setEnvEditing(true)} className="mt-2 text-primary hover:underline">Tambah sekarang</button>
+                              </div>
+                            )}
+                            {envRows.map((row, i) => (
+                              <div key={i} className="flex items-center gap-1.5">
+                                {envEditing ? (
+                                  <>
+                                    <input
+                                      placeholder="KEY"
+                                      value={row.key}
+                                      onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, key: e.target.value } : x))}
+                                      className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                    />
+                                    <input
+                                      placeholder="VALUE"
+                                      value={row.value}
+                                      onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
+                                      className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                                    />
+                                    <button onClick={() => setEnvRows(r => r.filter((_, j) => j !== i))} className="p-1.5 rounded-lg hover:bg-red-500/10 text-red-400 transition-colors shrink-0">
+                                      <X className="w-3.5 h-3.5" />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-accent/40 border border-border text-xs font-mono truncate">{row.key}</span>
+                                    <span className={cn("flex-1 min-w-0 px-2.5 py-2 rounded-lg bg-accent/40 border border-border text-xs font-mono truncate", row.hidden ? "text-muted-foreground" : "")}>
+                                      {row.hidden ? "••••••••" : row.value}
+                                    </span>
+                                    <button onClick={() => setEnvRows(r => r.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x))} className="p-1.5 rounded-lg hover:bg-accent transition-colors shrink-0 text-muted-foreground">
+                                      {row.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            ))}
+                            {envEditing && (
+                              <button
+                                onClick={() => setEnvRows(r => [...r, { key: "", value: "", hidden: false }])}
+                                className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors w-full justify-center py-2 rounded-xl border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Tambah variable
+                              </button>
+                            )}
+                          </div>
+                        )}
+
+                        {!envEditing && envRows.length > 0 && (
+                          <p className="text-[11px] text-muted-foreground text-center">
+                            Deploy ulang setelah mengubah env vars agar perubahan diterapkan
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ─ Settings tab ─ */}
+                    {detailTab === "settings" && (
+                      <div className="p-4 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium">Konfigurasi Proyek</p>
+                          <button
+                            onClick={handleSaveSettings}
+                            disabled={savingSettings}
+                            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                          >
+                            {savingSettings ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                            Simpan
+                          </button>
+                        </div>
+
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Branch</label>
+                              <input
+                                value={editForm.git_branch}
+                                onChange={e => setEditForm(f => ({ ...f, git_branch: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Port</label>
+                              <input
+                                type="number"
+                                value={editForm.port}
+                                onChange={e => setEditForm(f => ({ ...f, port: e.target.value }))}
+                                className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
+                              />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Build Command</label>
+                            <input
+                              placeholder="Kosong = auto-detect"
+                              value={editForm.build_command}
+                              onChange={e => setEditForm(f => ({ ...f, build_command: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Start Command</label>
+                            <input
+                              placeholder="Kosong = auto-detect"
+                              value={editForm.start_command}
+                              onChange={e => setEditForm(f => ({ ...f, start_command: e.target.value }))}
+                              className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400">
+                          Setelah menyimpan settings, lakukan Deploy ulang agar perubahan diterapkan.
+                        </div>
+
+                        {/* Danger zone */}
+                        <div className="pt-2 border-t border-border space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Danger Zone</p>
+                          <button
+                            onClick={() => setDeleteTarget(selectedProject)}
+                            className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/10 text-sm transition-colors"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            Hapus Proyek Ini
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ─ History tab ─ */}
+                    {detailTab === "history" && (
+                      <div className="p-4 space-y-3">
+                        <p className="text-sm font-medium">Riwayat Deployment</p>
+                        {deployments.length === 0 ? (
+                          <div className="text-center py-10 text-xs text-muted-foreground">
+                            <History className="w-8 h-8 mx-auto mb-3 text-muted-foreground/30" />
+                            Belum ada deployment
+                            <br />
+                            <button
+                              onClick={() => handleDeploy(selectedProject)}
+                              className="mt-2 text-primary hover:underline"
+                            >
+                              Deploy sekarang
                             </button>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setEditForm({
-                                build_command: selectedProject.build_command ?? "",
-                                start_command: selectedProject.start_command ?? "",
-                                git_branch: selectedProject.git_branch ?? "main",
-                                port: String(selectedProject.port ?? 3000),
-                              });
-                              setEditSettings(true);
-                            }}
-                            className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
-                          >Edit</button>
-                        )}
-                      </div>
-                      {editSettings ? (
-                        <div className="p-3 space-y-2.5">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Branch</label>
-                              <input value={editForm.git_branch} onChange={e => setEditForm(f => ({ ...f, git_branch: e.target.value }))}
-                                className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10" />
-                            </div>
-                            <div className="space-y-1">
-                              <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Port</label>
-                              <input type="number" value={editForm.port} onChange={e => setEditForm(f => ({ ...f, port: e.target.value }))}
-                                className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10" />
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Build Command</label>
-                            <input placeholder="Kosong = auto-detect" value={editForm.build_command} onChange={e => setEditForm(f => ({ ...f, build_command: e.target.value }))}
-                              className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40" />
-                          </div>
-                          <div className="space-y-1">
-                            <label className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Start Command</label>
-                            <input placeholder="Kosong = auto-detect" value={editForm.start_command} onChange={e => setEditForm(f => ({ ...f, start_command: e.target.value }))}
-                              className="w-full px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40" />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-2 gap-px bg-border">
-                          <InfoFlat label="Git URL" value={truncateGitUrl(selectedProject.git_url)} />
-                          <InfoFlat label="Branch" value={selectedProject.git_branch} />
-                          <InfoFlat label="Port" value={String(selectedProject.port)} />
-                          <InfoFlat label="Status" value={selectedProject.status} />
-                          {selectedProject.build_command && <InfoFlat label="Build" value={selectedProject.build_command} className="col-span-2" />}
-                          {selectedProject.start_command && <InfoFlat label="Start" value={selectedProject.start_command} className="col-span-2" />}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Public URL */}
-                    {selectedProject.public_url && (
-                      <a
-                        href={selectedProject.public_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-3 rounded-lg border border-primary/20 bg-primary/5 text-primary text-sm hover:bg-primary/10 transition-colors"
-                      >
-                        <ExternalLink className="w-4 h-4 shrink-0" />
-                        <span className="truncate">{selectedProject.public_url}</span>
-                        <ChevronRight className="w-4 h-4 ml-auto shrink-0" />
-                      </a>
-                    )}
-
-                    {/* Action buttons */}
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleDeploy(selectedProject)}
-                        disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
-                        className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-                      >
-                        {deploying === selectedProject.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                        Deploy
-                      </button>
-                      <button
-                        onClick={() => handleViewLogs(selectedProject)}
-                        className="flex items-center gap-2 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors"
-                      >
-                        <Terminal className="w-4 h-4" />
-                        Logs
-                      </button>
-                      <button
-                        onClick={() => handleSync(selectedProject)}
-                        disabled={syncing === selectedProject.id}
-                        className="p-2 rounded-lg border border-border hover:bg-accent transition-colors disabled:opacity-50"
-                      >
-                        <RefreshCw className={cn("w-4 h-4", syncing === selectedProject.id && "animate-spin")} />
-                      </button>
-                    </div>
-
-                    {/* Logs panel */}
-                    <AnimatePresence>
-                      {showLogs && (
-                        <motion.div
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ opacity: 1, height: "auto" }}
-                          exit={{ opacity: 0, height: 0 }}
-                          className="rounded-xl border border-border overflow-hidden"
-                        >
-                          <div className="flex items-center justify-between px-3 py-2 bg-zinc-900/50 border-b border-border">
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Terminal className="w-3.5 h-3.5" />
-                              <span>Build Logs</span>
-                              {logsLoading && <Loader2 className="w-3 h-3 animate-spin" />}
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <button onClick={copyLogs} className="p-1.5 rounded hover:bg-white/10 transition-colors">
-                                {copiedLogs ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5 text-muted-foreground" />}
-                              </button>
-                              <button onClick={() => setShowLogs(false)} className="p-1.5 rounded hover:bg-white/10 transition-colors">
-                                <X className="w-3.5 h-3.5 text-muted-foreground" />
-                              </button>
-                            </div>
-                          </div>
-                          <pre
-                            ref={logsRef}
-                            className="p-3 text-[11px] font-mono text-zinc-300 bg-zinc-950 overflow-auto max-h-64 whitespace-pre-wrap leading-relaxed"
-                          >
-                            {logsLoading
-                              ? "Memuat logs..."
-                              : logs || (selectedProject.status === "deploying"
-                                ? "Menunggu output dari VM..."
-                                : "Belum ada log. Klik Deploy untuk mulai.")}
-                          </pre>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-
-                    {/* Environment Variables */}
-                    <div className="rounded-xl border border-border overflow-hidden">
-                      <div className="flex items-center justify-between px-3 py-2.5 bg-accent/20 border-b border-border">
-                        <div className="flex items-center gap-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                          <KeyRound className="w-3.5 h-3.5" />
-                          Environment Variables
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {envEditing ? (
-                            <>
-                              <button
-                                onClick={() => {
-                                  if (envDotMode) {
-                                    setEnvDotMode(false);
-                                    const parsed = dotEnvToRows(envDotText);
-                                    setEnvRows(parsed);
-                                  } else {
-                                    setEnvDotMode(true);
-                                    setEnvDotText(rowsToDotEnv(envRows));
-                                  }
-                                }}
-                                className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground border border-border"
+                          <div className="space-y-2">
+                            {deployments.map((dep, i) => (
+                              <div
+                                key={dep.id}
+                                className="flex items-center justify-between px-3.5 py-3 rounded-xl border border-border bg-accent/20 hover:bg-accent/40 transition-colors"
                               >
-                                {envDotMode ? "Form" : "Edit as .env"}
-                              </button>
-                              <button
-                                onClick={() => {
-                                  setEnvEditing(false);
-                                  setEnvDotMode(false);
-                                  const ev = (selectedProject as any).env_vars ?? {};
-                                  setEnvRows(Object.entries(ev).map(([key, value]) => ({ key, value: String(value), hidden: true })));
-                                }}
-                                className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
-                              >Batal</button>
-                              <button
-                                onClick={handleSaveEnv}
-                                disabled={savingEnv}
-                                className="text-xs px-2 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center gap-1 disabled:opacity-50"
-                              >
-                                {savingEnv ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                Simpan
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              onClick={() => {
-                                setEnvEditing(true);
-                                setEnvDotMode(false);
-                              }}
-                              className="text-xs px-2 py-1 rounded hover:bg-accent transition-colors text-muted-foreground"
-                            >Edit</button>
-                          )}
-                        </div>
-                      </div>
-
-                      {envEditing && envDotMode ? (
-                        <div className="p-3">
-                          <p className="text-[10px] text-muted-foreground mb-2">Format: <span className="font-mono">KEY=VALUE</span> — satu baris per variable, baris # diabaikan</p>
-                          <textarea
-                            value={envDotText}
-                            onChange={e => setEnvDotText(e.target.value)}
-                            placeholder={"DATABASE_URL=postgres://...\nAPI_KEY=sk-...\nNODE_ENV=production"}
-                            rows={8}
-                            spellCheck={false}
-                            className="w-full px-3 py-2.5 rounded-lg bg-zinc-950 border border-border text-xs font-mono text-zinc-200 focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-zinc-600 resize-y leading-relaxed"
-                          />
-                        </div>
-                      ) : (
-                        <div className="p-3 space-y-2">
-                          {envRows.length === 0 && !envEditing && (
-                            <p className="text-xs text-muted-foreground text-center py-2">Belum ada env variable. Klik Edit untuk tambah.</p>
-                          )}
-                          {envRows.map((row, i) => (
-                            <div key={i} className="flex items-center gap-1.5">
-                              {envEditing ? (
-                                <>
-                                  <input
-                                    placeholder="KEY"
-                                    value={row.key}
-                                    onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, key: e.target.value } : x))}
-                                    className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
-                                  />
-                                  <input
-                                    placeholder="VALUE"
-                                    value={row.value}
-                                    onChange={e => setEnvRows(r => r.map((x, j) => j === i ? { ...x, value: e.target.value } : x))}
-                                    className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10"
-                                  />
-                                  <button onClick={() => setEnvRows(r => r.filter((_, j) => j !== i))} className="p-1.5 rounded hover:bg-red-500/10 text-red-400 transition-colors shrink-0">
-                                    <X className="w-3.5 h-3.5" />
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <span className="flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate text-foreground">{row.key}</span>
-                                  <span className={cn("flex-1 min-w-0 px-2 py-1.5 rounded-lg bg-background border border-border text-xs font-mono truncate", row.hidden ? "text-muted-foreground" : "text-foreground")}>
-                                    {row.hidden ? "••••••••" : row.value}
-                                  </span>
-                                  <button onClick={() => setEnvRows(r => r.map((x, j) => j === i ? { ...x, hidden: !x.hidden } : x))} className="p-1.5 rounded hover:bg-accent transition-colors shrink-0 text-muted-foreground">
-                                    {row.hidden ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          ))}
-                          {envEditing && (
-                            <button
-                              onClick={() => setEnvRows(r => [...r, { key: "", value: "", hidden: false }])}
-                              className="flex items-center gap-1.5 text-xs text-primary hover:text-primary/80 transition-colors w-full justify-center py-1.5 rounded-lg border border-dashed border-primary/30 hover:border-primary/50 hover:bg-primary/5"
-                            >
-                              <Plus className="w-3 h-3" />
-                              Tambah variable
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Deployment history */}
-                    <div>
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
-                        Riwayat Deployment
-                      </p>
-                      {deployments.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-4">Belum ada deployment</p>
-                      ) : (
-                        <div className="space-y-1.5">
-                          {deployments.map(dep => (
-                            <div key={dep.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-accent/30 border border-border">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <Zap className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                <div className="min-w-0">
-                                  <p className="text-xs font-medium capitalize">{dep.triggered_by}</p>
-                                  <p className="text-[11px] text-muted-foreground">{formatDate(dep.created_at)}</p>
+                                <div className="flex items-center gap-3 min-w-0">
+                                  <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                    dep.status === "finished" ? "bg-emerald-500/10" :
+                                    dep.status === "failed" ? "bg-red-500/10" :
+                                    dep.status === "in_progress" ? "bg-blue-500/10" : "bg-muted"
+                                  )}>
+                                    <GitCommit className={cn("w-4 h-4",
+                                      dep.status === "finished" ? "text-emerald-400" :
+                                      dep.status === "failed" ? "text-red-400" :
+                                      dep.status === "in_progress" ? "text-blue-400" : "text-muted-foreground"
+                                    )} />
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-xs font-medium capitalize">
+                                      {i === 0 && (dep.status === "in_progress" || dep.status === "queued") ? "Deployment terbaru" : `Deploy #${deployments.length - i}`}
+                                    </p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateShort(dep.created_at)}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <DeployStatusBadge status={dep.status} />
+                                  {(dep.status === "in_progress" || dep.status === "finished" || dep.status === "failed") && (
+                                    <button
+                                      onClick={() => { setDetailTab("logs"); handleLoadLogs(selectedProject); }}
+                                      className="text-[10px] px-2 py-0.5 rounded-md bg-accent hover:bg-accent/80 text-muted-foreground transition-colors"
+                                    >
+                                      Logs
+                                    </button>
+                                  )}
                                 </div>
                               </div>
-                              <DeployStatusBadge status={dep.status} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </>
                 )}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
+
+        {/* Empty state when no project selected */}
+        {!selectedProject && projects.length > 0 && (
+          <div className="hidden md:flex flex-1 items-center justify-center text-muted-foreground">
+            <div className="text-center">
+              <Server className="w-10 h-10 mx-auto mb-3 text-muted-foreground/20" />
+              <p className="text-sm">Pilih proyek untuk melihat detail</p>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Create Project Dialog */}
+      {/* ── Create Project Dialog ── */}
       <AnimatePresence>
         {showCreate && (
           <>
             <motion.div
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/60 z-40"
-              onClick={() => setShowCreate(false)}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40"
+              onClick={resetCreateDialog}
             />
             <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              initial={{ opacity: 0, scale: 0.96, y: 16 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              exit={{ opacity: 0, scale: 0.96, y: 16 }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
               className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-auto md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:top-1/2 md:w-[520px] z-50 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
             >
+              {/* Dialog header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <div>
-                  <h2 className="font-semibold">Proyek Hosting Baru</h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Deploy dari Git repository ke VM kamu</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                    <Globe className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-sm">Proyek Hosting Baru</h2>
+                    <p className="text-xs text-muted-foreground">Deploy dari Git repository ke VM</p>
+                  </div>
                 </div>
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkg(null); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
+                <button onClick={resetCreateDialog} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
                 {formError && (
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
+                  <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     {formError}
                   </div>
@@ -1053,18 +1268,17 @@ export default function HostingPage() {
                 <FormField label="Nama Proyek *" placeholder="my-web-app" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
                 <FormField label="Deskripsi" placeholder="Opsional" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
 
+                {/* Git URL + detect */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-medium text-muted-foreground">Git URL *</label>
                   <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        placeholder="https://github.com/user/repo"
-                        value={form.git_url}
-                        onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
-                        className="w-full px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
-                      />
-                    </div>
+                    <input
+                      type="text"
+                      placeholder="https://github.com/user/repo"
+                      value={form.git_url}
+                      onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
+                      className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
+                    />
                     <button
                       type="button"
                       onClick={() => runDetect(form.git_url.trim(), form.git_branch || "main")}
@@ -1075,30 +1289,31 @@ export default function HostingPage() {
                       {detecting ? "Deteksi..." : "Deteksi"}
                     </button>
                   </div>
+
+                  {/* Detection status */}
                   {detectResult && (
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      <span className="text-emerald-400 font-medium">
-                        {detectResult.isMonorepo
-                          ? workspacePackages.length > 0
-                            ? `Monorepo terdeteksi — pilih app yang ingin di-deploy (${workspacePackages.length} ditemukan)`
-                            : "Monorepo terdeteksi — isi build & start command manual"
-                          : `Framework terdeteksi: ${detectResult.framework} — command sudah diisi otomatis`}
-                      </span>
+                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                      <CheckCircle2 className="w-3 h-3" />
+                      {detectResult.isMonorepo
+                        ? workspacePackages.length > 0
+                          ? `Monorepo terdeteksi — ${workspacePackages.length} package ditemukan`
+                          : "Monorepo terdeteksi — isi build & start command manual"
+                        : `Framework: ${detectResult.framework} — command diisi otomatis`}
                     </div>
                   )}
                   {detectAttempted && !detectResult && !detecting && form.git_url.trim() && (
-                    <div className="flex items-center gap-1.5 text-[11px]">
-                      <AlertCircle className="w-3 h-3 text-amber-400" />
-                      <span className="text-amber-400">Tidak dapat mendeteksi — pastikan repo publik atau isi command manual</span>
+                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
+                      <AlertCircle className="w-3 h-3" />
+                      Tidak dapat mendeteksi — pastikan repo publik atau isi command manual
                     </div>
                   )}
                 </div>
 
+                {/* Package multi-select (monorepo) */}
                 {workspacePackages.length > 0 && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih App</p>
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih Package</p>
                       {selectedWorkspacePkgs.size > 0 && (
                         <span className="text-[11px] text-primary font-medium">{selectedWorkspacePkgs.size} terpilih</span>
                       )}
@@ -1113,12 +1328,8 @@ export default function HostingPage() {
                             onClick={() => {
                               setSelectedWorkspacePkgs(prev => {
                                 const next = new Set(prev);
-                                if (next.has(pkg.path)) {
-                                  next.delete(pkg.path);
-                                } else {
-                                  next.add(pkg.path);
-                                }
-                                // If exactly 1 selected, auto-fill the form fields
+                                if (next.has(pkg.path)) next.delete(pkg.path);
+                                else next.add(pkg.path);
                                 const remaining = [...next];
                                 if (remaining.length === 1) {
                                   const single = workspacePackages.find(p => p.path === remaining[0]);
@@ -1126,22 +1337,30 @@ export default function HostingPage() {
                                     setForm(f => ({ ...f, build_command: single.buildCommand, start_command: single.startCommand, port: String(single.port) }));
                                     setAutoFilledFields(new Set(["build_command", "start_command", "port"]));
                                   }
-                                } else if (remaining.length !== 1) {
+                                } else {
                                   setAutoFilledFields(new Set());
                                 }
                                 return next;
                               });
                             }}
-                            className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm transition-all ${isSelected ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/50 hover:bg-accent"}`}
+                            className={cn(
+                              "flex items-center justify-between px-3 py-2.5 rounded-lg border text-left text-sm transition-all",
+                              isSelected ? "border-primary bg-primary/8 text-primary" : "border-border hover:border-primary/40 hover:bg-accent"
+                            )}
                           >
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className={`w-4 h-4 rounded flex-shrink-0 border flex items-center justify-center transition-colors ${isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <span className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
+                                isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"
+                              )}>
                                 {isSelected && <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                               </span>
                               <span className="font-mono text-xs truncate">{pkg.name}</span>
-                              <span className="text-[10px] text-muted-foreground flex-shrink-0">{pkg.path}</span>
+                              <span className="text-[10px] text-muted-foreground shrink-0">{pkg.path}</span>
                             </div>
-                            <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ml-2 ${pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" : pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>
+                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2",
+                              pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" :
+                              pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"
+                            )}>
                               {pkg.framework}
                             </span>
                           </button>
@@ -1149,13 +1368,18 @@ export default function HostingPage() {
                       })}
                     </div>
                     {selectedWorkspacePkgs.size > 1 && (
-                      <p className="text-[11px] text-muted-foreground bg-accent/50 rounded-lg px-3 py-2">
-                        Akan dibuat <span className="text-foreground font-medium">{selectedWorkspacePkgs.size} proyek terpisah</span> — masing-masing dengan command dan port otomatis. Nama proyek = <span className="font-mono">{form.name || "nama"}-[package]</span>
-                      </p>
+                      <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground">
+                        <Package className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                        <span>
+                          Akan dibuat <span className="text-foreground font-medium">{selectedWorkspacePkgs.size} proyek terpisah</span> dengan command otomatis.
+                          Nama: <span className="font-mono">{form.name || "nama"}-[package]</span>
+                        </span>
+                      </div>
                     )}
                   </div>
                 )}
 
+                {/* Branch + port + commands (hidden when 2+ packages) */}
                 {selectedWorkspacePkgs.size <= 1 && (
                   <>
                     <div className="grid grid-cols-2 gap-3">
@@ -1190,12 +1414,19 @@ export default function HostingPage() {
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  Subdomain akan dibuat otomatis: <span className="font-mono text-primary">{form.name ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes` : "nama-xxxx.app.pio.codes"}</span>
+                  Subdomain: <span className="font-mono text-primary">
+                    {form.name
+                      ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes`
+                      : "nama-xxxx.app.pio.codes"}
+                  </span>
                 </p>
               </div>
 
-              <div className="flex gap-3 px-5 py-4 border-t border-border">
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkgs(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
+              <div className="flex gap-2 px-5 py-4 border-t border-border bg-accent/10">
+                <button
+                  onClick={resetCreateDialog}
+                  className="px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors"
+                >
                   Batal
                 </button>
                 <button
@@ -1203,8 +1434,8 @@ export default function HostingPage() {
                   disabled={creating}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
-                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                  {selectedWorkspacePkgs.size > 1 ? `Buat ${selectedWorkspacePkgs.size} Proyek` : "Buat Proyek"}
+                  {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                  {selectedWorkspacePkgs.size > 1 ? `Deploy ${selectedWorkspacePkgs.size} Proyek` : "Buat Proyek"}
                 </button>
               </div>
             </motion.div>
@@ -1214,11 +1445,11 @@ export default function HostingPage() {
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
-        <AlertDialogContent className="max-w-sm rounded-xl">
+        <AlertDialogContent className="max-w-sm rounded-2xl">
           <AlertDialogHeader>
             <AlertDialogTitle>Hapus proyek?</AlertDialogTitle>
             <AlertDialogDescription>
-              Proyek <span className="font-semibold text-foreground">"{deleteTarget?.name}"</span> dan semua deploymentnya akan dihapus permanen dari VM.
+              Proyek <span className="font-semibold text-foreground">"{deleteTarget?.name}"</span> dan semua deploymentnya akan dihapus permanen dari VM. Tindakan ini tidak bisa dibatalkan.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -1228,20 +1459,12 @@ export default function HostingPage() {
               disabled={deleting}
               className="bg-red-600 hover:bg-red-700 text-white"
             >
-              {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Hapus"}
+              {deleting ? <Loader2 className="w-4 h-4 animate-spin mr-1.5" /> : null}
+              Hapus Selamanya
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
-  );
-}
-
-function InfoCard({ label, value, className }: { label: string; value: string; className?: string }) {
-  return (
-    <div className={cn("p-2.5 rounded-lg bg-accent/30 border border-border", className)}>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium mb-0.5">{label}</p>
-      <p className="text-xs font-mono text-foreground truncate">{value}</p>
     </div>
   );
 }
