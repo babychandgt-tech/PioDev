@@ -4058,9 +4058,49 @@ function hostingSlugify(name: string): string {
 }
 
 /**
+ * Generate a custom Dockerfile for a Node.js/pnpm project.
+ * Uses node:22-alpine from Docker Hub — bypasses Coolify's frozen nixpkgs snapshot
+ * which only ships Node 18/22.11.0 (too old for Vite 7 which needs 22.12+).
+ */
+function generateNodeDockerfile(
+  installBuildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = {
+    PORT: String(port),
+    BASE_PATH: "/",
+    NODE_ENV: "production",
+    ...userEnvVars,
+  };
+  // ARG + ENV block so vars are available both at build time (RUN steps) and runtime
+  const argBlock = Object.keys(mergedVars)
+    .map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`)
+    .join("\n");
+  const envBlock = Object.keys(mergedVars)
+    .map((k) => `ENV ${k}=$${k}`)
+    .join("\n");
+
+  return [
+    "FROM node:22-alpine",
+    `ENV PNPM_HOME="/pnpm"`,
+    `ENV PATH="$PNPM_HOME:$PATH"`,
+    "RUN corepack enable && corepack prepare pnpm@9 --activate",
+    "WORKDIR /app",
+    "COPY . .",
+    argBlock,
+    envBlock,
+    `RUN ${installBuildCmd}`,
+    `EXPOSE ${port}`,
+    `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
+  ].join("\n") + "\n";
+}
+
+/**
  * Push environment variables to a Coolify application.
- * Always injects NODE_VERSION=22 and PORT so Nixpacks picks the right
- * Node.js version and the build step doesn't throw "PORT is required".
+ * PORT and BASE_PATH are baked into the Dockerfile ARG/ENV for build-time access,
+ * but we also sync them here so Coolify injects them as runtime env vars.
  */
 async function syncCoolifyEnvVars(
   appUuid: string,
@@ -4068,10 +4108,6 @@ async function syncCoolifyEnvVars(
   userEnvVars: Record<string, string> = {},
 ): Promise<void> {
   const vars: Record<string, string> = {
-    // nixpkgs snapshot for Node 22 in this Coolify Nixpacks image resolves to 22.11.0
-    // (too old for Vite 7 which needs 22.12+). Node 24 doesn't exist in that snapshot.
-    // Node 23 was released Oct 2024 and is present in the snapshot.
-    NIXPACKS_NODE_VERSION: "23",
     PORT: String(port),
     BASE_PATH: "/",
     ...userEnvVars,
@@ -4356,27 +4392,35 @@ app.post("/api/hosting/projects", requireAuth, async (req, res) => {
   if (COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
       const [serverUuid, projectUuid] = await Promise.all([getCoolifyServerUuid(), getCoolifyProjectUuid()]);
+      const effectivePort = Number(port) || 3000;
+      const installBuildCmd = build_command?.trim() || "pnpm install --no-frozen-lockfile";
+      const startCmd = start_command?.trim() || "node server/index.js";
+      const dockerfile = generateNodeDockerfile(installBuildCmd, startCmd, effectivePort, env_vars ?? {});
       const body: Record<string, string> = {
         project_uuid: projectUuid,
         server_uuid: serverUuid,
         environment_name: "production",
         git_repository: git_url.trim(),
         git_branch: git_branch?.trim() || "main",
-        build_pack: "nixpacks",
+        build_pack: "dockerfile",
+        dockerfile,
         name: subdomain,
         domains: publicUrl,
-        ports_exposes: String(Number(port) || 3000),
+        ports_exposes: String(effectivePort),
       };
-      if (build_command?.trim()) body.install_command = build_command.trim();
-      if (start_command?.trim()) body.start_command = start_command.trim();
       const appRes = await coolifyFetch("/applications/public", { method: "POST", body: JSON.stringify(body) });
       if (appRes.ok) {
         const appData: { uuid?: string } = await appRes.json();
         if (appData.uuid) {
           await supabaseAdmin.from("hosting_projects").update({ coolify_app_uuid: appData.uuid }).eq("id", project!.id);
           (project as any).coolify_app_uuid = appData.uuid;
-          // Sync NODE_VERSION, PORT, and user env vars so Nixpacks uses the right Node
-          await syncCoolifyEnvVars(appData.uuid, Number(port) || 3000, env_vars ?? {}).catch((e) =>
+          // Also PATCH to ensure build_pack + dockerfile are committed (some Coolify versions need this)
+          await coolifyFetch(`/applications/${appData.uuid}`, {
+            method: "PATCH",
+            body: JSON.stringify({ build_pack: "dockerfile", dockerfile }),
+          }).catch((e) => console.warn("[Hosting] Dockerfile PATCH failed:", (e as Error).message));
+          // Sync PORT and user env vars as runtime env vars
+          await syncCoolifyEnvVars(appData.uuid, effectivePort, env_vars ?? {}).catch((e) =>
             console.warn("[Hosting] syncCoolifyEnvVars failed:", (e as Error).message)
           );
         }
@@ -4486,22 +4530,28 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
   if (port !== undefined) updates.port = Number(port) || 3000;
   if (env_vars !== undefined) updates.env_vars = env_vars ?? {};
   await supabaseAdmin.from("hosting_projects").update(updates).eq("id", project.id);
-  // Push updated commands to Coolify app config
+  // Push updated config to Coolify — regenerate Dockerfile so Node version / cmds stay fresh
   if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
     try {
-      const body: Record<string, string> = {};
-      if (build_command !== undefined) body.build_command = build_command?.trim() ?? "";
-      if (start_command !== undefined) body.start_command = start_command?.trim() ?? "";
+      const effectivePort = port !== undefined ? Number(port) || 3000 : project.port || 3000;
+      const effectiveEnvVars = env_vars !== undefined ? (env_vars ?? {}) : (project.env_vars ?? {});
+      const effectiveBuildCmd = (build_command !== undefined ? build_command?.trim() : project.build_command?.trim())
+        || "pnpm install --no-frozen-lockfile";
+      const effectiveStartCmd = (start_command !== undefined ? start_command?.trim() : project.start_command?.trim())
+        || "node server/index.js";
+
+      const dockerfile = generateNodeDockerfile(effectiveBuildCmd, effectiveStartCmd, effectivePort, effectiveEnvVars);
+      const body: Record<string, string> = {
+        build_pack: "dockerfile",
+        dockerfile,
+        ports_exposes: String(effectivePort),
+      };
       if (git_branch !== undefined) body.git_branch = git_branch?.trim() || "main";
-      if (port !== undefined) body.ports_exposes = String(Number(port) || 3000);
       const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
         method: "PATCH", body: JSON.stringify(body),
       });
       const patchText = await patchRes.text();
       console.log("[Hosting] Coolify PATCH app:", patchRes.status, patchText.slice(0, 300));
-      // Re-sync env vars (keeps NODE_VERSION/PORT up to date with any port change)
-      const effectivePort = port !== undefined ? Number(port) || 3000 : project.port || 3000;
-      const effectiveEnvVars = env_vars !== undefined ? (env_vars ?? {}) : (project.env_vars ?? {});
       await syncCoolifyEnvVars(project.coolify_app_uuid, effectivePort, effectiveEnvVars).catch((e) =>
         console.warn("[Hosting] syncCoolifyEnvVars failed on PATCH:", (e as Error).message)
       );
