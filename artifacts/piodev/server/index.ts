@@ -4061,8 +4061,13 @@ function hostingSlugify(name: string): string {
  * Generate a custom Dockerfile for a Node.js/pnpm project.
  * Uses node:22-alpine from Docker Hub — bypasses Coolify's frozen nixpkgs snapshot
  * which only ships Node 18/22.11.0 (too old for Vite 7 which needs 22.12+).
+ *
+ * When Coolify uses an inline Dockerfile (not from repo), it does NOT clone the git
+ * repository before building — so we include a `git clone` step in the Dockerfile itself.
  */
 function generateNodeDockerfile(
+  gitRepository: string,
+  gitBranch: string,
   installBuildCmd: string,
   startCmd: string,
   port: number,
@@ -4086,11 +4091,14 @@ function generateNodeDockerfile(
     "FROM node:22-alpine",
     `ENV PNPM_HOME="/pnpm"`,
     `ENV PATH="$PNPM_HOME:$PATH"`,
+    // git is needed to clone the repo; openssh-client for private repos in future
+    "RUN apk add --no-cache git openssh-client",
     "RUN corepack enable && corepack prepare pnpm@9 --activate",
-    "WORKDIR /app",
-    "COPY . .",
     argBlock,
     envBlock,
+    // Clone the repo so the build has actual source files
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
     `RUN ${installBuildCmd}`,
     `EXPOSE ${port}`,
     `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
@@ -4395,7 +4403,7 @@ app.post("/api/hosting/projects", requireAuth, async (req, res) => {
       const effectivePort = Number(port) || 3000;
       const installBuildCmd = build_command?.trim() || "pnpm install --no-frozen-lockfile";
       const startCmd = start_command?.trim() || "node server/index.js";
-      const dockerfile = generateNodeDockerfile(installBuildCmd, startCmd, effectivePort, env_vars ?? {});
+      const dockerfile = generateNodeDockerfile(git_url.trim(), git_branch?.trim() || "main", installBuildCmd, startCmd, effectivePort, env_vars ?? {});
       const body: Record<string, string> = {
         project_uuid: projectUuid,
         server_uuid: serverUuid,
@@ -4478,7 +4486,7 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
       const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
       const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
       const deployStartCmd = project.start_command?.trim() || "node server/index.js";
-      const dockerfile = generateNodeDockerfile(deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
+      const dockerfile = generateNodeDockerfile(project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
 
       // Coolify API does NOT allow changing build_pack via PATCH after creation.
       // So we detect if the existing app is still using nixpacks and if so, delete it
@@ -4587,8 +4595,10 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
         || "pnpm install --no-frozen-lockfile";
       const effectiveStartCmd = (start_command !== undefined ? start_command?.trim() : project.start_command?.trim())
         || "node server/index.js";
+      const effectiveGitUrl = project.git_url as string;
+      const effectiveGitBranch = (git_branch !== undefined ? git_branch?.trim() : project.git_branch?.trim()) || "main";
 
-      const dockerfile = generateNodeDockerfile(effectiveBuildCmd, effectiveStartCmd, effectivePort, effectiveEnvVars);
+      const dockerfile = generateNodeDockerfile(effectiveGitUrl, effectiveGitBranch, effectiveBuildCmd, effectiveStartCmd, effectivePort, effectiveEnvVars);
       const body: Record<string, string> = {
         build_pack: "dockerfile",
         dockerfile,
