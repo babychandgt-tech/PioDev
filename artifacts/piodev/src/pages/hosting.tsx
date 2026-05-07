@@ -133,6 +133,8 @@ export default function HostingPage() {
   const [detectResult, setDetectResult] = useState<{ framework?: string; isMonorepo?: boolean } | null>(null);
   const [detectAttempted, setDetectAttempted] = useState(false);
   const [autoFilledFields, setAutoFilledFields] = useState<Set<string>>(new Set());
+  const [workspacePackages, setWorkspacePackages] = useState<{ name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number }[]>([]);
+  const [selectedWorkspacePkg, setSelectedWorkspacePkg] = useState<string | null>(null);
   const detectTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [selectedProject, setSelectedProject] = useState<HostingProject | null>(null);
@@ -180,19 +182,30 @@ export default function HostingPage() {
       const data = await res.json();
       if (data.detected) {
         setDetectResult({ framework: data.framework, isMonorepo: data.isMonorepo });
-        const filled = new Set<string>();
-        setForm(f => {
-          const next = { ...f };
-          next.build_command = data.buildCommand ?? "";
-          filled.add("build_command");
-          next.start_command = data.startCommand ?? "";
-          filled.add("start_command");
-          if (data.port) { next.port = String(data.port); filled.add("port"); }
-          return next;
-        });
-        setAutoFilledFields(filled);
+        if (data.isMonorepo && data.workspacePackages?.length) {
+          setWorkspacePackages(data.workspacePackages);
+          setSelectedWorkspacePkg(null);
+          setForm(f => ({ ...f, build_command: "", start_command: "" }));
+          setAutoFilledFields(new Set());
+        } else {
+          setWorkspacePackages([]);
+          setSelectedWorkspacePkg(null);
+          const filled = new Set<string>();
+          setForm(f => {
+            const next = { ...f };
+            next.build_command = data.buildCommand ?? "";
+            filled.add("build_command");
+            next.start_command = data.startCommand ?? "";
+            filled.add("start_command");
+            if (data.port) { next.port = String(data.port); filled.add("port"); }
+            return next;
+          });
+          setAutoFilledFields(filled);
+        }
       } else {
         setDetectResult(null);
+        setWorkspacePackages([]);
+        setSelectedWorkspacePkg(null);
       }
       setDetectAttempted(true);
     } catch { setDetectResult(null); setDetectAttempted(true); }
@@ -995,7 +1008,7 @@ export default function HostingPage() {
                   <h2 className="font-semibold">Proyek Hosting Baru</h2>
                   <p className="text-xs text-muted-foreground mt-0.5">Deploy dari Git repository ke VM kamu</p>
                 </div>
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkg(null); }} className="p-1.5 rounded-lg hover:bg-accent transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
@@ -1038,7 +1051,9 @@ export default function HostingPage() {
                       <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                       <span className="text-emerald-400 font-medium">
                         {detectResult.isMonorepo
-                          ? "Monorepo terdeteksi — isi build & start command manual"
+                          ? workspacePackages.length > 0
+                            ? `Monorepo terdeteksi — pilih app yang ingin di-deploy (${workspacePackages.length} ditemukan)`
+                            : "Monorepo terdeteksi — isi build & start command manual"
                           : `Framework terdeteksi: ${detectResult.framework} — command sudah diisi otomatis`}
                       </span>
                     </div>
@@ -1050,6 +1065,36 @@ export default function HostingPage() {
                     </div>
                   )}
                 </div>
+
+                {workspacePackages.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih App</p>
+                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                      {workspacePackages.map(pkg => (
+                        <button
+                          key={pkg.path}
+                          type="button"
+                          onClick={() => {
+                            setSelectedWorkspacePkg(pkg.path);
+                            const filled = new Set<string>(["build_command", "start_command", "port"]);
+                            setForm(f => ({ ...f, build_command: pkg.buildCommand, start_command: pkg.startCommand, port: String(pkg.port) }));
+                            setAutoFilledFields(filled);
+                          }}
+                          className={`flex items-center justify-between px-3 py-2 rounded-lg border text-left text-sm transition-all ${selectedWorkspacePkg === pkg.path ? "border-primary bg-primary/10 text-primary" : "border-border hover:border-primary/50 hover:bg-accent"}`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${selectedWorkspacePkg === pkg.path ? "bg-primary" : "bg-muted-foreground"}`} />
+                            <span className="font-mono text-xs truncate">{pkg.name}</span>
+                            <span className="text-[10px] text-muted-foreground flex-shrink-0">{pkg.path}</span>
+                          </div>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ml-2 ${pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" : pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"}`}>
+                            {pkg.framework}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
@@ -1084,7 +1129,7 @@ export default function HostingPage() {
               </div>
 
               <div className="flex gap-3 px-5 py-4 border-t border-border">
-                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
+                <button onClick={() => { setShowCreate(false); setDetectResult(null); setDetectAttempted(false); setAutoFilledFields(new Set()); setWorkspacePackages([]); setSelectedWorkspacePkg(null); }} className="flex-1 px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors">
                   Batal
                 </button>
                 <button

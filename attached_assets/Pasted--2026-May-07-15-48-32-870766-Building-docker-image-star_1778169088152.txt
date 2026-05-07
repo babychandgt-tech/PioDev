@@ -1,0 +1,386 @@
+----------------------------------------
+2026-May-07 15:48:32.870766
+Building docker image started.
+2026-May-07 15:48:32.882210
+To check the current progress, click on Show Debug Logs.
+2026-May-07 15:51:15.210661
+========================================
+2026-May-07 15:51:15.226363
+Deployment failed: Command execution failed (exit code 1): docker exec kqlhse67mg0ly77kvv0howzi bash -c 'bash /artifacts/build.sh'
+2026-May-07 15:51:15.226363
+Error: #0 building with "default" instance using docker driver
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#1 [internal] load build definition from Dockerfile
+2026-May-07 15:51:15.226363
+#1 transferring dockerfile: 1.51kB done
+2026-May-07 15:51:15.226363
+#1 DONE 0.1s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#2 [internal] load metadata for ghcr.io/railwayapp/nixpacks:ubuntu-1745885067
+2026-May-07 15:51:15.226363
+#2 DONE 1.7s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#3 [internal] load .dockerignore
+2026-May-07 15:51:15.226363
+#3 transferring context: 2B done
+2026-May-07 15:51:15.226363
+#3 DONE 0.1s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#4 [internal] load build context
+2026-May-07 15:51:15.226363
+#4 transferring context: 6.14MB 0.1s done
+2026-May-07 15:51:15.226363
+#4 DONE 0.3s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:51:15.226363
+#5 resolve ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de 0.1s done
+2026-May-07 15:51:15.226363
+#5 DONE 0.4s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:51:15.226363
+#5 sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 0B / 335B 0.2s
+2026-May-07 15:51:15.226363
+#5 sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 335B / 335B 0.3s done
+2026-May-07 15:51:15.226363
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 0B / 75.95MB 0.2s
+2026-May-07 15:51:15.226363
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 0B / 33.30MB 0.2s
+2026-May-07 15:51:15.226363
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 0B / 29.72MB 0.2s
+2026-May-07 15:51:15.226363
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 39.85MB / 75.95MB 0.5s
+2026-May-07 15:51:15.226363
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 59.77MB / 75.95MB 0.6s
+2026-May-07 15:51:15.226363
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 10.49MB / 29.72MB 0.5s
+2026-May-07 15:51:15.226363
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 75.95MB / 75.95MB 0.8s
+2026-May-07 15:51:15.226363
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 14.68MB / 33.30MB 0.6s
+2026-May-07 15:51:15.226363
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 27.26MB / 29.72MB 0.6s
+2026-May-07 15:51:15.226363
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 33.30MB / 33.30MB 0.8s
+2026-May-07 15:51:15.226363
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 29.72MB / 29.72MB 0.8s
+2026-May-07 15:51:15.226363
+#5 sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 75.95MB / 75.95MB 1.9s done
+2026-May-07 15:51:15.226363
+#5 sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 33.30MB / 33.30MB 1.8s done
+2026-May-07 15:51:15.226363
+#5 sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 29.72MB / 29.72MB 1.8s done
+2026-May-07 15:51:15.226363
+#5 extracting sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee
+2026-May-07 15:51:15.226363
+#5 extracting sha256:2726e237d1a374379e783053d93d0345c8a3bf3c57b5d35b099de1ad777486ee 0.9s done
+2026-May-07 15:51:15.226363
+#5 DONE 3.3s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:51:15.226363
+#5 extracting sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913
+2026-May-07 15:51:15.226363
+#5 extracting sha256:7962e2b983fd33a26ed1c6cd3dc8130d909d793c6a76893ed532f122edf72913 1.4s done
+2026-May-07 15:51:15.226363
+#5 DONE 4.7s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:51:15.226363
+#5 extracting sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06
+2026-May-07 15:51:15.226363
+#5 extracting sha256:b65af0a51d863b994ae8e73f3b739ad2c14c4ab0f3b8807c7baf25404b897c06 1.8s done
+2026-May-07 15:51:15.226363
+#5 DONE 6.5s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#5 [ 1/11] FROM ghcr.io/railwayapp/nixpacks:ubuntu-1745885067@sha256:d45c89d80e13d7ad0fd555b5130f22a866d9dd10e861f589932303ef2314c7de
+2026-May-07 15:51:15.226363
+#5 extracting sha256:866b26ac4e4722aa6bd512e1e0c5fa91657dc060ef3eebbbcbd6057625e8f518 0.1s done
+2026-May-07 15:51:15.226363
+#5 DONE 6.5s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#6 [ 2/11] WORKDIR /app/
+2026-May-07 15:51:15.226363
+#6 DONE 2.8s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#7 [ 3/11] COPY .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix
+2026-May-07 15:51:15.226363
+#7 DONE 0.2s
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+#8 [ 4/11] RUN nix-env -if .nixpacks/nixpkgs-ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.nix && nix-collect-garbage -d
+2026-May-07 15:51:15.226363
+#8 0.287 unpacking 'https://github.com/NixOS/nixpkgs/archive/ffeebf0acf3ae8b29f8c7049cd911b9636efd7e7.tar.gz' into the Git cache...
+2026-May-07 15:51:15.226363
+#8 58.01 unpacking 'https:<REDACTED>@types/express-rate-limit@6.0.2
+2026-May-07 15:51:15.226363
+#11 2.115 Progress: resolved 55, reused 0, downloaded 54, added 0
+2026-May-07 15:51:15.226363
+#11 3.115 Progress: resolved 62, reused 0, downloaded 61, added 0
+2026-May-07 15:51:15.226363
+#11 4.116 Progress: resolved 68, reused 0, downloaded 67, added 0
+2026-May-07 15:51:15.226363
+#11 5.117 Progress: resolved 84, reused 0, downloaded 83, added 0
+2026-May-07 15:51:15.226363
+#11 6.116 Progress: resolved 203, reused 0, downloaded 187, added 0
+2026-May-07 15:51:15.226363
+#11 7.122 Progress: resolved 215, reused 0, downloaded 199, added 0
+2026-May-07 15:51:15.226363
+#11 8.128 Progress: resolved 279, reused 0, downloaded 263, added 0
+2026-May-07 15:51:15.226363
+#11 9.132 Progress: resolved 411, reused 0, downloaded 319, added 0
+2026-May-07 15:51:15.226363
+#11 10.14 Progress: resolved 456, reused 0, downloaded 338, added 0
+2026-May-07 15:51:15.226363
+#11 11.13 Progress: resolved 552, reused 0, downloaded 439, added 0
+2026-May-07 15:51:15.226363
+#11 12.13 Progress: resolved 647, reused 0, downloaded 533, added 0
+2026-May-07 15:51:15.226363
+#11 12.80  WARN  2 deprecated subdependencies found: @esbuild-kit/core-utils@3.3.2, @esbuild-kit/esm-loader@2.6.5
+2026-May-07 15:51:15.226363
+#11 12.83 Packages: +534
+2026-May-07 15:51:15.226363
+#11 12.83 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+2026-May-07 15:51:15.226363
+#11 13.13 Progress: resolved 648, reused 0, downloaded 534, added 44
+2026-May-07 15:51:15.226363
+#11 14.14 Progress: resolved 648, reused 0, downloaded 534, added 282
+2026-May-07 15:51:15.226363
+#11 15.14 Progress: resolved 648, reused 0, downloaded 534, added 378
+2026-May-07 15:51:15.226363
+#11 23.79 Progress: resolved 648, reused 0, downloaded 534, added 379
+2026-May-07 15:51:15.226363
+#11 24.15 Progress: resolved 648, reused 0, downloaded 534, added 534, done
+2026-May-07 15:51:15.226363
+#11 24.65 .../core-js@3.49.0/node_modules/core-js postinstall$ node -e "try{require('./postinstall')}catch(e){}"
+2026-May-07 15:51:15.226363
+#11 24.79 .../esbuild@0.27.3/node_modules/esbuild postinstall$ node install.js
+2026-May-07 15:51:15.226363
+#11 24.79 .../esbuild@0.18.20/node_modules/esbuild postinstall$ node install.js
+2026-May-07 15:51:15.226363
+#11 24.79 .../esbuild@0.25.12/node_modules/esbuild postinstall$ node install.js
+2026-May-07 15:51:15.226363
+#11 24.96 .../core-js@3.49.0/node_modules/core-js postinstall: Done
+2026-May-07 15:51:15.226363
+#11 25.07 .../esbuild@0.27.3/node_modules/esbuild postinstall: Done
+2026-May-07 15:51:15.226363
+#11 25.07 .../esbuild@0.18.20/node_modules/esbuild postinstall: Done
+2026-May-07 15:51:15.226363
+#11 25.07 .../esbuild@0.25.12/node_modules/esbuild postinstall: Done
+2026-May-07 15:51:15.226363
+#11 27.50 . preinstall$ sh -c 'rm -f package-lock.json yarn.lock; case "$npm_config_user_agent" in pnpm/*) ;; *) echo "Use pnpm instead" >&2; exit 1 ;; esac'
+2026-May-07 15:51:15.226363
+#11 27.52 . preinstall: Done
+2026-May-07 15:51:15.226363
+#11 27.62
+2026-May-07 15:51:15.226363
+#11 27.62 devDependencies:
+2026-May-07 15:51:15.226363
+#11 27.62 + prettier 3.8.1 (3.8.3 is available)
+2026-May-07 15:51:15.226363
+#11 27.62 + typescript 5.9.3 (6.0.3 is available)
+2026-May-07 15:51:15.226363
+#11 27.62
+2026-May-07 15:51:15.226363
+#11 27.63  WARN  Issues with peer dependencies found
+2026-May-07 15:51:15.226363
+#11 27.63 artifacts/api-server
+2026-May-07 15:51:15.226363
+#11 27.63 └─┬ esbuild-plugin-pino 2.3.3
+2026-May-07 15:51:15.226363
+#11 27.63   └── ✕ unmet peer esbuild@">=0.25.0 <=0.25.8": found 0.27.3
+2026-May-07 15:51:15.226363
+#11 27.63
+2026-May-07 15:51:15.226363
+#11 27.65 Done in 27.4s using pnpm v9.15.9
+2026-May-07 15:51:15.226363
+#11 28.16
+2026-May-07 15:51:15.226363
+#11 28.16 > workspace@0.0.0 build /app
+2026-May-07 15:51:15.226363
+#11 28.16 > pnpm run typecheck && pnpm -r --if-present run build
+2026-May-07 15:51:15.226363
+#11 28.16
+2026-May-07 15:51:15.226363
+#11 28.58
+2026-May-07 15:51:15.226363
+#11 28.58 > workspace@0.0.0 typecheck /app
+2026-May-07 15:51:15.226363
+#11 28.58 > pnpm run typecheck:libs && pnpm -r --filter "./artifacts/**" --filter "./scripts" --if-present run typecheck
+2026-May-07 15:51:15.226363
+#11 28.58
+2026-May-07 15:51:15.226363
+#11 29.03
+2026-May-07 15:51:15.226363
+#11 29.03 > workspace@0.0.0 typecheck:libs /app
+2026-May-07 15:51:15.226363
+#11 29.03 > tsc --build
+2026-May-07 15:51:15.226363
+#11 29.03
+2026-May-07 15:51:15.226363
+#11 35.75 Scope: 4 of 9 workspace projects
+2026-May-07 15:51:15.226363
+#11 35.77 artifacts/api-server typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:51:15.226363
+#11 35.77 artifacts/iconvault typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:51:15.226363
+#11 35.77 artifacts/mockup-sandbox typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:51:15.226363
+#11 35.77 scripts typecheck$ tsc -p tsconfig.json --noEmit
+2026-May-07 15:51:15.226363
+#11 40.48 scripts typecheck: Done
+2026-May-07 15:51:15.226363
+#11 47.02 artifacts/api-server typecheck: src/routes/admin-users.ts(19,12): error TS2769: No overload matches this call.
+2026-May-07 15:51:15.226363
+#11 47.02 artifacts/api-server typecheck:   Overload 1 of 3, '(left: PgColumn<{ name: "id"; tableName: "profiles"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>, right: string | SQLWrapper): SQL<...>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:     Argument of type 'string | string[]' is not assignable to parameter of type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:       Type 'string[]' is not assignable to type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:   Overload 2 of 3, '(left: Aliased<string | string[]>, right: string | string[] | SQLWrapper): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "profiles"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'Aliased<string | string[]>'.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:       Type 'PgColumn<{ name: "id"; tableName: "profiles"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is missing the following properties from type 'Aliased<string | string[]>': sql, fieldAlias
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:   Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "profiles"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: false; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'never'.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck: src/routes/codes.ts(55,12): error TS2769: No overload matches this call.
+2026-May-07 15:51:15.226363
+#11 47.03 artifacts/api-server typecheck:   Overload 1 of 3, '(left: PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>, right: string | SQLWrapper): SQL<...>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:     Argument of type 'string | string[]' is not assignable to parameter of type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:       Type 'string[]' is not assignable to type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:   Overload 2 of 3, '(left: Aliased<string | string[]>, right: string | string[] | SQLWrapper): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'Aliased<string | string[]>'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:       Type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is missing the following properties from type 'Aliased<string | string[]>': sql, fieldAlias
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:   Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'never'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck: src/routes/codes.ts(64,43): error TS2769: No overload matches this call.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:   Overload 1 of 3, '(left: PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>, right: string | SQLWrapper): SQL<...>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:     Argument of type 'string | string[]' is not assignable to parameter of type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:       Type 'string[]' is not assignable to type 'string | SQLWrapper'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:   Overload 2 of 3, '(left: Aliased<string | string[]>, right: string | string[] | SQLWrapper): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'Aliased<string | string[]>'.
+2026-May-07 15:51:15.226363
+#11 47.04 artifacts/api-server typecheck:       Type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is missing the following properties from type 'Aliased<string | string[]>': sql, fieldAlias
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck:   Overload 3 of 3, '(left: never, right: unknown): SQL<unknown>', gave the following error.
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck:     Argument of type 'PgColumn<{ name: "id"; tableName: "redeem_codes"; dataType: "string"; columnType: "PgUUID"; data: string; driverParam: string; notNull: true; hasDefault: true; isPrimaryKey: true; isAutoincrement: false; ... 4 more ...; generated: undefined; }, {}, {}>' is not assignable to parameter of type 'never'.
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck: src/routes/icons.ts(234,23): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck:   Type 'string[]' is not assignable to type 'string'.
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck: src/routes/icons.ts(269,23): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+2026-May-07 15:51:15.226363
+#11 47.05 artifacts/api-server typecheck:   Type 'string[]' is not assignable to type 'string'.
+2026-May-07 15:51:15.226363
+#11 47.28 artifacts/api-server typecheck: Failed
+2026-May-07 15:51:15.226363
+#11 47.29 /app/artifacts/api-server:
+2026-May-07 15:51:15.226363
+#11 47.29  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 typecheck: `tsc -p tsconfig.json --noEmit`
+2026-May-07 15:51:15.226363
+#11 47.29 Exit status 2
+2026-May-07 15:51:15.226363
+#11 47.35  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:51:15.226363
+#11 47.38  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:51:15.226363
+#11 ERROR: process "/bin/bash -ol pipefail -c pnpm install --no-frozen-lockfile && pnpm run build" did not complete successfully: exit code: 2
+2026-May-07 15:51:15.226363
+------
+2026-May-07 15:51:15.226363
+> [ 7/11] RUN  pnpm install --no-frozen-lockfile && pnpm run build:
+2026-May-07 15:51:15.226363
+47.05 artifacts/api-server typecheck: src/routes/icons.ts(234,23): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+2026-May-07 15:51:15.226363
+47.05 artifacts/api-server typecheck:   Type 'string[]' is not assignable to type 'string'.
+2026-May-07 15:51:15.226363
+47.05 artifacts/api-server typecheck: src/routes/icons.ts(269,23): error TS2345: Argument of type 'string | string[]' is not assignable to parameter of type 'string'.
+2026-May-07 15:51:15.226363
+47.05 artifacts/api-server typecheck:   Type 'string[]' is not assignable to type 'string'.
+2026-May-07 15:51:15.226363
+47.28 artifacts/api-server typecheck: Failed
+2026-May-07 15:51:15.226363
+47.29 /app/artifacts/api-server:
+2026-May-07 15:51:15.226363
+47.29  ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL  @workspace/api-server@0.0.0 typecheck: `tsc -p tsconfig.json --noEmit`
+2026-May-07 15:51:15.226363
+47.29 Exit status 2
+2026-May-07 15:51:15.226363
+47.35  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:51:15.226363
+47.38  ELIFECYCLE  Command failed with exit code 2.
+2026-May-07 15:51:15.226363
+------
+2026-May-07 15:51:15.226363
+2026-May-07 15:51:15.226363
+7 warnings found (use docker --debug to expand):
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SESSION_SECRET") (line 12)
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "SUPABASE_ANON_KEY") (line 12)
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ENV "VITE_SUPABASE_ANON_KEY") (line 12)
+2026-May-07 15:51:15.226363
+- UndefinedVar: Usage of undefined variable '$NIXPACKS_PATH' (line 18)
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SESSION_SECRET") (line 11)
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "SUPABASE_ANON_KEY") (line 11)
+2026-May-07 15:51:15.226363
+- SecretsUsedInArgOrEnv: Do not use ARG or ENV instructions for sensitive data (ARG "VITE_SUPABASE_ANON_KEY") (line 11)
+2026-May-07 15:51:15.226363
+Dockerfile:20
+2026-May-07 15:51:15.226363
+--------------------
+2026-May-07 15:51:15.226363
+18 |     ENV NIXPACKS_PATH=/app/node_modules/.bin:$NIXPACKS_PATH
+2026-May-07 15:51:15.226363
+19 |     COPY . /app/.
+2026-May-07 15:51:15.226363
+20 | >>> RUN  pnpm install --no-frozen-lockfile && pnpm run build
+2026-May-07 15:51:15.226363
+21 |
+2026-May-07 15:51:15.226363
+22 |     # build phase
+2026-May-07 15:51:15.226363
+--------------------
+2026-May-07 15:51:15.226363
+ERROR: failed to build: failed to solve: process "/bin/bash -ol pipefail -c pnpm install --no-frozen-lockfile && pnpm run build" did not complete successfully: exit code: 2
+2026-May-07 15:51:15.226363
+exit status 1
+2026-May-07 15:51:15.373716
+========================================
+2026-May-07 15:51:15.385583
+Deployment failed. Removing the new version of your application.

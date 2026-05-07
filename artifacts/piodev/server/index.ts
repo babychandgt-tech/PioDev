@@ -4121,59 +4121,104 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
   if (hasPnpm) pm = "pnpm";
   else if (hasYarn) pm = "yarn";
 
+  const installCmd = pm === "pnpm" ? "pnpm install --no-frozen-lockfile" : `${pm} install`;
+
   // Check if monorepo
-  const isMonorepo = !!(pkg.workspaces || await rawFetch("pnpm-workspace.yaml", detectedBranch).catch(() => null));
+  const wsYamlRaw = await rawFetch("pnpm-workspace.yaml", detectedBranch).catch(() => null);
+  const isMonorepo = !!(pkg.workspaces || wsYamlRaw);
+
+  function detectFramework(d: Record<string, string>, s: Record<string, string>): { framework: string; port: number } {
+    if (d["next"]) return { framework: "nextjs", port: 3000 };
+    if (d["nuxt"] || d["nuxt3"]) return { framework: "nuxt", port: 3000 };
+    if (d["@sveltejs/kit"] || d["svelte"]) return { framework: "svelte", port: 3000 };
+    if (d["vite"] || d["@vitejs/plugin-react"] || d["@vitejs/plugin-vue"]) return { framework: "vite", port: 4173 };
+    if (d["react-scripts"]) return { framework: "cra", port: 3000 };
+    if (d["express"] || d["fastify"] || d["koa"] || d["hapi"]) return { framework: "node-server", port: 3000 };
+    return { framework: "node", port: 3000 };
+  }
+
+  function buildCmdsForPkg(subPkg: any, filterName: string, pm: string, installCmd: string) {
+    const s = subPkg.scripts || {};
+    const d = { ...(subPkg.dependencies || {}), ...(subPkg.devDependencies || {}) };
+    const { framework, port } = detectFramework(d, s);
+    const buildCommand = s["build"] ? `${installCmd} && ${pm} --filter ${filterName} run build` : installCmd;
+    const startCommand = s["serve"] ? `${pm} --filter ${filterName} run serve`
+      : s["start"] ? `${pm} --filter ${filterName} run start`
+      : s["preview"] ? `${pm} --filter ${filterName} run preview`
+      : "";
+    return { buildCommand, startCommand, framework, port };
+  }
+
+  if (isMonorepo) {
+    // Parse workspace patterns
+    let patterns: string[] = Array.isArray(pkg.workspaces) ? pkg.workspaces : [];
+    if (!patterns.length && wsYamlRaw) {
+      const m = wsYamlRaw.match(/packages:\s*\n((?:\s+-.+\n?)+)/);
+      if (m) patterns = (m[1].match(/-\s+['"]?([^'"]+)['"]?/g) || []).map((x: string) => x.replace(/^-\s+['"]?|['"]?$/g, "").trim());
+    }
+
+    // Scan each workspace base dir via GitHub API
+    const workspacePackages: { name: string; path: string; framework: string; buildCommand: string; startCommand: string; port: number }[] = [];
+    const scanned = new Set<string>();
+
+    for (const pattern of patterns.slice(0, 6)) {
+      const basePath = pattern.replace(/\/\*\*?$/, "").replace(/\*\*?$/, "").replace(/\/$/, "");
+      if (!basePath || scanned.has(basePath)) continue;
+      scanned.add(basePath);
+
+      try {
+        const apiUrl = `https://api.github.com/repos/${owner}/${repo}/contents/${basePath}?ref=${detectedBranch}`;
+        const apiRes = await fetch(apiUrl, { signal: AbortSignal.timeout(6000) });
+        if (!apiRes.ok) continue;
+        const entries: { name: string; type: string }[] = await apiRes.json();
+        const dirs = entries.filter(e => e.type === "dir").slice(0, 12);
+
+        for (const dir of dirs) {
+          const subPath = `${basePath}/${dir.name}`;
+          const subPkgRaw = await rawFetch(`${subPath}/package.json`, detectedBranch).catch(() => null);
+          if (!subPkgRaw) continue;
+          let subPkg: any = {};
+          try { subPkg = JSON.parse(subPkgRaw); } catch { continue; }
+          const filterName = subPkg.name || subPath;
+          const cmds = buildCmdsForPkg(subPkg, filterName, pm, installCmd);
+          workspacePackages.push({ name: subPkg.name || dir.name, path: subPath, ...cmds });
+        }
+      } catch { continue; }
+    }
+
+    res.json({ detected: true, framework: "monorepo", packageManager: pm, buildCommand: "", startCommand: "", port: 3000, isMonorepo: true, workspacePackages, branch: detectedBranch }); return;
+  }
 
   let framework = "node";
   let buildCommand = "";
   let startCommand = "";
   let port = 3000;
 
-  const installCmd = pm === "pnpm" ? "pnpm install --no-frozen-lockfile" : `${pm} install`;
+  const detected = detectFramework(deps, scripts);
+  framework = detected.framework;
+  port = detected.port;
 
-  if (deps["next"]) {
-    framework = "nextjs";
+  if (framework === "nextjs") {
     buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `${pm} start`;
-    port = 3000;
-  } else if (deps["nuxt"] || deps["nuxt3"]) {
-    framework = "nuxt";
+  } else if (framework === "nuxt") {
     buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `node .output/server/index.mjs`;
-    port = 3000;
-  } else if (deps["@sveltejs/kit"] || deps["svelte"]) {
-    framework = "svelte";
+  } else if (framework === "svelte") {
     buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `node build`;
-    port = 3000;
-  } else if (deps["vite"] || deps["@vitejs/plugin-react"] || deps["@vitejs/plugin-vue"]) {
-    framework = "vite";
+  } else if (framework === "vite") {
     buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = scripts["preview"] ? `${pm} run preview` : `${pm} run serve`;
-    port = 4173;
-  } else if (deps["react-scripts"]) {
-    framework = "cra";
+  } else if (framework === "cra") {
     buildCommand = `${installCmd} && ${pm} run build`;
     startCommand = `${pm} start`;
-    port = 3000;
-  } else if (deps["express"] || deps["fastify"] || deps["koa"] || deps["hapi"]) {
-    framework = "node-server";
-    buildCommand = scripts["build"] ? `${installCmd} && ${pm} run build` : installCmd;
-    startCommand = scripts["start"] ? `${pm} start` : "node index.js";
-    port = 3000;
   } else {
-    framework = "node";
     buildCommand = scripts["build"] ? `${installCmd} && ${pm} run build` : installCmd;
     startCommand = scripts["start"] ? `${pm} start` : "node index.js";
-    port = 3000;
   }
 
-  if (isMonorepo) {
-    buildCommand = "";
-    startCommand = "";
-  }
-
-  res.json({ detected: true, framework, packageManager: pm, buildCommand, startCommand, port, isMonorepo, branch: detectedBranch });
+  res.json({ detected: true, framework, packageManager: pm, buildCommand, startCommand, port, isMonorepo: false, branch: detectedBranch });
 });
 
 // GET /api/hosting/status
