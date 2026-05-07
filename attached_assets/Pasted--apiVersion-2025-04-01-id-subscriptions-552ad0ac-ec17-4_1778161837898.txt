@@ -1,0 +1,82 @@
+{
+    "apiVersion": "2025-04-01",
+    "id": "/subscriptions/552ad0ac-ec17-4713-9462-1e36b17f20a9/resourceGroups/rg-piodev/providers/Microsoft.Compute/virtualMachines/vm-piocodes",
+    "name": "vm-piocodes",
+    "type": "microsoft.compute/virtualmachines",
+    "location": "southeastasia",
+    "properties": {
+        "hardwareProfile": {
+            "vmSize": "Standard_B2als_v2"
+        },
+        "provisioningState": "Succeeded",
+        "vmId": "1deb307d-5d2c-4c83-9012-bb74130102aa",
+        "additionalCapabilities": {
+            "hibernationEnabled": false
+        },
+        "storageProfile": {
+            "imageReference": {
+                "publisher": "canonical",
+                "offer": "ubuntu-24_04-lts",
+                "sku": "server",
+                "version": "latest",
+                "exactVersion": "24.04.202605060"
+            },
+            "osDisk": {
+                "osType": "Linux",
+                "name": "vm-piocodes_OsDisk_1_717d3e4c2b76429580a51deb5ad04aeb",
+                "createOption": "FromImage",
+                "caching": "ReadWrite",
+                "managedDisk": {
+                    "storageAccountType": "StandardSSD_LRS",
+                    "id": "/subscriptions/552ad0ac-ec17-4713-9462-1e36b17f20a9/resourceGroups/rg-piodev/providers/Microsoft.Compute/disks/vm-piocodes_OsDisk_1_717d3e4c2b76429580a51deb5ad04aeb"
+                },
+                "deleteOption": "Delete",
+                "diskSizeGB": 30
+            },
+            "dataDisks": [],
+            "diskControllerType": "SCSI"
+        },
+        "osProfile": {
+            "computerName": "vm-piocodes",
+            "adminUsername": "piocodes",
+            "linuxConfiguration": {
+                "disablePasswordAuthentication": true,
+                "ssh": {
+                    "publicKeys": [
+                        {
+                            "path": "/home/piocodes/.ssh/authorized_keys",
+                            "keyData": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGW1dHn1QsagzfuysGTwsAXXqCTKkViJUW7UnqryALOW generated-by-azure"
+                        }
+                    ]
+                },
+                "provisionVMAgent": true,
+                "patchSettings": {
+                    "patchMode": "ImageDefault",
+                    "assessmentMode": "AutomaticByPlatform"
+                }
+            },
+            "secrets": [],
+            "allowExtensionOperations": true,
+            "requireGuestProvisionSignal": true
+        },
+        "securityProfile": {
+            "uefiSettings": {
+                "secureBootEnabled": true,
+                "vTpmEnabled": true
+            },
+            "securityType": "TrustedLaunch"
+        },
+        "networkProfile": {
+            "networkInterfaces": [
+                {
+                    "id": "/subscriptions/552ad0ac-ec17-4713-9462-1e36b17f20a9/resourceGroups/rg-piodev/providers/Microsoft.Network/networkInterfaces/vm-piocodes956",
+                    "properties": {
+                        "deleteOption": "Delete"
+                    }
+                }
+            ]
+        },
+        "timeCreated": "2026-05-07T13:37:54.273Z"
+    },
+    "etag": "\"1\""
+}
