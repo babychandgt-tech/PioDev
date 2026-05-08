@@ -225,6 +225,7 @@ export default function HostingPage() {
   const [createMode, setCreateMode] = useState<CreateMode>("repo");
   const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([]);
   const [reposLoading, setReposLoading] = useState(false);
+  const [reposError, setReposError] = useState<string | null>(null);
   const [repoSearch, setRepoSearch] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<GithubRepo | null>(null);
 
@@ -422,20 +423,26 @@ export default function HostingPage() {
     setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
     setSelectedRepo(null);
     setRepoSearch("");
+    setReposError(null);
   };
 
   const loadGithubRepos = useCallback(async () => {
-    if (!githubStatus?.connected) return;
     setReposLoading(true);
+    setReposError(null);
     try {
       const res = await authedFetch("/api/hosting/github/repos");
+      const data = await res.json();
       if (res.ok) {
-        const data = await res.json();
         setGithubRepos(data.repos ?? []);
+      } else {
+        setReposError(data.error ?? "Gagal memuat repo");
       }
-    } catch {}
-    finally { setReposLoading(false); }
-  }, [githubStatus?.connected]);
+    } catch {
+      setReposError("Gagal terhubung ke server");
+    } finally {
+      setReposLoading(false);
+    }
+  }, []);
 
   const selectRepo = useCallback((repo: GithubRepo) => {
     setSelectedRepo(repo);
@@ -637,10 +644,10 @@ export default function HostingPage() {
     if (!showCreate) return;
     const defaultMode: CreateMode = githubStatus?.connected ? "repo" : "manual";
     setCreateMode(defaultMode);
-    if (githubStatus?.connected && defaultMode === "repo" && githubRepos.length === 0) {
+    if (githubStatus?.connected && githubRepos.length === 0) {
       loadGithubRepos();
     }
-  }, [showCreate]);
+  }, [showCreate, githubStatus?.connected]);
 
   const handleGithubConnect = async () => {
     setConnectingGithub(true);
@@ -1559,6 +1566,18 @@ export default function HostingPage() {
                         <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Memuat repo...
+                        </div>
+                      ) : reposError ? (
+                        <div className="flex flex-col items-center justify-center py-8 gap-3 text-center px-4">
+                          <AlertCircle className="w-5 h-5 text-red-400/60" />
+                          <p className="text-xs text-red-400">{reposError}</p>
+                          <button
+                            type="button"
+                            onClick={loadGithubRepos}
+                            className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+                          >
+                            <Loader2 className="w-3 h-3" /> Coba lagi
+                          </button>
                         </div>
                       ) : githubRepos.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
