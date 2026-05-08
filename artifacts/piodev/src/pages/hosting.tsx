@@ -6,12 +6,12 @@ import {
   Loader2, AlertCircle, CheckCircle2, Clock, X, ChevronRight,
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
   KeyRound, Eye, EyeOff, Settings, LayoutDashboard, History,
-  ArrowUpRight, GitCommit, Package,
+  ArrowUpRight, GitCommit, Package, Github, Link, Unlink,
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
 import { useChat } from "@/hooks/use-chat";
 import { ChatSidebar } from "@/components/chat-sidebar";
-import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import {
@@ -34,8 +34,15 @@ interface HostingProject {
   subdomain: string | null;
   public_url: string | null;
   status: ProjectStatus;
+  auto_deploy: boolean;
+  github_webhook_id: number | null;
   created_at: string;
   updated_at: string;
+}
+
+interface GithubStatus {
+  connected: boolean;
+  username?: string | null;
 }
 
 interface Deployment {
@@ -171,6 +178,10 @@ export default function HostingPage() {
   const [editForm, setEditForm] = useState({ build_command: "", start_command: "", git_branch: "main", port: "3000" });
   const [savingSettings, setSavingSettings] = useState(false);
 
+  const [githubStatus, setGithubStatus] = useState<GithubStatus | null>(null);
+  const [togglingAutoDeploy, setTogglingAutoDeploy] = useState(false);
+  const [connectingGithub, setConnectingGithub] = useState(false);
+
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const logsPollRef = useRef<NodeJS.Timeout | null>(null);
@@ -178,6 +189,36 @@ export default function HostingPage() {
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate("/login");
   }, [authLoading, isAuthenticated]);
+
+  // Load GitHub connection status
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    authedFetch("/api/hosting/github/status").then(r => r.json()).then(setGithubStatus).catch(() => {});
+  }, [isAuthenticated]);
+
+  // Handle OAuth redirect back from GitHub (capture provider_token and store it)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const pending = localStorage.getItem("gh_link_pending");
+    if (!pending) return;
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const token = (session as any)?.provider_token;
+      if (token) {
+        localStorage.removeItem("gh_link_pending");
+        authedFetch("/api/hosting/github/connect", {
+          method: "POST",
+          body: JSON.stringify({ provider_token: token }),
+        }).then(r => r.json()).then(data => {
+          if (data.connected) {
+            setGithubStatus({ connected: true, username: data.username });
+            toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
+          }
+        }).catch(() => {});
+      } else {
+        localStorage.removeItem("gh_link_pending");
+      }
+    });
+  }, [isAuthenticated]);
 
   const runDetect = useCallback(async (url: string, branch: string) => {
     if (!url || !url.includes("github.com")) return;
@@ -516,6 +557,47 @@ export default function HostingPage() {
     setTimeout(() => setCopiedLogs(false), 2000);
   };
 
+  const handleGithubConnect = async () => {
+    setConnectingGithub(true);
+    try {
+      localStorage.setItem("gh_link_pending", "1");
+      await supabase.auth.linkIdentity({
+        provider: "github" as any,
+        options: {
+          scopes: "repo admin:repo_hook",
+          redirectTo: window.location.href,
+        } as any,
+      });
+    } catch (e) {
+      localStorage.removeItem("gh_link_pending");
+      toast({ title: "Gagal menghubungkan GitHub", description: (e as Error).message, variant: "destructive" });
+      setConnectingGithub(false);
+    }
+  };
+
+  const handleGithubDisconnect = async () => {
+    await authedFetch("/api/hosting/github/disconnect", { method: "DELETE" });
+    setGithubStatus({ connected: false, username: null });
+    toast({ title: "GitHub diputuskan" });
+  };
+
+  const handleToggleAutoDeploy = async (project: HostingProject, enabled: boolean) => {
+    setTogglingAutoDeploy(true);
+    try {
+      const res = await authedFetch(`/api/hosting/projects/${project.id}/auto-deploy`, {
+        method: "POST",
+        body: JSON.stringify({ enabled }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast({ title: "Gagal", description: data.error, variant: "destructive" }); return; }
+      setSelectedProject(prev => prev ? { ...prev, auto_deploy: enabled } : prev);
+      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, auto_deploy: enabled } : p));
+      toast({ title: enabled ? "Auto Deploy aktif!" : "Auto Deploy dinonaktifkan" });
+    } finally {
+      setTogglingAutoDeploy(false);
+    }
+  };
+
   const sidebar = user ? (
     <ChatSidebar
       user={user}
@@ -618,6 +700,40 @@ export default function HostingPage() {
               Baru
             </button>
           </div>
+
+          {/* GitHub connect banner */}
+          {githubStatus !== null && (
+            githubStatus.connected ? (
+              <div className="mx-3 mt-3 flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                <Github className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <p className="text-[11px] text-muted-foreground flex-1 min-w-0 truncate">
+                  <span className="text-foreground font-medium">@{githubStatus.username}</span>
+                </p>
+                <button
+                  onClick={handleGithubDisconnect}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors shrink-0 flex items-center gap-1"
+                >
+                  <Unlink className="w-3 h-3" /> Putuskan
+                </button>
+              </div>
+            ) : (
+              <div className="mx-3 mt-3 flex items-center gap-3 p-3 rounded-lg bg-zinc-900/50 border border-border">
+                <Github className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium">Hubungkan GitHub</p>
+                  <p className="text-[11px] text-muted-foreground">Aktifkan Auto Deploy saat push</p>
+                </div>
+                <button
+                  onClick={handleGithubConnect}
+                  disabled={connectingGithub}
+                  className="text-xs px-2.5 py-1 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 flex items-center gap-1"
+                >
+                  {connectingGithub ? <Loader2 className="w-3 h-3 animate-spin" /> : <Link className="w-3 h-3" />}
+                  Hubungkan
+                </button>
+              </div>
+            )
+          )}
 
           {/* Coolify warning */}
           {hostingStatus && !hostingStatus.coolifyReachable && (
@@ -1132,6 +1248,45 @@ export default function HostingPage() {
 
                         <div className="p-3 rounded-lg bg-amber-500/5 border border-amber-500/20 text-xs text-amber-400">
                           Setelah menyimpan settings, lakukan Deploy ulang agar perubahan diterapkan.
+                        </div>
+
+                        {/* Auto Deploy toggle */}
+                        <div className="space-y-2">
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Auto Deploy</p>
+                          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-accent/10">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                                <Zap className="w-4 h-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium">Deploy otomatis</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">Trigger saat push ke branch <span className="font-mono">{selectedProject.git_branch || "main"}</span></p>
+                              </div>
+                            </div>
+                            {!githubStatus?.connected ? (
+                              <span className="text-[11px] text-muted-foreground italic">GitHub belum terhubung</span>
+                            ) : (
+                              <button
+                                onClick={() => handleToggleAutoDeploy(selectedProject, !selectedProject.auto_deploy)}
+                                disabled={togglingAutoDeploy}
+                                className={cn(
+                                  "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 shrink-0",
+                                  selectedProject.auto_deploy ? "bg-primary" : "bg-muted"
+                                )}
+                              >
+                                <span className={cn(
+                                  "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform",
+                                  selectedProject.auto_deploy ? "translate-x-4" : "translate-x-0.5"
+                                )} />
+                              </button>
+                            )}
+                          </div>
+                          {selectedProject.auto_deploy && (
+                            <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-400">
+                              <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                              <span>Auto Deploy aktif — setiap push ke branch <span className="font-mono">{selectedProject.git_branch || "main"}</span> akan memicu deployment otomatis.</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Danger zone */}

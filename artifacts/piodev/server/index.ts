@@ -271,7 +271,10 @@ Promise.all([
 ]).catch((e) => console.warn("[storage] bucket setup error:", (e as Error).message));
 
 const app = express();
-app.use(express.json({ limit: "25mb" }));
+app.use(express.json({
+  limit: "25mb",
+  verify: (req: any, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(express.raw({
   type: (req: any) => {
     const ct = (req.headers?.["content-type"] || "");
@@ -4009,6 +4012,12 @@ const COOLIFY_API_URL = (process.env.COOLIFY_API_URL ?? "").replace(/\/$/, "");
 const COOLIFY_API_TOKEN = process.env.COOLIFY_API_TOKEN ?? "";
 const COOLIFY_BASE_DOMAIN = process.env.COOLIFY_BASE_DOMAIN ?? "app.pio.codes";
 const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 5, pro: 20 };
+const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+const SITE_URL = process.env.SITE_URL ?? (
+  IS_PRODUCTION
+    ? "https://pio.codes"
+    : `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost"}`
+);
 
 let _coolifyServerUuid: string | null = null;
 let _coolifyProjectUuid: string | null = null;
@@ -4794,6 +4803,198 @@ app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
     console.warn("[Hosting] Logs fetch error:", (e as Error).message);
   }
   res.json({ logs: "", deploymentId: latestDeploy.id, status: latestDeploy.status });
+});
+
+// ── GITHUB INTEGRATION (Auto Deploy) ──────────────────────────────────────────
+
+// GET /api/hosting/github/status
+app.get("/api/hosting/github/status", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: profile } = await supabaseAdmin
+    .from("profiles").select("github_username, github_access_token").eq("id", userId).single();
+  res.json({
+    connected: !!(profile?.github_access_token),
+    username: profile?.github_username ?? null,
+  });
+});
+
+// POST /api/hosting/github/connect — store provider_token after OAuth link
+app.post("/api/hosting/github/connect", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { provider_token } = req.body;
+  if (!provider_token) { res.status(400).json({ error: "provider_token required" }); return; }
+  try {
+    const ghRes = await fetch("https://api.github.com/user", {
+      headers: { Authorization: `token ${provider_token}`, "User-Agent": "PioCode/1.0" },
+    });
+    if (!ghRes.ok) { res.status(400).json({ error: "Token GitHub tidak valid" }); return; }
+    const ghUser = await ghRes.json() as { login: string; id: number };
+    await supabaseAdmin.from("profiles").update({
+      github_access_token: provider_token,
+      github_username: ghUser.login,
+    }).eq("id", userId);
+    res.json({ connected: true, username: ghUser.login });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
+// DELETE /api/hosting/github/disconnect
+app.delete("/api/hosting/github/disconnect", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  await supabaseAdmin.from("profiles").update({
+    github_access_token: null,
+    github_username: null,
+  }).eq("id", userId);
+  res.json({ ok: true });
+});
+
+// POST /api/hosting/projects/:id/auto-deploy — toggle auto-deploy on/off
+app.post("/api/hosting/projects/:id/auto-deploy", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { enabled } = req.body as { enabled: boolean };
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const { data: profile } = await supabaseAdmin
+    .from("profiles").select("github_access_token").eq("id", userId).single();
+  if (!profile?.github_access_token) {
+    res.status(400).json({ error: "GitHub belum dihubungkan. Hubungkan akun GitHub terlebih dahulu." }); return;
+  }
+  const match = project.git_url.match(/github\.com[/:]+([\w.-]+)\/([\w.-]+?)(\.git)?$/);
+  if (!match) { res.status(400).json({ error: "URL repo bukan GitHub yang valid" }); return; }
+  const [, owner, repo] = match;
+  const token = profile.github_access_token;
+  const webhookUrl = `${SITE_URL}/api/hosting/webhook/github`;
+
+  if (enabled) {
+    const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/hooks`, {
+      method: "POST",
+      headers: {
+        Authorization: `token ${token}`,
+        "User-Agent": "PioCode/1.0",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name: "web",
+        active: true,
+        events: ["push"],
+        config: {
+          url: webhookUrl,
+          content_type: "json",
+          secret: GITHUB_WEBHOOK_SECRET,
+          insecure_ssl: "0",
+        },
+      }),
+    });
+    if (!ghRes.ok) {
+      const errData = await ghRes.json() as { message?: string; errors?: { message: string }[] };
+      const msg = errData.errors?.[0]?.message ?? errData.message ?? "Gagal mendaftar webhook ke GitHub";
+      res.status(400).json({ error: msg }); return;
+    }
+    const hookData = await ghRes.json() as { id: number };
+    await supabaseAdmin.from("hosting_projects").update({
+      auto_deploy: true,
+      github_webhook_id: hookData.id,
+    }).eq("id", project.id);
+    console.log(`[GitHub] Webhook registered id=${hookData.id} for ${owner}/${repo} → project ${project.id}`);
+    res.json({ auto_deploy: true, webhook_id: hookData.id });
+  } else {
+    if (project.github_webhook_id) {
+      await fetch(`https://api.github.com/repos/${owner}/${repo}/hooks/${project.github_webhook_id}`, {
+        method: "DELETE",
+        headers: { Authorization: `token ${token}`, "User-Agent": "PioCode/1.0" },
+      }).catch((e) => console.warn("[GitHub] Delete webhook error:", (e as Error).message));
+    }
+    await supabaseAdmin.from("hosting_projects").update({
+      auto_deploy: false,
+      github_webhook_id: null,
+    }).eq("id", project.id);
+    res.json({ auto_deploy: false });
+  }
+});
+
+// POST /api/hosting/webhook/github — receive GitHub push events (no auth, HMAC-verified)
+app.post("/api/hosting/webhook/github", async (req, res) => {
+  // Verify HMAC signature from X-Hub-Signature-256 header
+  const sig = req.headers["x-hub-signature-256"] as string | undefined;
+  if (GITHUB_WEBHOOK_SECRET && sig) {
+    const rawBody: Buffer = (req as any).rawBody ?? Buffer.from(JSON.stringify(req.body));
+    const expected = "sha256=" + crypto.createHmac("sha256", GITHUB_WEBHOOK_SECRET).update(rawBody).digest("hex");
+    try {
+      if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
+        res.status(401).json({ error: "Invalid signature" }); return;
+      }
+    } catch { res.status(401).json({ error: "Signature mismatch" }); return; }
+  }
+
+  const event = req.headers["x-github-event"] as string;
+  if (event !== "push") { res.json({ ok: true, skipped: `event=${event}` }); return; }
+
+  const payload = req.body as {
+    ref?: string;
+    repository?: { clone_url?: string; html_url?: string; full_name?: string };
+    head_commit?: { id?: string; message?: string };
+  };
+  const pushedBranch = payload.ref?.replace("refs/heads/", "");
+  const repoUrl = payload.repository?.clone_url ?? payload.repository?.html_url ?? "";
+  if (!pushedBranch || !repoUrl) { res.json({ ok: true, skipped: "missing ref or repo" }); return; }
+
+  const normalizeUrl = (u: string) => u.replace(/\.git$/, "").replace(/^http:/, "https:").toLowerCase();
+  const repoNorm = normalizeUrl(repoUrl);
+
+  console.log(`[GitHub Webhook] push to ${repoUrl} branch ${pushedBranch}`);
+
+  // Find all projects with auto_deploy=true matching this repo+branch
+  const { data: allAutoProjects } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("auto_deploy", true).eq("git_branch", pushedBranch);
+  const matching = (allAutoProjects ?? []).filter(p => normalizeUrl(p.git_url) === repoNorm);
+  if (!matching.length) { res.json({ ok: true, triggered: 0, reason: "no matching projects" }); return; }
+
+  // Respond immediately to GitHub (must be within 10s)
+  res.json({ ok: true, triggered: matching.length });
+
+  // Trigger deploy for each matching project asynchronously
+  for (const project of matching) {
+    (async () => {
+      try {
+        const commitRef = payload.head_commit?.id?.slice(0, 7) ?? "auto";
+        const { data: deployment } = await supabaseAdmin.from("hosting_deployments").insert({
+          project_id: project.id,
+          user_id: project.user_id,
+          status: "queued",
+          triggered_by: `push:${commitRef}`,
+        }).select().single();
+        await supabaseAdmin.from("hosting_projects").update({
+          status: "deploying", updated_at: new Date().toISOString(),
+        }).eq("id", project.id);
+
+        if (!COOLIFY_API_URL || !COOLIFY_API_TOKEN || !project.coolify_app_uuid) return;
+        const deployPort = project.port || 3000;
+        const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
+        const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
+        const deployStartCmd = project.start_command?.trim() || "node server/index.js";
+        const dockerfile = generateNodeDockerfile(project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
+
+        await syncCoolifyEnvVars(project.coolify_app_uuid, deployPort, deployEnvVars).catch(() => {});
+        // Update dockerfile on Coolify app
+        await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+          method: "PATCH", body: JSON.stringify({ dockerfile }),
+        }).catch(() => {});
+        const deployRes = await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`);
+        const deployData = await deployRes.json() as { deployments?: { deployment_uuid?: string }[]; deployment_uuid?: string };
+        const coolifyDeploymentUuid = deployData.deployments?.[0]?.deployment_uuid ?? deployData.deployment_uuid;
+        if (coolifyDeploymentUuid && deployment) {
+          await supabaseAdmin.from("hosting_deployments").update({
+            coolify_deployment_uuid: coolifyDeploymentUuid, status: "in_progress",
+          }).eq("id", deployment.id);
+        }
+        console.log(`[GitHub Webhook] Triggered deploy for project ${project.id} (commit ${commitRef})`);
+      } catch (e) {
+        console.warn(`[GitHub Webhook] Deploy error for project ${project.id}:`, (e as Error).message);
+      }
+    })();
+  }
 });
 
 // Serve static files in production (dist/public built by Vite)
