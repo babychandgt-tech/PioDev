@@ -4880,6 +4880,29 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
   res.json({ project: { ...project, ...updates } });
 });
 
+// POST /api/hosting/projects/:id/restart — restart container without rebuilding
+app.post("/api/hosting/projects/:id/restart", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (!project.coolify_app_uuid || !COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
+    res.status(400).json({ error: "Coolify belum dikonfigurasi atau UUID belum tersedia" }); return;
+  }
+  try {
+    const r = await coolifyFetch(`/applications/${project.coolify_app_uuid}/restart`, { method: "POST" });
+    if (!r.ok) {
+      const errText = await r.text().catch(() => "unknown");
+      res.status(500).json({ error: `Gagal restart container: ${errText}` }); return;
+    }
+    await supabaseAdmin.from("hosting_projects").update({ updated_at: new Date().toISOString() }).eq("id", project.id);
+    console.log(`[Hosting] Restarted app ${project.coolify_app_uuid} for project ${project.id}`);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 // GET /api/hosting/projects/:id/sync
 app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
   const userId = (req as any).userId;

@@ -7,7 +7,7 @@ import {
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
   KeyRound, Eye, EyeOff, Settings, LayoutDashboard, History,
   ArrowUpRight, GitCommit, Package, Github, Link, Unlink,
-  Search, Lock, Star, GitFork, Activity, ArrowDown,
+  Search, Lock, Star, GitFork, Activity, ArrowDown, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
@@ -218,6 +218,7 @@ export default function HostingPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [deploying, setDeploying] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
+  const [restarting, setRestarting] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HostingProject | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -253,6 +254,8 @@ export default function HostingPage() {
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const logsPollRef = useRef<NodeJS.Timeout | null>(null);
+  const bgPollRef = useRef<NodeJS.Timeout | null>(null);
+  const prevStatusesRef = useRef<Record<string, ProjectStatus>>({});
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) navigate("/login");
@@ -351,7 +354,10 @@ export default function HostingPage() {
       if (statusRes.ok) setHostingStatus(await statusRes.json());
       if (projectsRes.ok) {
         const d = await projectsRes.json();
-        setProjects(d.projects ?? []);
+        const loaded: HostingProject[] = d.projects ?? [];
+        setProjects(loaded);
+        // Seed prevStatusesRef so first bg-poll doesn't fire false notifications
+        loaded.forEach(p => { prevStatusesRef.current[p.id] = p.status; });
       }
     } finally {
       setLoading(false);
@@ -386,6 +392,47 @@ export default function HostingPage() {
     return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projects.filter(p => p.status === "deploying").map(p => p.id).join(",")]);
+
+  // Background realtime poller — refresh all projects every 20s so status stays fresh without manual Sync
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const poll = async () => {
+      try {
+        const res = await authedFetch("/api/hosting/projects");
+        if (!res.ok) return;
+        const data = await res.json();
+        const updated: HostingProject[] = data.projects ?? [];
+        setProjects(prev => {
+          const prevMap: Record<string, HostingProject> = {};
+          prev.forEach(p => { prevMap[p.id] = p; });
+          // Detect status transitions and fire toasts
+          updated.forEach(p => {
+            const prevStatus = prevStatusesRef.current[p.id];
+            if (prevStatus === "deploying" && p.status === "running") {
+              toast({ title: `✅ ${p.name} berhasil di-deploy`, description: "Aplikasi sedang berjalan." });
+            } else if (prevStatus === "deploying" && p.status === "failed") {
+              toast({ title: `❌ ${p.name} gagal di-deploy`, description: "Buka tab Logs untuk melihat detail error.", variant: "destructive" });
+            }
+            prevStatusesRef.current[p.id] = p.status;
+          });
+          // Merge: preserve local state for deploying projects (fast poller owns those)
+          return updated.map(fresh => {
+            const local = prevMap[fresh.id];
+            if (local?.status === "deploying") return local;
+            return fresh;
+          });
+        });
+        setSelectedProject(prev => {
+          if (!prev) return prev;
+          const fresh = updated.find(p => p.id === prev.id);
+          if (!fresh || fresh.status === "deploying") return prev;
+          return fresh;
+        });
+      } catch {}
+    };
+    bgPollRef.current = setInterval(poll, 20000);
+    return () => { if (bgPollRef.current) { clearInterval(bgPollRef.current); bgPollRef.current = null; } };
+  }, [isAuthenticated]);
 
   const loadDetail = useCallback(async (project: HostingProject) => {
     setDetailLoading(true);
@@ -627,10 +674,26 @@ export default function HostingPage() {
       if (res.ok && data.project) {
         setProjects(prev => prev.map(p => p.id === project.id ? data.project : p));
         if (selectedProject?.id === project.id) setSelectedProject(data.project);
+        prevStatusesRef.current[project.id] = data.project.status;
         toast({ title: "Status disinkronkan" });
       }
     } finally {
       setSyncing(null);
+    }
+  };
+
+  const handleRestart = async (project: HostingProject) => {
+    setRestarting(project.id);
+    try {
+      const res = await authedFetch(`/api/hosting/projects/${project.id}/restart`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Gagal restart", description: data.error, variant: "destructive" });
+        return;
+      }
+      toast({ title: `${project.name} sedang direstart`, description: "Container akan kembali online dalam beberapa detik." });
+    } finally {
+      setRestarting(null);
     }
   };
 
@@ -1206,6 +1269,14 @@ export default function HostingPage() {
                           >
                             <Terminal className="w-4 h-4" />
                             Logs
+                          </button>
+                          <button
+                            onClick={() => handleRestart(selectedProject)}
+                            disabled={restarting === selectedProject.id || selectedProject.status === "deploying" || !selectedProject.coolify_app_uuid}
+                            className="p-2.5 rounded-xl border border-border hover:bg-accent transition-colors disabled:opacity-50"
+                            title="Restart container (tanpa rebuild)"
+                          >
+                            <RotateCcw className={cn("w-4 h-4", restarting === selectedProject.id && "animate-spin")} />
                           </button>
                           <button
                             onClick={() => handleSync(selectedProject)}
