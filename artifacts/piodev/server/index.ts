@@ -4021,8 +4021,15 @@ const SITE_URL = process.env.SITE_URL ?? (
     : `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost"}`
 );
 
+function getAppBaseUrl(): string {
+  if (IS_PRODUCTION) return SITE_URL;
+  const devDomain = process.env.REPLIT_DEV_DOMAIN;
+  if (devDomain) return `https://${devDomain}:${process.env.PORT ?? 5000}`;
+  return SITE_URL;
+}
+
 function getGithubCallbackUrl(): string {
-  return `${SITE_URL}/api/hosting/github/oauth/callback`;
+  return `${getAppBaseUrl()}/api/hosting/github/oauth/callback`;
 }
 
 const githubOAuthStates = new Map<string, { userId: string; ts: number }>();
@@ -4850,7 +4857,7 @@ app.get("/api/hosting/github/oauth/start", requireAuth, async (req, res) => {
 // GET /api/hosting/github/oauth/callback — GitHub redirects here after authorization
 app.get("/api/hosting/github/oauth/callback", async (req, res) => {
   const { code, state, error } = req.query as Record<string, string>;
-  const redirectBase = SITE_URL;
+  const redirectBase = getAppBaseUrl();
 
   if (error || !code || !state) {
     res.redirect(`${redirectBase}/hosting?github_error=${encodeURIComponent(error ?? "cancelled")}`);
