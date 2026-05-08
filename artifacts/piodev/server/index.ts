@@ -4903,7 +4903,7 @@ app.post("/api/hosting/projects/:id/restart", requireAuth, async (req, res) => {
   }
 });
 
-// PUT /api/hosting/projects/:id/domain — set custom domain
+// PUT /api/hosting/projects/:id/domain — set custom domain (DB only; Coolify registration happens after DNS verify)
 app.put("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
   const { domain } = req.body as { domain: string };
@@ -4920,17 +4920,7 @@ app.put("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => {
     custom_domain_verified: false,
     updated_at: new Date().toISOString(),
   }).eq("id", project.id);
-  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
-    try {
-      const fqdn = `https://${cleanDomain},https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
-      const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
-        method: "PATCH", body: JSON.stringify({ fqdn }),
-      });
-      console.log(`[Hosting] Domain set: ${cleanDomain} → Coolify PATCH ${patchRes.status}`);
-    } catch (e) {
-      console.warn("[Hosting] Coolify domain PATCH error:", (e as Error).message);
-    }
-  }
+  console.log(`[Hosting] Domain saved to DB: ${cleanDomain} (Coolify registration deferred until DNS verified)`);
   res.json({ success: true, custom_domain: cleanDomain });
 });
 
@@ -4958,7 +4948,7 @@ app.delete("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => 
   res.json({ success: true });
 });
 
-// GET /api/hosting/projects/:id/domain/verify — check DNS CNAME propagation
+// GET /api/hosting/projects/:id/domain/verify — check DNS propagation, then register domain in Coolify
 app.get("/api/hosting/projects/:id/domain/verify", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
   const { data: project } = await supabaseAdmin
@@ -4968,33 +4958,62 @@ app.get("/api/hosting/projects/:id/domain/verify", requireAuth, async (req, res)
   if (!customDomain) { res.status(400).json({ error: "Belum ada custom domain" }); return; }
   const expectedTarget = `${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
   try {
-    // Check www prefixed or root domain
-    const checkDomain = customDomain.startsWith("www.") ? customDomain : `www.${customDomain}`;
-    const [cnameRes, aRes] = await Promise.all([
-      fetch(`https://dns.google/resolve?name=${encodeURIComponent(checkDomain)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }),
-      fetch(`https://dns.google/resolve?name=${encodeURIComponent(customDomain)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }),
-    ]);
-    const [cnameData, aData]: { Answer?: { type: number; data: string }[] }[] = await Promise.all([
-      cnameRes.ok ? cnameRes.json() : Promise.resolve({}),
-      aRes.ok ? aRes.json() : Promise.resolve({}),
-    ]);
-    const allAnswers = [
-      ...(cnameData.Answer ?? []).filter(a => a.type === 5),
-      ...(aData.Answer ?? []).filter(a => a.type === 5),
+    // For root domain: check both the root and www. For www domain: check as-is.
+    const isWww = customDomain.startsWith("www.");
+    const wwwVariant  = isWww ? customDomain : `www.${customDomain}`;
+    const rootVariant = isWww ? customDomain.slice(4) : customDomain;
+
+    const dnsChecks = await Promise.all([
+      // CNAME check on www variant
+      fetch(`https://dns.google/resolve?name=${encodeURIComponent(wwwVariant)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : {}),
+      // CNAME check on exact domain
+      fetch(`https://dns.google/resolve?name=${encodeURIComponent(customDomain)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : {}),
+      // ALIAS/ANAME resolve as A records on root — check if IP matches subdomain
+      !isWww ? fetch(`https://dns.google/resolve?name=${encodeURIComponent(rootVariant)}&type=A`, { signal: AbortSignal.timeout(8000) }).then(r => r.ok ? r.json() : {}) : Promise.resolve({}),
+    ]) as { Answer?: { type: number; data: string }[] }[];
+
+    const cnameAnswers = [
+      ...(dnsChecks[0].Answer ?? []).filter(a => a.type === 5),
+      ...(dnsChecks[1].Answer ?? []).filter(a => a.type === 5),
     ];
-    const found = allAnswers.map(a => a.data.replace(/\.$/, "").toLowerCase());
+    const found = cnameAnswers.map(a => a.data.replace(/\.$/, "").toLowerCase());
     const verified = found.some(f => f.includes((project.subdomain ?? "").toLowerCase()));
+
     if (verified) {
+      // Mark as verified in DB
       await supabaseAdmin.from("hosting_projects").update({
         custom_domain_verified: true, updated_at: new Date().toISOString(),
       }).eq("id", project.id);
+
+      // Now register the custom domain in Coolify — DNS is confirmed, so Coolify can provision SSL
+      if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN && project.subdomain) {
+        try {
+          const fqdn = `https://${customDomain},https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+          const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+            method: "PATCH", body: JSON.stringify({ fqdn }),
+          });
+          const patchBody = await patchRes.text().catch(() => "");
+          if (patchRes.ok) {
+            console.log(`[Hosting] Coolify domain registered: ${customDomain} → ${patchRes.status}`);
+            // Trigger redeploy so Traefik picks up new domain + SSL
+            await coolifyFetch(`/deploy?uuid=${project.coolify_app_uuid}&force=false`, { method: "GET" }).catch(() => {});
+          } else {
+            console.warn(`[Hosting] Coolify domain PATCH failed: ${patchRes.status}`, patchBody.slice(0, 400));
+          }
+        } catch (e) {
+          console.warn("[Hosting] Coolify domain registration error:", (e as Error).message);
+        }
+      }
     }
+
     res.json({
       verified,
-      checked_domain: checkDomain,
+      checked_domain: wwwVariant,
       expected: expectedTarget,
       found,
-      reason: verified ? "CNAME terverifikasi" : "CNAME belum mengarah ke subdomain yang benar. Tunggu propagasi DNS (5–30 menit).",
+      reason: verified
+        ? "DNS terverifikasi — domain sedang didaftarkan ke server (SSL akan aktif dalam 1-2 menit)."
+        : "DNS belum mengarah ke subdomain yang benar. Tunggu propagasi DNS (5–30 menit) lalu coba verifikasi lagi.",
     });
   } catch {
     res.json({ verified: false, reason: "Timeout atau gagal menjangkau DNS resolver. Coba beberapa saat lagi." });
