@@ -941,7 +941,15 @@ export default function HostingPage() {
                         <p className="text-xs text-muted-foreground truncate mt-0.5">{project.description}</p>
                       )}
                     </div>
-                    <StatusBadge status={project.status} />
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {project.auto_deploy && (
+                        <span className="flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400 font-medium">
+                          <Zap className="w-2.5 h-2.5" />
+                          Auto
+                        </span>
+                      )}
+                      <StatusBadge status={project.status} />
+                    </div>
                   </div>
 
                   {/* Git info */}
@@ -1176,6 +1184,63 @@ export default function HostingPage() {
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
+                        </div>
+
+                        {/* Deploy on Push card */}
+                        <div className={cn(
+                          "flex items-center justify-between p-3.5 rounded-xl border transition-colors",
+                          selectedProject.auto_deploy
+                            ? "border-emerald-500/30 bg-emerald-500/5"
+                            : "border-border bg-accent/10"
+                        )}>
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className={cn(
+                              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                              selectedProject.auto_deploy ? "bg-emerald-500/15" : "bg-primary/10"
+                            )}>
+                              <Zap className={cn("w-4 h-4", selectedProject.auto_deploy ? "text-emerald-400" : "text-primary")} />
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-medium leading-tight">Deploy on Push</p>
+                              {selectedProject.auto_deploy ? (
+                                <p className="text-[11px] text-emerald-400 mt-0.5">
+                                  Aktif — push ke <span className="font-mono">{selectedProject.git_branch || "main"}</span> akan auto-deploy
+                                </p>
+                              ) : (
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Auto-deploy saat push ke <span className="font-mono">{selectedProject.git_branch || "main"}</span>
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                          {!githubStatus?.connected ? (
+                            <button
+                              onClick={handleGithubConnect}
+                              disabled={connectingGithub}
+                              className="text-[11px] px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {connectingGithub ? <Loader2 className="w-3 h-3 animate-spin" /> : <Github className="w-3 h-3" />}
+                              Hubungkan GitHub
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => handleToggleAutoDeploy(selectedProject, !selectedProject.auto_deploy)}
+                              disabled={togglingAutoDeploy}
+                              className={cn(
+                                "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 shrink-0",
+                                selectedProject.auto_deploy ? "bg-emerald-500" : "bg-muted"
+                              )}
+                            >
+                              {togglingAutoDeploy ? (
+                                <Loader2 className="w-3 h-3 animate-spin absolute inset-0 m-auto text-white" />
+                              ) : (
+                                <span className={cn(
+                                  "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform",
+                                  selectedProject.auto_deploy ? "translate-x-4" : "translate-x-0.5"
+                                )} />
+                              )}
+                            </button>
+                          )}
                         </div>
 
                         {/* Last updated */}
@@ -1489,39 +1554,60 @@ export default function HostingPage() {
 
                         {/* Auto Deploy toggle */}
                         <div className="space-y-2">
-                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Auto Deploy</p>
-                          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-accent/10">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                                <Zap className="w-4 h-4 text-primary" />
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Deploy on Push</p>
+                          <div className={cn(
+                            "flex items-center justify-between p-3.5 rounded-xl border transition-colors",
+                            selectedProject.auto_deploy
+                              ? "border-emerald-500/30 bg-emerald-500/5"
+                              : "border-border bg-accent/10"
+                          )}>
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={cn(
+                                "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
+                                selectedProject.auto_deploy ? "bg-emerald-500/15" : "bg-primary/10"
+                              )}>
+                                <Zap className={cn("w-4 h-4", selectedProject.auto_deploy ? "text-emerald-400" : "text-primary")} />
                               </div>
-                              <div>
-                                <p className="text-sm font-medium">Deploy otomatis</p>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Trigger saat push ke branch <span className="font-mono">{selectedProject.git_branch || "main"}</span></p>
+                              <div className="min-w-0">
+                                <p className="text-sm font-medium">Deploy on Push</p>
+                                <p className="text-[11px] text-muted-foreground mt-0.5">
+                                  Push ke <span className="font-mono">{selectedProject.git_branch || "main"}</span> → auto-deploy
+                                </p>
                               </div>
                             </div>
                             {!githubStatus?.connected ? (
-                              <span className="text-[11px] text-muted-foreground italic">GitHub belum terhubung</span>
+                              <button
+                                onClick={handleGithubConnect}
+                                disabled={connectingGithub}
+                                className="text-[11px] px-2.5 py-1.5 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 flex items-center gap-1"
+                              >
+                                {connectingGithub ? <Loader2 className="w-3 h-3 animate-spin" /> : <Github className="w-3 h-3" />}
+                                Hubungkan GitHub
+                              </button>
                             ) : (
                               <button
                                 onClick={() => handleToggleAutoDeploy(selectedProject, !selectedProject.auto_deploy)}
                                 disabled={togglingAutoDeploy}
                                 className={cn(
                                   "relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none disabled:opacity-50 shrink-0",
-                                  selectedProject.auto_deploy ? "bg-primary" : "bg-muted"
+                                  selectedProject.auto_deploy ? "bg-emerald-500" : "bg-muted"
                                 )}
                               >
-                                <span className={cn(
-                                  "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform",
-                                  selectedProject.auto_deploy ? "translate-x-4" : "translate-x-0.5"
-                                )} />
+                                {togglingAutoDeploy ? (
+                                  <Loader2 className="w-3 h-3 animate-spin absolute inset-0 m-auto text-white" />
+                                ) : (
+                                  <span className={cn(
+                                    "inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform",
+                                    selectedProject.auto_deploy ? "translate-x-4" : "translate-x-0.5"
+                                  )} />
+                                )}
                               </button>
                             )}
                           </div>
                           {selectedProject.auto_deploy && (
                             <div className="flex items-start gap-2 p-3 rounded-lg bg-emerald-500/5 border border-emerald-500/20 text-[11px] text-emerald-400">
                               <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                              <span>Auto Deploy aktif — setiap push ke branch <span className="font-mono">{selectedProject.git_branch || "main"}</span> akan memicu deployment otomatis.</span>
+                              <span>Webhook GitHub terdaftar. Setiap push ke <span className="font-mono">{selectedProject.git_branch || "main"}</span> akan langsung memicu deployment otomatis.</span>
                             </div>
                           )}
                         </div>
