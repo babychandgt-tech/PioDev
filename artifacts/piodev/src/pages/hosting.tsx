@@ -228,6 +228,7 @@ export default function HostingPage() {
   const [reposError, setReposError] = useState<string | null>(null);
   const [repoSearch, setRepoSearch] = useState("");
   const [selectedRepo, setSelectedRepo] = useState<GithubRepo | null>(null);
+  const [repoDropdownOpen, setRepoDropdownOpen] = useState(false);
 
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -424,6 +425,7 @@ export default function HostingPage() {
     setSelectedRepo(null);
     setRepoSearch("");
     setReposError(null);
+    setRepoDropdownOpen(false);
   };
 
   const loadGithubRepos = useCallback(async () => {
@@ -1548,136 +1550,121 @@ export default function HostingPage() {
                 {/* ── Repo picker mode ── */}
                 {createMode === "repo" && githubStatus?.connected && (
                   <div className="space-y-2">
-                    {/* Search */}
+                    {/* Dropdown trigger */}
                     <div className="relative">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
-                      <input
-                        type="text"
-                        placeholder="Cari repo..."
-                        value={repoSearch}
-                        onChange={e => setRepoSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
-                      />
-                    </div>
+                      <button
+                        type="button"
+                        onClick={() => setRepoDropdownOpen(o => !o)}
+                        className={cn(
+                          "w-full flex items-center gap-2.5 px-3 py-2.5 rounded-lg border bg-background text-sm text-left transition-all",
+                          repoDropdownOpen ? "border-primary/50 ring-2 ring-primary/10" : "border-border hover:border-primary/30"
+                        )}
+                      >
+                        {reposLoading ? (
+                          <><Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground shrink-0" /><span className="text-muted-foreground flex-1">Memuat repo...</span></>
+                        ) : selectedRepo ? (
+                          <>
+                            <Github className="w-3.5 h-3.5 text-primary shrink-0" />
+                            <span className="flex-1 font-medium truncate">{selectedRepo.full_name}</span>
+                            {selectedRepo.private && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                            {selectedRepo.language && (
+                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", LANG_COLORS[selectedRepo.language] ?? "bg-muted text-muted-foreground")}>
+                                {selectedRepo.language}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <><Github className="w-3.5 h-3.5 text-muted-foreground shrink-0" /><span className="text-muted-foreground/60 flex-1">Pilih repository...</span></>
+                        )}
+                        <svg className={cn("w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform", repoDropdownOpen && "rotate-180")} viewBox="0 0 10 10" fill="none">
+                          <path d="M2 4l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </button>
 
-                    {/* Repo list */}
-                    <div className="rounded-xl border border-border overflow-hidden max-h-60 overflow-y-auto">
-                      {reposLoading ? (
-                        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                          Memuat repo...
-                        </div>
-                      ) : reposError ? (
-                        <div className="flex flex-col items-center justify-center py-8 gap-3 text-center px-4">
-                          <AlertCircle className="w-5 h-5 text-red-400/60" />
-                          <p className="text-xs text-red-400">{reposError}</p>
-                          <button
-                            type="button"
-                            onClick={loadGithubRepos}
-                            className="flex items-center gap-1.5 text-xs text-primary hover:underline"
-                          >
-                            <Loader2 className="w-3 h-3" /> Coba lagi
-                          </button>
-                        </div>
-                      ) : githubRepos.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
-                          <Github className="w-6 h-6 text-muted-foreground/30" />
-                          <p className="text-xs text-muted-foreground">Tidak ada repo ditemukan</p>
-                        </div>
-                      ) : (
-                        (() => {
-                          const q = repoSearch.toLowerCase();
-                          const filtered = q
-                            ? githubRepos.filter(r => r.full_name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q))
-                            : githubRepos;
-                          if (filtered.length === 0) return (
-                            <div className="py-8 text-center text-xs text-muted-foreground">Tidak ada repo yang cocok</div>
-                          );
-                          return filtered.map((repo, i) => {
-                            const isSelected = selectedRepo?.id === repo.id;
-                            return (
-                              <button
-                                key={repo.id}
-                                type="button"
-                                onClick={() => selectRepo(repo)}
-                                className={cn(
-                                  "w-full flex items-start gap-3 px-3.5 py-3 text-left transition-colors",
-                                  i < filtered.length - 1 && "border-b border-border",
-                                  isSelected
-                                    ? "bg-primary/8 text-foreground"
-                                    : "hover:bg-accent/60"
-                                )}
-                              >
-                                {/* Selected checkmark or status dot */}
-                                <div className={cn(
-                                  "mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors",
-                                  isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"
-                                )}>
-                                  {isSelected && (
-                                    <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none">
-                                      <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-                                    </svg>
-                                  )}
-                                </div>
+                      {/* Dropdown panel */}
+                      {repoDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1 z-10 bg-card border border-border rounded-xl shadow-xl overflow-hidden">
+                          {/* Search inside dropdown */}
+                          <div className="p-2 border-b border-border">
+                            <div className="relative">
+                              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground pointer-events-none" />
+                              <input
+                                autoFocus
+                                type="text"
+                                placeholder="Cari repo..."
+                                value={repoSearch}
+                                onChange={e => setRepoSearch(e.target.value)}
+                                className="w-full pl-7 pr-3 py-1.5 rounded-md bg-background border border-border text-xs focus:outline-none focus:border-primary/50 placeholder:text-muted-foreground/40 transition-all"
+                              />
+                            </div>
+                          </div>
 
-                                {/* Info */}
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-sm font-medium truncate">{repo.full_name}</span>
-                                    {repo.private && (
-                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground border border-border rounded px-1 py-0.5 shrink-0">
-                                        <Lock className="w-2.5 h-2.5" /> Private
-                                      </span>
+                          {/* List */}
+                          <div className="max-h-52 overflow-y-auto">
+                            {reposError ? (
+                              <div className="flex flex-col items-center py-6 gap-2 text-center">
+                                <AlertCircle className="w-4 h-4 text-red-400/60" />
+                                <p className="text-xs text-red-400">{reposError}</p>
+                                <button type="button" onClick={loadGithubRepos} className="text-xs text-primary hover:underline">Coba lagi</button>
+                              </div>
+                            ) : githubRepos.length === 0 ? (
+                              <div className="py-6 text-center text-xs text-muted-foreground">Tidak ada repo</div>
+                            ) : (() => {
+                              const q = repoSearch.toLowerCase();
+                              const filtered = q
+                                ? githubRepos.filter(r => r.full_name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q))
+                                : githubRepos;
+                              if (filtered.length === 0) return <div className="py-6 text-center text-xs text-muted-foreground">Tidak ada yang cocok</div>;
+                              return filtered.map((repo, i) => {
+                                const isSelected = selectedRepo?.id === repo.id;
+                                return (
+                                  <button
+                                    key={repo.id}
+                                    type="button"
+                                    onClick={() => { selectRepo(repo); setRepoDropdownOpen(false); setRepoSearch(""); }}
+                                    className={cn(
+                                      "w-full flex items-center gap-2.5 px-3 py-2.5 text-left transition-colors",
+                                      i < filtered.length - 1 && "border-b border-border/50",
+                                      isSelected ? "bg-primary/8" : "hover:bg-accent/60"
                                     )}
-                                    {repo.fork && (
-                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
-                                        <GitFork className="w-2.5 h-2.5" />
-                                      </span>
-                                    )}
-                                  </div>
-                                  {repo.description && (
-                                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{repo.description}</p>
-                                  )}
-                                  <div className="flex items-center gap-2.5 mt-1.5">
+                                  >
+                                    <div className={cn(
+                                      "w-3.5 h-3.5 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                                      isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"
+                                    )}>
+                                      {isSelected && <svg className="w-2 h-2 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                    </div>
+                                    <span className="flex-1 text-xs font-medium truncate">{repo.full_name}</span>
+                                    {repo.private && <Lock className="w-2.5 h-2.5 text-muted-foreground shrink-0" />}
                                     {repo.language && (
-                                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", LANG_COLORS[repo.language] ?? "bg-muted text-muted-foreground")}>
+                                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0", LANG_COLORS[repo.language] ?? "bg-muted text-muted-foreground")}>
                                         {repo.language}
                                       </span>
                                     )}
-                                    {repo.stargazers_count > 0 && (
-                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                        <Star className="w-2.5 h-2.5" />{repo.stargazers_count}
-                                      </span>
-                                    )}
-                                    <span className="text-[10px] text-muted-foreground">{timeAgo(repo.pushed_at)}</span>
-                                  </div>
-                                </div>
-                              </button>
-                            );
-                          });
-                        })()
+                                    <span className="text-[10px] text-muted-foreground shrink-0">{timeAgo(repo.pushed_at)}</span>
+                                  </button>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
                       )}
                     </div>
 
-                    {/* Selected repo indicator with detect status */}
+                    {/* Selected repo status chip */}
                     {selectedRepo && (
                       <div className={cn(
                         "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all",
-                        detecting
-                          ? "border-violet-500/30 bg-violet-500/5 text-violet-400"
-                          : detectResult
-                          ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
-                          : detectAttempted
-                          ? "border-amber-500/30 bg-amber-500/5 text-amber-400"
+                        detecting ? "border-violet-500/30 bg-violet-500/5 text-violet-400"
+                          : detectResult ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
+                          : detectAttempted ? "border-amber-500/30 bg-amber-500/5 text-amber-400"
                           : "border-primary/20 bg-primary/5 text-primary"
                       )}>
                         {detecting ? (
                           <><Loader2 className="w-3 h-3 animate-spin shrink-0" /> Mendeteksi framework dari <span className="font-mono font-medium">{selectedRepo.name}</span>...</>
                         ) : detectResult ? (
                           <><CheckCircle2 className="w-3 h-3 shrink-0" />
-                            {detectResult.isMonorepo && workspacePackages.length > 0
-                              ? `Monorepo · ${workspacePackages.length} package`
-                              : `${detectResult.framework} · command diisi otomatis`}
+                            {detectResult.isMonorepo && workspacePackages.length > 0 ? `Monorepo · ${workspacePackages.length} package` : `${detectResult.framework} · command diisi otomatis`}
                           </>
                         ) : detectAttempted ? (
                           <><AlertCircle className="w-3 h-3 shrink-0" /> Repo terpilih: <span className="font-mono font-medium">{selectedRepo.name}</span> · isi command manual</>
