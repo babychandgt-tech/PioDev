@@ -4013,11 +4013,25 @@ const COOLIFY_API_TOKEN = process.env.COOLIFY_API_TOKEN ?? "";
 const COOLIFY_BASE_DOMAIN = process.env.COOLIFY_BASE_DOMAIN ?? "app.pio.codes";
 const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 5, pro: 20 };
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET ?? "";
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
 const SITE_URL = process.env.SITE_URL ?? (
   IS_PRODUCTION
     ? "https://pio.codes"
     : `https://${process.env.REPLIT_DEV_DOMAIN ?? "localhost"}`
 );
+
+function getGithubCallbackUrl(): string {
+  return `${SITE_URL}/api/hosting/github/oauth/callback`;
+}
+
+const githubOAuthStates = new Map<string, { userId: string; ts: number }>();
+setInterval(() => {
+  const cutoff = Date.now() - 10 * 60 * 1000;
+  for (const [k, v] of githubOAuthStates.entries()) {
+    if (v.ts < cutoff) githubOAuthStates.delete(k);
+  }
+}, 5 * 60 * 1000);
 
 let _coolifyServerUuid: string | null = null;
 let _coolifyProjectUuid: string | null = null;
@@ -4816,6 +4830,74 @@ app.get("/api/hosting/github/status", requireAuth, async (req, res) => {
     connected: !!(profile?.github_access_token),
     username: profile?.github_username ?? null,
   });
+});
+
+// GET /api/hosting/github/oauth/start — initiate server-side GitHub OAuth
+app.get("/api/hosting/github/oauth/start", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const crypto = await import("crypto");
+  const state = crypto.randomBytes(16).toString("hex");
+  githubOAuthStates.set(state, { userId, ts: Date.now() });
+  const params = new URLSearchParams({
+    client_id: GITHUB_CLIENT_ID,
+    redirect_uri: getGithubCallbackUrl(),
+    scope: "repo admin:repo_hook",
+    state,
+  });
+  res.json({ url: `https://github.com/login/oauth/authorize?${params}` });
+});
+
+// GET /api/hosting/github/oauth/callback — GitHub redirects here after authorization
+app.get("/api/hosting/github/oauth/callback", async (req, res) => {
+  const { code, state, error } = req.query as Record<string, string>;
+  const redirectBase = SITE_URL;
+
+  if (error || !code || !state) {
+    res.redirect(`${redirectBase}/hosting?github_error=${encodeURIComponent(error ?? "cancelled")}`);
+    return;
+  }
+
+  const stateData = githubOAuthStates.get(state);
+  if (!stateData || Date.now() - stateData.ts > 10 * 60 * 1000) {
+    githubOAuthStates.delete(state);
+    res.redirect(`${redirectBase}/hosting?github_error=invalid_state`);
+    return;
+  }
+  githubOAuthStates.delete(state);
+
+  try {
+    const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        client_id: GITHUB_CLIENT_ID,
+        client_secret: GITHUB_CLIENT_SECRET,
+        code,
+        redirect_uri: getGithubCallbackUrl(),
+      }),
+    });
+    const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+
+    if (!tokenData.access_token) {
+      res.redirect(`${redirectBase}/hosting?github_error=${encodeURIComponent(tokenData.error ?? "token_exchange_failed")}`);
+      return;
+    }
+
+    const ghRes = await fetch("https://api.github.com/user", {
+      headers: { Authorization: `token ${tokenData.access_token}`, "User-Agent": "PioCode/1.0" },
+    });
+    const ghUser = await ghRes.json() as { login: string };
+
+    await supabaseAdmin.from("profiles").update({
+      github_access_token: tokenData.access_token,
+      github_username: ghUser.login,
+    }).eq("id", stateData.userId);
+
+    res.redirect(`${redirectBase}/hosting?github_connected=1&username=${encodeURIComponent(ghUser.login)}`);
+  } catch (e) {
+    console.error("[GitHub OAuth callback]", e);
+    res.redirect(`${redirectBase}/hosting?github_error=server_error`);
+  }
 });
 
 // POST /api/hosting/github/connect — store provider_token after OAuth link
