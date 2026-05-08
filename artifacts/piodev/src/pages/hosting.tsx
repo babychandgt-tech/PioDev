@@ -7,6 +7,7 @@ import {
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
   KeyRound, Eye, EyeOff, Settings, LayoutDashboard, History,
   ArrowUpRight, GitCommit, Package, Github, Link, Unlink,
+  Search, Lock, Star, GitFork,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
@@ -64,6 +65,45 @@ interface HostingStatus {
 }
 
 type DetailTab = "overview" | "logs" | "env" | "settings" | "history";
+type CreateMode = "repo" | "manual";
+
+interface GithubRepo {
+  id: number;
+  full_name: string;
+  name: string;
+  description: string | null;
+  private: boolean;
+  language: string | null;
+  clone_url: string;
+  html_url: string;
+  default_branch: string;
+  pushed_at: string;
+  stargazers_count: number;
+  fork: boolean;
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 60) return `${m}m lalu`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}j lalu`;
+  const d = Math.floor(h / 24);
+  if (d < 30) return `${d}h lalu`;
+  return new Date(iso).toLocaleDateString("id-ID", { day: "numeric", month: "short" });
+}
+
+const LANG_COLORS: Record<string, string> = {
+  TypeScript: "bg-blue-500/20 text-blue-400",
+  JavaScript: "bg-yellow-500/20 text-yellow-400",
+  Python: "bg-green-500/20 text-green-400",
+  Go: "bg-cyan-500/20 text-cyan-400",
+  Rust: "bg-orange-500/20 text-orange-400",
+  Java: "bg-red-500/20 text-red-400",
+  "C++": "bg-purple-500/20 text-purple-400",
+  CSS: "bg-pink-500/20 text-pink-400",
+  HTML: "bg-orange-400/20 text-orange-300",
+};
 
 async function getToken(): Promise<string> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -181,6 +221,12 @@ export default function HostingPage() {
   const [githubStatus, setGithubStatus] = useState<GithubStatus | null>(null);
   const [togglingAutoDeploy, setTogglingAutoDeploy] = useState(false);
   const [connectingGithub, setConnectingGithub] = useState(false);
+
+  const [createMode, setCreateMode] = useState<CreateMode>("repo");
+  const [githubRepos, setGithubRepos] = useState<GithubRepo[]>([]);
+  const [reposLoading, setReposLoading] = useState(false);
+  const [repoSearch, setRepoSearch] = useState("");
+  const [selectedRepo, setSelectedRepo] = useState<GithubRepo | null>(null);
 
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -374,7 +420,40 @@ export default function HostingPage() {
     setSelectedWorkspacePkgs(new Set());
     setFormError(null);
     setForm({ name: "", description: "", git_url: "", git_branch: "main", build_command: "", start_command: "", port: "3000" });
+    setSelectedRepo(null);
+    setRepoSearch("");
   };
+
+  const loadGithubRepos = useCallback(async () => {
+    if (!githubStatus?.connected) return;
+    setReposLoading(true);
+    try {
+      const res = await authedFetch("/api/hosting/github/repos");
+      if (res.ok) {
+        const data = await res.json();
+        setGithubRepos(data.repos ?? []);
+      }
+    } catch {}
+    finally { setReposLoading(false); }
+  }, [githubStatus?.connected]);
+
+  const selectRepo = useCallback((repo: GithubRepo) => {
+    setSelectedRepo(repo);
+    const branch = repo.default_branch || "main";
+    setForm(f => ({
+      ...f,
+      git_url: repo.clone_url,
+      git_branch: branch,
+      name: f.name.trim() ? f.name : repo.name,
+      description: f.description.trim() ? f.description : (repo.description ?? ""),
+    }));
+    setDetectResult(null);
+    setDetectAttempted(false);
+    setAutoFilledFields(new Set());
+    setWorkspacePackages([]);
+    setSelectedWorkspacePkgs(new Set());
+    runDetect(repo.clone_url, branch);
+  }, [runDetect]);
 
   const handleCreate = async () => {
     setFormError(null);
@@ -553,6 +632,15 @@ export default function HostingPage() {
     setCopiedLogs(true);
     setTimeout(() => setCopiedLogs(false), 2000);
   };
+
+  useEffect(() => {
+    if (!showCreate) return;
+    const defaultMode: CreateMode = githubStatus?.connected ? "repo" : "manual";
+    setCreateMode(defaultMode);
+    if (githubStatus?.connected && defaultMode === "repo" && githubRepos.length === 0) {
+      loadGithubRepos();
+    }
+  }, [showCreate]);
 
   const handleGithubConnect = async () => {
     setConnectingGithub(true);
@@ -1390,10 +1478,10 @@ export default function HostingPage() {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 16 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-auto md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:top-1/2 md:w-[520px] z-50 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden"
+              className="fixed inset-x-4 top-1/2 -translate-y-1/2 md:inset-auto md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 md:top-1/2 md:w-[560px] z-50 bg-card border border-border rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
             >
               {/* Dialog header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
                     <Globe className="w-4 h-4 text-primary" />
@@ -1408,7 +1496,41 @@ export default function HostingPage() {
                 </button>
               </div>
 
-              <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Mode tabs — only when GitHub is connected */}
+              {githubStatus?.connected && (
+                <div className="px-5 pt-4 pb-0 shrink-0">
+                  <div className="flex p-1 rounded-xl bg-muted/40 border border-border gap-1">
+                    <button
+                      type="button"
+                      onClick={() => { setCreateMode("repo"); if (githubRepos.length === 0) loadGithubRepos(); }}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-all",
+                        createMode === "repo"
+                          ? "bg-background shadow-sm text-foreground border border-border"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Github className="w-3.5 h-3.5" />
+                      Pilih dari Repo
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCreateMode("manual")}
+                      className={cn(
+                        "flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-medium transition-all",
+                        createMode === "manual"
+                          ? "bg-background shadow-sm text-foreground border border-border"
+                          : "text-muted-foreground hover:text-foreground"
+                      )}
+                    >
+                      <Link className="w-3.5 h-3.5" />
+                      Dari URL / Link
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-5 space-y-4 overflow-y-auto flex-1">
                 {formError && (
                   <div className="flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
                     <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1416,164 +1538,304 @@ export default function HostingPage() {
                   </div>
                 )}
 
-                <FormField label="Nama Proyek *" placeholder="my-web-app" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
-                <FormField label="Deskripsi" placeholder="Opsional" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
-
-                {/* Git URL + detect */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Git URL *</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      placeholder="https://github.com/user/repo"
-                      value={form.git_url}
-                      onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
-                      className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => runDetect(form.git_url.trim(), form.git_branch || "main")}
-                      disabled={detecting || !form.git_url.trim().includes("github.com")}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-accent hover:bg-accent/80 text-xs font-medium transition-colors disabled:opacity-40 whitespace-nowrap"
-                    >
-                      {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-400" />}
-                      {detecting ? "Deteksi..." : "Deteksi"}
-                    </button>
-                  </div>
-
-                  {/* Detection status */}
-                  {detectResult && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
-                      <CheckCircle2 className="w-3 h-3" />
-                      {detectResult.isMonorepo
-                        ? workspacePackages.length > 0
-                          ? `Monorepo terdeteksi — ${workspacePackages.length} package ditemukan`
-                          : "Monorepo terdeteksi — isi build & start command manual"
-                        : `Framework: ${detectResult.framework} — command diisi otomatis`}
-                    </div>
-                  )}
-                  {detectAttempted && !detectResult && !detecting && form.git_url.trim() && (
-                    <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
-                      <AlertCircle className="w-3 h-3" />
-                      Tidak dapat mendeteksi — pastikan repo publik atau isi command manual
-                    </div>
-                  )}
-                </div>
-
-                {/* Package multi-select (monorepo) */}
-                {workspacePackages.length > 0 && (
+                {/* ── Repo picker mode ── */}
+                {createMode === "repo" && githubStatus?.connected && (
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih Package</p>
-                      {selectedWorkspacePkgs.size > 0 && (
-                        <span className="text-[11px] text-primary font-medium">{selectedWorkspacePkgs.size} terpilih</span>
+                    {/* Search */}
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                      <input
+                        type="text"
+                        placeholder="Cari repo..."
+                        value={repoSearch}
+                        onChange={e => setRepoSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
+                      />
+                    </div>
+
+                    {/* Repo list */}
+                    <div className="rounded-xl border border-border overflow-hidden max-h-60 overflow-y-auto">
+                      {reposLoading ? (
+                        <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Memuat repo...
+                        </div>
+                      ) : githubRepos.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                          <Github className="w-6 h-6 text-muted-foreground/30" />
+                          <p className="text-xs text-muted-foreground">Tidak ada repo ditemukan</p>
+                        </div>
+                      ) : (
+                        (() => {
+                          const q = repoSearch.toLowerCase();
+                          const filtered = q
+                            ? githubRepos.filter(r => r.full_name.toLowerCase().includes(q) || (r.description ?? "").toLowerCase().includes(q))
+                            : githubRepos;
+                          if (filtered.length === 0) return (
+                            <div className="py-8 text-center text-xs text-muted-foreground">Tidak ada repo yang cocok</div>
+                          );
+                          return filtered.map((repo, i) => {
+                            const isSelected = selectedRepo?.id === repo.id;
+                            return (
+                              <button
+                                key={repo.id}
+                                type="button"
+                                onClick={() => selectRepo(repo)}
+                                className={cn(
+                                  "w-full flex items-start gap-3 px-3.5 py-3 text-left transition-colors",
+                                  i < filtered.length - 1 && "border-b border-border",
+                                  isSelected
+                                    ? "bg-primary/8 text-foreground"
+                                    : "hover:bg-accent/60"
+                                )}
+                              >
+                                {/* Selected checkmark or status dot */}
+                                <div className={cn(
+                                  "mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 transition-colors",
+                                  isSelected ? "bg-primary border-primary" : "border-muted-foreground/30"
+                                )}>
+                                  {isSelected && (
+                                    <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none">
+                                      <path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                                    </svg>
+                                  )}
+                                </div>
+
+                                {/* Info */}
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-sm font-medium truncate">{repo.full_name}</span>
+                                    {repo.private && (
+                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground border border-border rounded px-1 py-0.5 shrink-0">
+                                        <Lock className="w-2.5 h-2.5" /> Private
+                                      </span>
+                                    )}
+                                    {repo.fork && (
+                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground shrink-0">
+                                        <GitFork className="w-2.5 h-2.5" />
+                                      </span>
+                                    )}
+                                  </div>
+                                  {repo.description && (
+                                    <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{repo.description}</p>
+                                  )}
+                                  <div className="flex items-center gap-2.5 mt-1.5">
+                                    {repo.language && (
+                                      <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium", LANG_COLORS[repo.language] ?? "bg-muted text-muted-foreground")}>
+                                        {repo.language}
+                                      </span>
+                                    )}
+                                    {repo.stargazers_count > 0 && (
+                                      <span className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                        <Star className="w-2.5 h-2.5" />{repo.stargazers_count}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-muted-foreground">{timeAgo(repo.pushed_at)}</span>
+                                  </div>
+                                </div>
+                              </button>
+                            );
+                          });
+                        })()
                       )}
                     </div>
-                    <div className="grid grid-cols-1 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                      {workspacePackages.map(pkg => {
-                        const isSelected = selectedWorkspacePkgs.has(pkg.path);
-                        return (
-                          <button
-                            key={pkg.path}
-                            type="button"
-                            onClick={() => {
-                              setSelectedWorkspacePkgs(prev => {
-                                const next = new Set(prev);
-                                if (next.has(pkg.path)) next.delete(pkg.path);
-                                else next.add(pkg.path);
-                                const remaining = [...next];
-                                if (remaining.length === 1) {
-                                  const single = workspacePackages.find(p => p.path === remaining[0]);
-                                  if (single) {
-                                    setForm(f => ({ ...f, build_command: single.buildCommand, start_command: single.startCommand, port: String(single.port) }));
-                                    setAutoFilledFields(new Set(["build_command", "start_command", "port"]));
-                                  }
-                                } else {
-                                  setAutoFilledFields(new Set());
-                                }
-                                return next;
-                              });
-                            }}
-                            className={cn(
-                              "flex items-center justify-between px-3 py-2.5 rounded-lg border text-left text-sm transition-all",
-                              isSelected ? "border-primary bg-primary/8 text-primary" : "border-border hover:border-primary/40 hover:bg-accent"
-                            )}
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <span className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
-                                isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"
-                              )}>
-                                {isSelected && <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                              </span>
-                              <span className="font-mono text-xs truncate">{pkg.name}</span>
-                              <span className="text-[10px] text-muted-foreground shrink-0">{pkg.path}</span>
-                            </div>
-                            <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2",
-                              pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" :
-                              pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"
-                            )}>
-                              {pkg.framework}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {selectedWorkspacePkgs.size > 1 && (
-                      <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground">
-                        <Package className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
-                        <span>
-                          Akan dibuat <span className="text-foreground font-medium">{selectedWorkspacePkgs.size} proyek terpisah</span> dengan command otomatis.
-                          Nama: <span className="font-mono">{form.name || "nama"}-[package]</span>
-                        </span>
+
+                    {/* Selected repo indicator with detect status */}
+                    {selectedRepo && (
+                      <div className={cn(
+                        "flex items-center gap-2 px-3 py-2 rounded-lg border text-xs transition-all",
+                        detecting
+                          ? "border-violet-500/30 bg-violet-500/5 text-violet-400"
+                          : detectResult
+                          ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-400"
+                          : detectAttempted
+                          ? "border-amber-500/30 bg-amber-500/5 text-amber-400"
+                          : "border-primary/20 bg-primary/5 text-primary"
+                      )}>
+                        {detecting ? (
+                          <><Loader2 className="w-3 h-3 animate-spin shrink-0" /> Mendeteksi framework dari <span className="font-mono font-medium">{selectedRepo.name}</span>...</>
+                        ) : detectResult ? (
+                          <><CheckCircle2 className="w-3 h-3 shrink-0" />
+                            {detectResult.isMonorepo && workspacePackages.length > 0
+                              ? `Monorepo · ${workspacePackages.length} package`
+                              : `${detectResult.framework} · command diisi otomatis`}
+                          </>
+                        ) : detectAttempted ? (
+                          <><AlertCircle className="w-3 h-3 shrink-0" /> Repo terpilih: <span className="font-mono font-medium">{selectedRepo.name}</span> · isi command manual</>
+                        ) : (
+                          <><GitBranch className="w-3 h-3 shrink-0" /> <span className="font-mono font-medium">{selectedRepo.name}</span> · branch <span className="font-mono">{selectedRepo.default_branch}</span></>
+                        )}
                       </div>
                     )}
                   </div>
                 )}
 
-                {/* Branch + port + commands (hidden when 2+ packages) */}
-                {selectedWorkspacePkgs.size <= 1 && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3">
-                      <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
-                      <FormField
-                        label="Port"
-                        placeholder="3000"
-                        value={form.port}
-                        onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("port"); return n; }); setForm(f => ({ ...f, port: v })); }}
-                        type="number"
-                        isAutoDetected={autoFilledFields.has("port")}
+                {/* ── Manual URL mode ── */}
+                {(createMode === "manual" || !githubStatus?.connected) && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Git URL *</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="https://github.com/user/repo"
+                        value={form.git_url}
+                        onChange={e => setForm(f => ({ ...f, git_url: e.target.value }))}
+                        className="flex-1 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 placeholder:text-muted-foreground/40 transition-all"
                       />
+                      <button
+                        type="button"
+                        onClick={() => runDetect(form.git_url.trim(), form.git_branch || "main")}
+                        disabled={detecting || !form.git_url.trim().includes("github.com")}
+                        className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border bg-accent hover:bg-accent/80 text-xs font-medium transition-colors disabled:opacity-40 whitespace-nowrap"
+                      >
+                        {detecting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-violet-400" />}
+                        {detecting ? "Deteksi..." : "Deteksi"}
+                      </button>
                     </div>
-                    <FormField
-                      label="Build Command"
-                      placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
-                      value={form.build_command}
-                      onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("build_command"); return n; }); setForm(f => ({ ...f, build_command: v })); }}
-                      isAutoDetected={autoFilledFields.has("build_command")}
-                    />
-                    <FormField
-                      label="Start Command"
-                      placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
-                      value={form.start_command}
-                      onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("start_command"); return n; }); setForm(f => ({ ...f, start_command: v })); }}
-                      isAutoDetected={autoFilledFields.has("start_command")}
-                    />
-                  </>
-                )}
-                {selectedWorkspacePkgs.size > 1 && (
-                  <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
+                    {detectResult && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                        <CheckCircle2 className="w-3 h-3" />
+                        {detectResult.isMonorepo
+                          ? workspacePackages.length > 0
+                            ? `Monorepo terdeteksi — ${workspacePackages.length} package ditemukan`
+                            : "Monorepo terdeteksi — isi build & start command manual"
+                          : `Framework: ${detectResult.framework} — command diisi otomatis`}
+                      </div>
+                    )}
+                    {detectAttempted && !detectResult && !detecting && form.git_url.trim() && (
+                      <div className="flex items-center gap-1.5 text-[11px] text-amber-400">
+                        <AlertCircle className="w-3 h-3" />
+                        Tidak dapat mendeteksi — pastikan repo publik atau isi command manual
+                      </div>
+                    )}
+                  </div>
                 )}
 
-                <p className="text-xs text-muted-foreground">
-                  Subdomain: <span className="font-mono text-primary">
-                    {form.name
-                      ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes`
-                      : "nama-xxxx.app.pio.codes"}
-                  </span>
-                </p>
+                {/* ── Config fields (shared by both modes) ── */}
+                <div className={cn(
+                  "space-y-4 transition-opacity",
+                  createMode === "repo" && !selectedRepo && !form.git_url && "opacity-50 pointer-events-none"
+                )}>
+                  <div className="grid grid-cols-2 gap-3">
+                    <FormField label="Nama Proyek *" placeholder="my-web-app" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
+                    <FormField label="Deskripsi" placeholder="Opsional" value={form.description} onChange={v => setForm(f => ({ ...f, description: v }))} />
+                  </div>
+
+                  {/* Package multi-select (monorepo) */}
+                  {workspacePackages.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Pilih Package</p>
+                        {selectedWorkspacePkgs.size > 0 && (
+                          <span className="text-[11px] text-primary font-medium">{selectedWorkspacePkgs.size} terpilih</span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 gap-1.5 max-h-44 overflow-y-auto pr-1">
+                        {workspacePackages.map(pkg => {
+                          const isSelected = selectedWorkspacePkgs.has(pkg.path);
+                          return (
+                            <button
+                              key={pkg.path}
+                              type="button"
+                              onClick={() => {
+                                setSelectedWorkspacePkgs(prev => {
+                                  const next = new Set(prev);
+                                  if (next.has(pkg.path)) next.delete(pkg.path);
+                                  else next.add(pkg.path);
+                                  const remaining = [...next];
+                                  if (remaining.length === 1) {
+                                    const single = workspacePackages.find(p => p.path === remaining[0]);
+                                    if (single) {
+                                      setForm(f => ({ ...f, build_command: single.buildCommand, start_command: single.startCommand, port: String(single.port) }));
+                                      setAutoFilledFields(new Set(["build_command", "start_command", "port"]));
+                                    }
+                                  } else {
+                                    setAutoFilledFields(new Set());
+                                  }
+                                  return next;
+                                });
+                              }}
+                              className={cn(
+                                "flex items-center justify-between px-3 py-2.5 rounded-lg border text-left text-sm transition-all",
+                                isSelected ? "border-primary bg-primary/8 text-primary" : "border-border hover:border-primary/40 hover:bg-accent"
+                              )}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className={cn("w-4 h-4 rounded border flex items-center justify-center transition-colors shrink-0",
+                                  isSelected ? "bg-primary border-primary" : "border-muted-foreground/40"
+                                )}>
+                                  {isSelected && <svg className="w-2.5 h-2.5 text-primary-foreground" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                                </span>
+                                <span className="font-mono text-xs truncate">{pkg.name}</span>
+                                <span className="text-[10px] text-muted-foreground shrink-0">{pkg.path}</span>
+                              </div>
+                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2",
+                                pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" :
+                                pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"
+                              )}>
+                                {pkg.framework}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {selectedWorkspacePkgs.size > 1 && (
+                        <div className="flex items-start gap-2 p-3 rounded-lg bg-primary/5 border border-primary/20 text-[11px] text-muted-foreground">
+                          <Package className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                          <span>
+                            Akan dibuat <span className="text-foreground font-medium">{selectedWorkspacePkgs.size} proyek terpisah</span> dengan command otomatis.
+                            Nama: <span className="font-mono">{form.name || "nama"}-[package]</span>
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Branch + port + commands */}
+                  {selectedWorkspacePkgs.size <= 1 && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
+                        <FormField
+                          label="Port"
+                          placeholder="3000"
+                          value={form.port}
+                          onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("port"); return n; }); setForm(f => ({ ...f, port: v })); }}
+                          type="number"
+                          isAutoDetected={autoFilledFields.has("port")}
+                        />
+                      </div>
+                      <FormField
+                        label="Build Command"
+                        placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                        value={form.build_command}
+                        onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("build_command"); return n; }); setForm(f => ({ ...f, build_command: v })); }}
+                        isAutoDetected={autoFilledFields.has("build_command")}
+                      />
+                      <FormField
+                        label="Start Command"
+                        placeholder={detecting ? "Mendeteksi..." : "Biarkan kosong untuk auto-detect"}
+                        value={form.start_command}
+                        onChange={v => { setAutoFilledFields(s => { const n = new Set(s); n.delete("start_command"); return n; }); setForm(f => ({ ...f, start_command: v })); }}
+                        isAutoDetected={autoFilledFields.has("start_command")}
+                      />
+                    </>
+                  )}
+                  {selectedWorkspacePkgs.size > 1 && (
+                    <FormField label="Branch" placeholder="main" value={form.git_branch} onChange={v => setForm(f => ({ ...f, git_branch: v }))} />
+                  )}
+
+                  <p className="text-xs text-muted-foreground">
+                    Subdomain: <span className="font-mono text-primary">
+                      {form.name
+                        ? `${form.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 20)}-xxxx.app.pio.codes`
+                        : "nama-xxxx.app.pio.codes"}
+                    </span>
+                  </p>
+                </div>
               </div>
 
-              <div className="flex gap-2 px-5 py-4 border-t border-border bg-accent/10">
+              <div className="flex gap-2 px-5 py-4 border-t border-border bg-accent/10 shrink-0">
                 <button
                   onClick={resetCreateDialog}
                   className="px-4 py-2 rounded-lg border border-border hover:bg-accent text-sm transition-colors"
@@ -1582,7 +1844,7 @@ export default function HostingPage() {
                 </button>
                 <button
                   onClick={handleCreate}
-                  disabled={creating}
+                  disabled={creating || (createMode === "repo" && !selectedRepo && !form.git_url)}
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
                 >
                   {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}

@@ -4828,6 +4828,59 @@ app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
 
 // ── GITHUB INTEGRATION (Auto Deploy) ──────────────────────────────────────────
 
+// GET /api/hosting/github/repos — list user's GitHub repositories
+app.get("/api/hosting/github/repos", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: profile } = await supabaseAdmin
+    .from("profiles").select("github_access_token").eq("id", userId).single();
+
+  if (!profile?.github_access_token) {
+    res.status(400).json({ error: "GitHub belum dihubungkan" }); return;
+  }
+
+  try {
+    const repos: any[] = [];
+    let page = 1;
+    while (repos.length < 200) {
+      const ghRes = await fetch(
+        `https://api.github.com/user/repos?sort=pushed&per_page=100&page=${page}&affiliation=owner,collaborator`,
+        {
+          headers: {
+            Authorization: `token ${profile.github_access_token}`,
+            "User-Agent": "PioCode/1.0",
+            Accept: "application/vnd.github+json",
+          },
+          signal: AbortSignal.timeout(10000),
+        }
+      );
+      if (!ghRes.ok) break;
+      const data: any[] = await ghRes.json();
+      if (!Array.isArray(data) || !data.length) break;
+      repos.push(...data);
+      if (data.length < 100) break;
+      page++;
+    }
+    res.json({
+      repos: repos.map((r) => ({
+        id: r.id,
+        full_name: r.full_name,
+        name: r.name,
+        description: r.description ?? null,
+        private: r.private,
+        language: r.language ?? null,
+        clone_url: r.clone_url,
+        html_url: r.html_url,
+        default_branch: r.default_branch ?? "main",
+        pushed_at: r.pushed_at,
+        stargazers_count: r.stargazers_count ?? 0,
+        fork: r.fork,
+      })),
+    });
+  } catch (e) {
+    res.status(500).json({ error: (e as Error).message });
+  }
+});
+
 // GET /api/hosting/github/status
 app.get("/api/hosting/github/status", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
