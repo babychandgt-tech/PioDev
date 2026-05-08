@@ -201,23 +201,54 @@ export default function HostingPage() {
     if (!isAuthenticated) return;
     const pending = localStorage.getItem("gh_link_pending");
     if (!pending) return;
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      const token = (session as any)?.provider_token;
-      if (token) {
+
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const githubToken = (session as any)?.provider_token as string | undefined;
+
+      if (!githubToken) {
         localStorage.removeItem("gh_link_pending");
-        authedFetch("/api/hosting/github/connect", {
-          method: "POST",
-          body: JSON.stringify({ provider_token: token }),
-        }).then(r => r.json()).then(data => {
+        localStorage.removeItem("gh_link_refresh_token");
+        return;
+      }
+
+      localStorage.removeItem("gh_link_pending");
+
+      // If we fell back to signInWithOAuth, restore the original user session first
+      const savedRefreshToken = localStorage.getItem("gh_link_refresh_token");
+      if (savedRefreshToken) {
+        localStorage.removeItem("gh_link_refresh_token");
+        // Restore original session before calling the API
+        const { data: restored } = await supabase.auth.refreshSession({ refresh_token: savedRefreshToken });
+        if (restored.session) {
+          const res = await fetch("/api/hosting/github/connect", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${restored.session.access_token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ provider_token: githubToken }),
+          });
+          const data = await res.json();
           if (data.connected) {
             setGithubStatus({ connected: true, username: data.username });
             toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
           }
-        }).catch(() => {});
-      } else {
-        localStorage.removeItem("gh_link_pending");
+          return;
+        }
       }
-    });
+
+      // linkIdentity path — session is already correct
+      authedFetch("/api/hosting/github/connect", {
+        method: "POST",
+        body: JSON.stringify({ provider_token: githubToken }),
+      }).then(r => r.json()).then(data => {
+        if (data.connected) {
+          setGithubStatus({ connected: true, username: data.username });
+          toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
+        }
+      }).catch(() => {});
+    })();
   }, [isAuthenticated]);
 
   const runDetect = useCallback(async (url: string, branch: string) => {
@@ -560,16 +591,42 @@ export default function HostingPage() {
   const handleGithubConnect = async () => {
     setConnectingGithub(true);
     try {
-      localStorage.setItem("gh_link_pending", "1");
-      await supabase.auth.linkIdentity({
-        provider: "github" as any,
+      // Try linkIdentity first (requires enable_manual_linking in Supabase)
+      const { error: linkError } = await (supabase.auth as any).linkIdentity({
+        provider: "github",
         options: {
           scopes: "repo admin:repo_hook",
           redirectTo: window.location.href,
-        } as any,
+        },
       });
+
+      if (!linkError) {
+        // Success — browser will be redirected to GitHub by Supabase
+        localStorage.setItem("gh_link_pending", "1");
+        return;
+      }
+
+      // Fallback: use signInWithOAuth and preserve the current session via refresh_token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const refreshToken = sessionData.session?.refresh_token;
+      if (refreshToken) {
+        localStorage.setItem("gh_link_pending", "1");
+        localStorage.setItem("gh_link_refresh_token", refreshToken);
+      } else {
+        localStorage.setItem("gh_link_pending", "1");
+      }
+
+      await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: {
+          scopes: "repo admin:repo_hook",
+          redirectTo: window.location.href,
+        },
+      });
+      // Browser will redirect — execution stops here
     } catch (e) {
       localStorage.removeItem("gh_link_pending");
+      localStorage.removeItem("gh_link_refresh_token");
       toast({ title: "Gagal menghubungkan GitHub", description: (e as Error).message, variant: "destructive" });
       setConnectingGithub(false);
     }
