@@ -1413,171 +1413,170 @@ export default function HostingPage() {
                       const target = selectedProject.subdomain ? `${selectedProject.subdomain}.app.pio.codes` : null;
 
                       return (
-                        <div className="p-4 sm:p-5 space-y-4">
+                        <div className="divide-y divide-border/60">
 
-                          {/* ── Auto subdomain card ── */}
-                          <div className="rounded-xl border border-border bg-accent/10 overflow-hidden">
-                            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/60">
-                              <Globe2 className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Subdomain Otomatis</span>
-                            </div>
-                            <div className="px-4 py-3 flex items-center gap-2">
-                              {target ? (
-                                <>
-                                  <span className="text-xs font-mono text-foreground flex-1 min-w-0 truncate">{target}</span>
-                                  <CopyBtn value={target} />
-                                  <a href={`https://${target}`} target="_blank" rel="noopener noreferrer"
-                                    className="p-1 rounded hover:bg-accent transition-colors text-muted-foreground hover:text-foreground">
-                                    <ExternalLink className="w-3 h-3" />
-                                  </a>
-                                </>
-                              ) : (
-                                <span className="text-xs text-muted-foreground/60 italic">Deploy terlebih dahulu untuk mendapatkan subdomain</span>
-                              )}
-                            </div>
+                          {/* ── Subdomain otomatis ── */}
+                          <div className="px-5 py-4">
+                            <p className="text-xs text-muted-foreground font-medium mb-3">Subdomain Otomatis</p>
+                            {target ? (
+                              <div className="flex items-center gap-2 group">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                                <span className="text-sm font-mono text-foreground flex-1 min-w-0 truncate">{target}</span>
+                                <CopyBtn value={target} />
+                                <a href={`https://${target}`} target="_blank" rel="noopener noreferrer"
+                                  className="p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors">
+                                  <ExternalLink className="w-3.5 h-3.5" />
+                                </a>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 text-muted-foreground/50">
+                                <span className="w-1.5 h-1.5 rounded-full bg-muted shrink-0" />
+                                <span className="text-xs italic">Deploy terlebih dahulu untuk mendapatkan subdomain</span>
+                              </div>
+                            )}
                           </div>
 
-                          {/* ── Custom domain card ── */}
-                          <div className="rounded-xl border border-border overflow-hidden">
-                            <div className="flex items-center gap-2.5 px-4 py-3 border-b border-border/60 bg-accent/10">
-                              <Link className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                              <span className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium flex-1">Custom Domain</span>
+                          {/* ── Custom domain ── */}
+                          <div className="px-5 py-4 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs text-muted-foreground font-medium">Custom Domain</p>
                               {selectedProject.custom_domain && (
-                                <span className={cn("flex items-center gap-1 text-[10px] font-medium",
-                                  selectedProject.custom_domain_verified ? "text-emerald-400" : "text-amber-400")}>
-                                  <span className={cn("w-1.5 h-1.5 rounded-full", selectedProject.custom_domain_verified ? "bg-emerald-400" : "bg-amber-400 animate-pulse")} />
+                                <span className={cn(
+                                  "flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full",
+                                  selectedProject.custom_domain_verified
+                                    ? "bg-emerald-500/10 text-emerald-400"
+                                    : "bg-amber-500/10 text-amber-400"
+                                )}>
+                                  <span className={cn("w-1.5 h-1.5 rounded-full shrink-0",
+                                    selectedProject.custom_domain_verified ? "bg-emerald-400" : "bg-amber-400 animate-pulse")} />
                                   {selectedProject.custom_domain_verified ? "Aktif" : "Menunggu DNS"}
                                 </span>
                               )}
                             </div>
 
-                            <div className="p-4 space-y-3">
-                              {selectedProject.custom_domain ? (
-                                <>
-                                  {/* Domain pill */}
-                                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-accent/30 border border-border">
-                                    <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                    <span className="text-sm font-mono flex-1 min-w-0 truncate">{selectedProject.custom_domain}</span>
-                                    <CopyBtn value={selectedProject.custom_domain} />
-                                  </div>
+                            {selectedProject.custom_domain ? (
+                              <div className="space-y-3">
+                                {/* Domain row */}
+                                <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-muted/40">
+                                  <Globe className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                  <span className="text-sm font-mono flex-1 min-w-0 truncate">{selectedProject.custom_domain}</span>
+                                  <CopyBtn value={selectedProject.custom_domain} />
+                                </div>
 
-                                  {/* Smart DNS instruction — auto based on domain type */}
-                                  {!selectedProject.custom_domain_verified && target && (
-                                    <div className={cn("rounded-lg border p-3 space-y-2.5 text-xs",
-                                      isWwwDomain ? "border-blue-500/20 bg-blue-500/5" : isRootDomain ? "border-violet-500/20 bg-violet-500/5" : "border-border bg-accent/10")}>
-                                      <p className={cn("font-medium flex items-center gap-1.5", isWwwDomain ? "text-blue-400" : isRootDomain ? "text-violet-400" : "text-foreground")}>
-                                        <ChevronRight className="w-3 h-3" />
-                                        {isWwwDomain ? "Tambah record CNAME di DNS registrarmu:" : isRootDomain ? "Tambah record berikut di DNS registrarmu:" : "Atur DNS domain ini ke:"}
-                                      </p>
-                                      {/* Record rows */}
-                                      <div className="space-y-1.5">
-                                        {/* www CNAME — always shown */}
-                                        <div className="grid grid-cols-3 gap-1.5 text-[11px]">
-                                          <div className="px-2 py-1.5 rounded bg-accent/60 font-mono text-center">
-                                            <span className="text-muted-foreground block text-[9px] mb-0.5">Type</span>CNAME
-                                          </div>
-                                          <div className="px-2 py-1.5 rounded bg-accent/60 font-mono text-center">
-                                            <span className="text-muted-foreground block text-[9px] mb-0.5">Host</span>
-                                            {isWwwDomain ? "www" : "@"}
-                                          </div>
-                                          <div className="px-2 py-1.5 rounded bg-accent/60 font-mono text-center min-w-0">
-                                            <span className="text-muted-foreground block text-[9px] mb-0.5">Value</span>
-                                            <span className="flex items-center justify-center gap-1 min-w-0">
-                                              <span className="truncate">{target}</span>
-                                              <CopyBtn value={target} />
-                                            </span>
+                                {/* DNS instruction — only when not verified */}
+                                {!selectedProject.custom_domain_verified && target && (
+                                  <div className="rounded-xl bg-muted/30 p-4 space-y-3">
+                                    <p className="text-xs text-muted-foreground font-medium">
+                                      Tambah record DNS ini di registrarmu
+                                    </p>
+
+                                    {/* Record table */}
+                                    <div className="grid grid-cols-3 gap-2">
+                                      {[
+                                        { label: "Type", value: isRootDomain ? "ALIAS" : "CNAME", copyable: true },
+                                        { label: "Host", value: isWwwDomain ? "www" : "@", copyable: true },
+                                        { label: "Value", value: target, copyable: true, mono: true, truncate: true },
+                                      ].map(({ label, value, copyable, truncate: trunc }) => (
+                                        <div key={label} className="space-y-1">
+                                          <p className="text-[10px] text-muted-foreground/70 font-medium">{label}</p>
+                                          <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-background/60 border border-border/50 min-w-0">
+                                            <span className={cn("flex-1 text-xs font-mono min-w-0", trunc && "truncate")}>{value}</span>
+                                            {copyable && <CopyBtn value={value} />}
                                           </div>
                                         </div>
-                                        {/* Root domain extra note */}
-                                        {isRootDomain && (
-                                          <p className="text-[10px] text-muted-foreground leading-relaxed pt-0.5">
-                                            Gunakan type <span className="font-mono text-foreground">ALIAS</span> / <span className="font-mono text-foreground">ANAME</span> jika tersedia di registrarmu. Cloudflare mendukung <span className="font-mono text-foreground">CNAME</span> di root. Jika registrarmu tidak ada keduanya, coba ganti ke <span className="font-mono text-foreground">www.{activeDomain}</span>.
-                                          </p>
-                                        )}
-                                      </div>
-                                      <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground pt-0.5">
-                                        <Clock className="w-3 h-3 shrink-0 text-amber-500" />
-                                        Propagasi DNS biasanya 5–30 menit setelah record ditambah.
-                                      </div>
+                                      ))}
                                     </div>
-                                  )}
 
-                                  {/* Verify result */}
-                                  {domainVerifyResult && (
-                                    <div className={cn("flex items-start gap-2 p-3 rounded-lg border text-xs",
-                                      domainVerifyResult.verified
-                                        ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-400"
-                                        : "bg-amber-500/5 border-amber-500/20 text-amber-400")}>
-                                      {domainVerifyResult.verified
-                                        ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                        : <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
-                                      <div className="min-w-0">
-                                        <p>{domainVerifyResult.reason}</p>
-                                        {domainVerifyResult.found && domainVerifyResult.found.length > 0 && (
-                                          <p className="mt-1 text-[10px] opacity-70 truncate">Ditemukan: {domainVerifyResult.found.join(", ")}</p>
-                                        )}
-                                      </div>
+                                    {/* Root domain note */}
+                                    {isRootDomain && (
+                                      <p className="text-[11px] text-muted-foreground leading-relaxed">
+                                        Gunakan <span className="font-mono text-foreground/80">ALIAS</span> atau <span className="font-mono text-foreground/80">ANAME</span> jika tersedia, atau <span className="font-mono text-foreground/80">CNAME</span> di Cloudflare. Kalau registrarmu tidak support, pakai <span className="font-mono text-foreground/80">www.{activeDomain}</span>.
+                                      </p>
+                                    )}
+
+                                    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/60">
+                                      <Clock className="w-3 h-3 shrink-0" />
+                                      Propagasi DNS biasanya 5–30 menit.
                                     </div>
-                                  )}
-
-                                  {/* Actions */}
-                                  <div className="flex flex-wrap gap-2">
-                                    <button onClick={handleVerifyDomain} disabled={verifyingDomain}
-                                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-border hover:bg-accent text-xs font-medium transition-colors disabled:opacity-50">
-                                      {verifyingDomain ? <Loader2 className="w-3 h-3 animate-spin" /> : <ShieldCheck className="w-3 h-3" />}
-                                      Verifikasi DNS
-                                    </button>
-                                    <button onClick={handleRemoveDomain} disabled={removingDomain}
-                                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-red-500/20 text-red-400 hover:bg-red-500/8 text-xs transition-colors disabled:opacity-50">
-                                      {removingDomain ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlink className="w-3 h-3" />}
-                                      Hapus Domain
-                                    </button>
                                   </div>
-                                </>
-                              ) : (
-                                <div className="space-y-2.5">
-                                  {/* No subdomain yet warning */}
-                                  {!target && (
-                                    <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-500/8 border border-amber-500/20 text-[11px] text-amber-400">
-                                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                                      <span>Deploy proyek terlebih dahulu agar mendapat subdomain target DNS.</span>
-                                    </div>
-                                  )}
+                                )}
 
-                                  {/* Input */}
-                                  <div className="flex gap-2">
-                                    <input
-                                      type="text"
-                                      placeholder="www.namadomain.com atau namadomain.com"
-                                      value={domainInput}
-                                      onChange={e => setDomainInput(e.target.value)}
-                                      onKeyDown={e => e.key === "Enter" && handleSetDomain()}
-                                      disabled={!target}
-                                      className="flex-1 min-w-0 px-3 py-2 rounded-lg bg-background border border-border text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/40 font-mono disabled:opacity-50"
-                                    />
-                                    <button onClick={handleSetDomain} disabled={settingDomain || !domainInput.trim() || !target}
-                                      className="shrink-0 flex items-center gap-1.5 px-4 py-2 rounded-lg bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
-                                      {settingDomain ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                                      Set
-                                    </button>
+                                {/* Verify result banner */}
+                                {domainVerifyResult && (
+                                  <div className={cn(
+                                    "flex items-start gap-2.5 px-3 py-2.5 rounded-xl text-xs",
+                                    domainVerifyResult.verified
+                                      ? "bg-emerald-500/8 text-emerald-400"
+                                      : "bg-amber-500/8 text-amber-400"
+                                  )}>
+                                    {domainVerifyResult.verified
+                                      ? <CheckCircle2 className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                                      : <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />}
+                                    <div className="min-w-0">
+                                      <p>{domainVerifyResult.reason}</p>
+                                      {domainVerifyResult.found?.length ? (
+                                        <p className="mt-0.5 text-[10px] opacity-70 truncate">
+                                          Ditemukan: {domainVerifyResult.found.join(", ")}
+                                        </p>
+                                      ) : null}
+                                    </div>
                                   </div>
+                                )}
 
-                                  {/* Live domain-type hint */}
-                                  {isWwwDomain && (
-                                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20 text-[11px] text-emerald-400">
-                                      <CheckCircle2 className="w-3 h-3 shrink-0" />
-                                      <span><strong>Subdomain www</strong> — 1 record CNAME, didukung semua registrar.</span>
-                                    </div>
-                                  )}
-                                  {isRootDomain && (
-                                    <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-amber-500/8 border border-amber-500/20 text-[11px] text-amber-400">
-                                      <AlertCircle className="w-3 h-3 shrink-0" />
-                                      <span><strong>Root domain</strong> — butuh ALIAS/ANAME atau CNAME (Cloudflare). Instruksi muncul setelah disimpan.</span>
-                                    </div>
-                                  )}
+                                {/* Action buttons */}
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                  <button onClick={handleVerifyDomain} disabled={verifyingDomain}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-background hover:bg-accent text-xs font-medium transition-colors disabled:opacity-50">
+                                    {verifyingDomain ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                                    Verifikasi DNS
+                                  </button>
+                                  <button onClick={handleRemoveDomain} disabled={removingDomain}
+                                    className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-border bg-background text-muted-foreground hover:text-red-400 hover:border-red-500/30 text-xs font-medium transition-colors disabled:opacity-50">
+                                    {removingDomain ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Unlink className="w-3.5 h-3.5" />}
+                                    Lepas Domain
+                                  </button>
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            ) : (
+                              <div className="space-y-3">
+                                {/* No subdomain warning */}
+                                {!target && (
+                                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground/70">
+                                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                                    <span>Deploy proyek terlebih dahulu untuk mengatur custom domain.</span>
+                                  </div>
+                                )}
+
+                                {/* Input row */}
+                                <div className="flex flex-col sm:flex-row gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="www.contoh.com atau contoh.com"
+                                    value={domainInput}
+                                    onChange={e => setDomainInput(e.target.value)}
+                                    onKeyDown={e => e.key === "Enter" && handleSetDomain()}
+                                    disabled={!target}
+                                    className="flex-1 min-w-0 px-3 py-2.5 rounded-xl bg-muted/30 border border-border/60 text-sm focus:outline-none focus:border-primary/40 focus:ring-1 focus:ring-primary/10 placeholder:text-muted-foreground/30 font-mono disabled:opacity-40 transition-colors"
+                                  />
+                                  <button onClick={handleSetDomain} disabled={settingDomain || !domainInput.trim() || !target}
+                                    className="sm:w-auto flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40">
+                                    {settingDomain ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+                                    Hubungkan
+                                  </button>
+                                </div>
+
+                                {/* Live type hint — single clean line */}
+                                {(isWwwDomain || isRootDomain) && (
+                                  <p className={cn("flex items-center gap-1.5 text-[11px]",
+                                    isWwwDomain ? "text-emerald-500/80" : "text-amber-500/80")}>
+                                    {isWwwDomain
+                                      ? <><CheckCircle2 className="w-3 h-3 shrink-0" /> 1 record CNAME — didukung semua registrar.</>
+                                      : <><AlertCircle className="w-3 h-3 shrink-0" /> Root domain — butuh ALIAS/ANAME (atau CNAME di Cloudflare).</>
+                                    }
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
