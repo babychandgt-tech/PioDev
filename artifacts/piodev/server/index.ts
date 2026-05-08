@@ -4137,6 +4137,192 @@ function generateNodeDockerfile(
   ].join("\n") + "\n";
 }
 
+function generatePythonDockerfile(
+  gitRepository: string,
+  gitBranch: string,
+  installBuildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = { PORT: String(port), ...userEnvVars };
+  const argBlock = Object.keys(mergedVars).map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`).join("\n");
+  const envBlock = Object.keys(mergedVars).map((k) => `ENV ${k}=$${k}`).join("\n");
+  return [
+    "FROM python:3.12-slim",
+    "RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*",
+    argBlock,
+    envBlock,
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
+    `RUN ${installBuildCmd}`,
+    `EXPOSE ${port}`,
+    `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
+  ].join("\n") + "\n";
+}
+
+function generateBunDockerfile(
+  gitRepository: string,
+  gitBranch: string,
+  installBuildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = { PORT: String(port), ...userEnvVars };
+  const argBlock = Object.keys(mergedVars).map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`).join("\n");
+  const envBlock = Object.keys(mergedVars).map((k) => `ENV ${k}=$${k}`).join("\n");
+  return [
+    "FROM oven/bun:1-alpine",
+    "RUN apk add --no-cache git",
+    argBlock,
+    envBlock,
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
+    `RUN ${installBuildCmd}`,
+    `EXPOSE ${port}`,
+    `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
+  ].join("\n") + "\n";
+}
+
+function generateDenoDockerfile(
+  gitRepository: string,
+  gitBranch: string,
+  installBuildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = { PORT: String(port), ...userEnvVars };
+  const argBlock = Object.keys(mergedVars).map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`).join("\n");
+  const envBlock = Object.keys(mergedVars).map((k) => `ENV ${k}=$${k}`).join("\n");
+  return [
+    "FROM denoland/deno:alpine",
+    "RUN apk add --no-cache git",
+    argBlock,
+    envBlock,
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
+    installBuildCmd ? `RUN ${installBuildCmd}` : "",
+    `EXPOSE ${port}`,
+    `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
+  ].filter(l => l !== "").join("\n") + "\n";
+}
+
+function generatePhpDockerfile(
+  gitRepository: string,
+  gitBranch: string,
+  installBuildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = { PORT: String(port), ...userEnvVars };
+  const argBlock = Object.keys(mergedVars).map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`).join("\n");
+  const envBlock = Object.keys(mergedVars).map((k) => `ENV ${k}=$${k}`).join("\n");
+  return [
+    "FROM php:8.3-cli-alpine",
+    "RUN apk add --no-cache git curl",
+    "RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer",
+    argBlock,
+    envBlock,
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
+    `RUN ${installBuildCmd}`,
+    `EXPOSE ${port}`,
+    `CMD ["sh", "-c", ${JSON.stringify(startCmd)}]`,
+  ].join("\n") + "\n";
+}
+
+function generateStaticDockerfile(
+  gitRepository: string,
+  gitBranch: string,
+  buildCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  const mergedVars: Record<string, string> = { ...userEnvVars };
+  const argBlock = Object.keys(mergedVars).map((k) => `ARG ${k}=${JSON.stringify(mergedVars[k])}`).join("\n");
+  const envBlock = Object.keys(mergedVars).map((k) => `ENV ${k}=$${k}`).join("\n");
+  // nginx config as a single printf line — single-quotes protect $uri from shell expansion
+  const nginxLine = `RUN printf 'server {\\n  listen ${port};\\n  root /usr/share/nginx/html;\\n  index index.html;\\n  location / { try_files $uri $uri/ /index.html; }\\n}\\n' > /etc/nginx/conf.d/default.conf`;
+  return [
+    "FROM node:22-alpine AS builder",
+    `ENV PNPM_HOME="/pnpm"`,
+    `ENV PATH="$PNPM_HOME:$PATH"`,
+    "RUN apk add --no-cache git",
+    "RUN corepack enable && corepack prepare pnpm@9 --activate",
+    argBlock || "",
+    envBlock || "",
+    `RUN git clone --depth=1 --branch ${gitBranch} ${gitRepository} /app`,
+    "WORKDIR /app",
+    `RUN ${buildCmd}`,
+    "",
+    "FROM nginx:alpine",
+    // Try dist then build then out — pick whichever exists
+    "COPY --from=builder /app/dist /usr/share/nginx/html",
+    nginxLine,
+    `EXPOSE ${port}`,
+    `CMD ["nginx", "-g", "daemon off;"]`,
+  ].filter(l => l !== undefined).join("\n") + "\n";
+}
+
+/**
+ * Detect runtime from build/start commands.
+ * Returns a runtime key used by generateDockerfile().
+ */
+function detectRuntimeFromCommands(buildCmd: string, startCmd: string): string {
+  const b = (buildCmd || "").toLowerCase();
+  const s = (startCmd || "").toLowerCase();
+  if (
+    b.includes("pip install") || b.includes("pip3") || b.includes("uv pip") || b.includes("uv sync") ||
+    s.includes("uvicorn") || s.includes("gunicorn") || s.includes("python ") || s.includes("python3 ")
+  ) return "python";
+  if (
+    b.includes("bun install") || b.startsWith("bun ") || b.includes("bun run") ||
+    s.startsWith("bun ") || s.includes("bun run")
+  ) return "bun";
+  if (
+    b.includes("composer install") || b.includes("composer update") ||
+    s.includes("php -s") || s.includes("php artisan")
+  ) return "php";
+  if (
+    b.includes("deno cache") || b.includes("deno compile") ||
+    s.startsWith("deno ") || s.includes("deno run")
+  ) return "deno";
+  // Static: nginx serve, or empty start command with a build command (likely a SPA)
+  if (s.includes("nginx") || (s === "" && b !== "" && !b.includes("node"))) return "static";
+  return "node";
+}
+
+/**
+ * Dispatcher — pick the right Dockerfile generator based on detected runtime.
+ */
+function generateDockerfile(
+  runtime: string,
+  gitRepository: string,
+  gitBranch: string,
+  buildCmd: string,
+  startCmd: string,
+  port: number,
+  userEnvVars: Record<string, string> = {},
+): string {
+  switch (runtime) {
+    case "python": case "django": case "fastapi": case "flask":
+      return generatePythonDockerfile(gitRepository, gitBranch, buildCmd, startCmd, port, userEnvVars);
+    case "bun":
+      return generateBunDockerfile(gitRepository, gitBranch, buildCmd, startCmd, port, userEnvVars);
+    case "deno":
+      return generateDenoDockerfile(gitRepository, gitBranch, buildCmd, startCmd, port, userEnvVars);
+    case "php": case "laravel":
+      return generatePhpDockerfile(gitRepository, gitBranch, buildCmd, startCmd, port, userEnvVars);
+    case "static":
+      return generateStaticDockerfile(gitRepository, gitBranch, buildCmd, port, userEnvVars);
+    default:
+      return generateNodeDockerfile(gitRepository, gitBranch, buildCmd, startCmd, port, userEnvVars);
+  }
+}
+
 /**
  * Push environment variables to a Coolify application.
  * PORT and BASE_PATH are baked into the Dockerfile ARG/ENV for build-time access,
@@ -4223,9 +4409,46 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
         startCommand: hasDjango ? "python manage.py runserver 0.0.0.0:8000" : hasFastapi ? "uvicorn main:app --host 0.0.0.0 --port 8000" : "python app.py",
         port: 8000,
         packageManager: "pip",
+        runtime: "python",
       }); return;
     }
-    res.json({ detected: false, reason: "No package.json or requirements.txt found" }); return;
+
+    // Check for Deno
+    const hasDeno = await rawFetch("deno.json", detectedBranch).catch(() => null)
+      ?? await rawFetch("deno.jsonc", detectedBranch).catch(() => null);
+    if (hasDeno) {
+      let denoConfig: any = {};
+      try { denoConfig = JSON.parse(hasDeno); } catch { /**/ }
+      const tasks: Record<string, string> = denoConfig.tasks ?? {};
+      res.json({
+        detected: true,
+        framework: "deno",
+        buildCommand: tasks["build"] ? "deno task build" : "",
+        startCommand: tasks["start"] ? "deno task start" : tasks["dev"] ? "deno task dev" : "deno run --allow-net main.ts",
+        port: 8000,
+        packageManager: "deno",
+        runtime: "deno",
+      }); return;
+    }
+
+    // Check for PHP (Composer)
+    const hasComposer = await rawFetch("composer.json", detectedBranch).catch(() => null);
+    if (hasComposer) {
+      let composerConfig: any = {};
+      try { composerConfig = JSON.parse(hasComposer); } catch { /**/ }
+      const isLaravel = !!(composerConfig.require?.["laravel/framework"]);
+      res.json({
+        detected: true,
+        framework: isLaravel ? "laravel" : "php",
+        buildCommand: "composer install --no-dev --optimize-autoloader",
+        startCommand: isLaravel ? "php artisan serve --host=0.0.0.0 --port=8080" : "php -S 0.0.0.0:8080 -t public",
+        port: 8080,
+        packageManager: "composer",
+        runtime: "php",
+      }); return;
+    }
+
+    res.json({ detected: false, reason: "No package.json, requirements.txt, deno.json, or composer.json found" }); return;
   }
 
   let pkg: any = {};
@@ -4236,12 +4459,14 @@ app.get("/api/hosting/detect", requireAuth, async (req, res) => {
 
   // Detect package manager
   let pm = "npm";
-  const [hasPnpm, hasYarn] = await Promise.all([
+  const [hasPnpm, hasYarn, hasBunLock] = await Promise.all([
     rawFetch("pnpm-lock.yaml", detectedBranch).catch(() => null),
     rawFetch("yarn.lock", detectedBranch).catch(() => null),
+    rawFetch("bun.lockb", detectedBranch).catch(() => null),
   ]);
   if (hasPnpm) pm = "pnpm";
   else if (hasYarn) pm = "yarn";
+  else if (hasBunLock) pm = "bun";
 
   const installCmd = pm === "pnpm" ? "pnpm install --no-frozen-lockfile" : `${pm} install`;
 
@@ -4435,7 +4660,8 @@ app.post("/api/hosting/projects", requireAuth, async (req, res) => {
       const effectivePort = Number(port) || 3000;
       const installBuildCmd = build_command?.trim() || "pnpm install --no-frozen-lockfile";
       const startCmd = start_command?.trim() || "node server/index.js";
-      const dockerfile = generateNodeDockerfile(git_url.trim(), git_branch?.trim() || "main", installBuildCmd, startCmd, effectivePort, env_vars ?? {});
+      const runtime = detectRuntimeFromCommands(installBuildCmd, startCmd);
+      const dockerfile = generateDockerfile(runtime, git_url.trim(), git_branch?.trim() || "main", installBuildCmd, startCmd, effectivePort, env_vars ?? {});
       const body: Record<string, string> = {
         project_uuid: projectUuid,
         server_uuid: serverUuid,
@@ -4518,7 +4744,8 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
       const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
       const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
       const deployStartCmd = project.start_command?.trim() || "node server/index.js";
-      const dockerfile = generateNodeDockerfile(project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
+      const deployRuntime = detectRuntimeFromCommands(deployBuildCmd, deployStartCmd);
+      const dockerfile = generateDockerfile(deployRuntime, project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
 
       // Coolify API does NOT allow changing build_pack via PATCH after creation.
       // So we detect if the existing app is still using nixpacks and if so, delete it
@@ -4630,7 +4857,8 @@ app.patch("/api/hosting/projects/:id", requireAuth, async (req, res) => {
       const effectiveGitUrl = project.git_url as string;
       const effectiveGitBranch = (git_branch !== undefined ? git_branch?.trim() : project.git_branch?.trim()) || "main";
 
-      const dockerfile = generateNodeDockerfile(effectiveGitUrl, effectiveGitBranch, effectiveBuildCmd, effectiveStartCmd, effectivePort, effectiveEnvVars);
+      const patchRuntime = detectRuntimeFromCommands(effectiveBuildCmd, effectiveStartCmd);
+      const dockerfile = generateDockerfile(patchRuntime, effectiveGitUrl, effectiveGitBranch, effectiveBuildCmd, effectiveStartCmd, effectivePort, effectiveEnvVars);
       const body: Record<string, string> = {
         build_pack: "dockerfile",
         dockerfile,
@@ -5139,7 +5367,8 @@ app.post("/api/hosting/webhook/github", async (req, res) => {
         const deployEnvVars = (project.env_vars as Record<string, string>) ?? {};
         const deployBuildCmd = project.build_command?.trim() || "pnpm install --no-frozen-lockfile";
         const deployStartCmd = project.start_command?.trim() || "node server/index.js";
-        const dockerfile = generateNodeDockerfile(project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
+        const webhookRuntime = detectRuntimeFromCommands(deployBuildCmd, deployStartCmd);
+        const dockerfile = generateDockerfile(webhookRuntime, project.git_url, project.git_branch || "main", deployBuildCmd, deployStartCmd, deployPort, deployEnvVars);
 
         await syncCoolifyEnvVars(project.coolify_app_uuid, deployPort, deployEnvVars).catch(() => {});
         // Update dockerfile on Coolify app

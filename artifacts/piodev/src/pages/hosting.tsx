@@ -2063,8 +2063,14 @@ export default function HostingPage() {
                                 <span className="text-[10px] text-muted-foreground shrink-0">{pkg.path}</span>
                               </div>
                               <span className={cn("text-[10px] px-1.5 py-0.5 rounded font-medium shrink-0 ml-2",
-                                pkg.framework === "vite" || pkg.framework === "nextjs" ? "bg-blue-500/20 text-blue-400" :
-                                pkg.framework === "node-server" ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"
+                                pkg.framework === "vite" || pkg.framework === "nextjs" || pkg.framework === "nuxt" || pkg.framework === "svelte" ? "bg-blue-500/20 text-blue-400" :
+                                pkg.framework === "node-server" || pkg.framework === "node" ? "bg-green-500/20 text-green-400" :
+                                pkg.framework === "python" || pkg.framework === "django" || pkg.framework === "fastapi" || pkg.framework === "flask" ? "bg-yellow-500/20 text-yellow-400" :
+                                pkg.framework === "bun" ? "bg-pink-500/20 text-pink-400" :
+                                pkg.framework === "deno" ? "bg-cyan-500/20 text-cyan-400" :
+                                pkg.framework === "php" || pkg.framework === "laravel" ? "bg-purple-500/20 text-purple-400" :
+                                pkg.framework === "static" ? "bg-orange-500/20 text-orange-400" :
+                                "bg-muted text-muted-foreground"
                               )}>
                                 {pkg.framework}
                               </span>
