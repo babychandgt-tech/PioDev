@@ -7,7 +7,7 @@ import {
   Terminal, Copy, Check, Menu, Server, Zap, XCircle, Sparkles,
   KeyRound, Eye, EyeOff, Settings, LayoutDashboard, History,
   ArrowUpRight, GitCommit, Package, Github, Link, Unlink,
-  Search, Lock, Star, GitFork,
+  Search, Lock, Star, GitFork, Activity, ArrowDown,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/hooks/use-auth";
@@ -80,6 +80,22 @@ interface GithubRepo {
   pushed_at: string;
   stargazers_count: number;
   fork: boolean;
+}
+
+// Strip ANSI escape codes from log strings
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1B\[[0-9;]*[mGKHF]/g, "").replace(/\x1B\[[0-9;]*[A-Z]/g, "");
+}
+
+// Determine CSS class for a log line based on keywords
+function logLineClass(line: string): string {
+  const l = line.toLowerCase();
+  if (/\b(error|err|fatal|failed|failure|exception)\b/.test(l)) return "text-red-400";
+  if (/\b(warn|warning)\b/.test(l)) return "text-amber-400";
+  if (/\b(success|done|finished|ready|started|listening|deployed)\b/.test(l)) return "text-emerald-400";
+  if (/^\s*#/.test(line) || /\b(step|from|run|copy|add|workdir|arg|env)\b/.test(l)) return "text-blue-400/80";
+  return "text-zinc-300";
 }
 
 function timeAgo(iso: string): string {
@@ -205,8 +221,12 @@ export default function HostingPage() {
   const [deleteTarget, setDeleteTarget] = useState<HostingProject | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [logType, setLogType] = useState<"build" | "runtime">("build");
   const [logs, setLogs] = useState<string>("");
+  const [runtimeLogs, setRuntimeLogs] = useState<string>("");
   const [logsLoading, setLogsLoading] = useState(false);
+  const [runtimeLogsLoading, setRuntimeLogsLoading] = useState(false);
+  const [logsAutoScroll, setLogsAutoScroll] = useState(true);
   const [copiedLogs, setCopiedLogs] = useState(false);
 
   const [envRows, setEnvRows] = useState<{ key: string; value: string; hidden: boolean }[]>([]);
@@ -372,6 +392,8 @@ export default function HostingPage() {
     setDetailTab("overview");
     setEnvEditing(false);
     setLogs("");
+    setRuntimeLogs("");
+    setLogType("build");
     await loadDetail(project);
   };
 
@@ -387,9 +409,19 @@ export default function HostingPage() {
     });
   }, [selectedProject?.id]);
 
-  // Auto-poll logs while deploying and on logs tab
+  // Auto-scroll helper
+  const scrollLogsToBottom = () => {
+    setTimeout(() => { if (logsAutoScroll) logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight, behavior: "smooth" }); }, 50);
+  };
+
+  // Build log poller — runs every 2s while deploying and logs tab is open
   useEffect(() => {
-    if (!selectedProject || selectedProject.status !== "deploying" || detailTab !== "logs") {
+    if (!selectedProject || detailTab !== "logs" || logType !== "build") {
+      if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
+      return;
+    }
+    const isDeploying = selectedProject.status === "deploying";
+    if (!isDeploying) {
       if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
       return;
     }
@@ -398,7 +430,7 @@ export default function HostingPage() {
         const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}/logs`);
         if (!res.ok) return;
         const data = await res.json();
-        if (data.logs) { setLogs(data.logs); setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 50); }
+        if (data.logs !== undefined) { setLogs(data.logs); scrollLogsToBottom(); }
         if (data.status === "finished" || data.status === "failed") {
           if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
           const newStatus = data.status === "finished" ? "running" : "failed";
@@ -409,9 +441,27 @@ export default function HostingPage() {
       } catch {}
     };
     poll();
-    logsPollRef.current = setInterval(poll, 3000);
+    logsPollRef.current = setInterval(poll, 2000);
     return () => { if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; } };
-  }, [selectedProject?.id, selectedProject?.status, detailTab]);
+  }, [selectedProject?.id, selectedProject?.status, detailTab, logType, logsAutoScroll]);
+
+  // Runtime log poller — runs every 4s while logs tab is open and project is running
+  useEffect(() => {
+    if (!selectedProject || detailTab !== "logs" || logType !== "runtime") return;
+    const canPoll = selectedProject.status === "running" || selectedProject.status === "failed";
+    if (!canPoll) return;
+    const poll = async () => {
+      try {
+        const res = await authedFetch(`/api/hosting/projects/${selectedProject.id}/runtime-logs`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data.logs !== undefined) { setRuntimeLogs(data.logs); scrollLogsToBottom(); }
+      } catch {}
+    };
+    poll();
+    const t = setInterval(poll, 4000);
+    return () => clearInterval(t);
+  }, [selectedProject?.id, selectedProject?.status, detailTab, logType, logsAutoScroll]);
 
   const resetCreateDialog = () => {
     setShowCreate(false);
@@ -567,9 +617,21 @@ export default function HostingPage() {
     try {
       const res = await authedFetch(`/api/hosting/projects/${project.id}/logs`);
       const data = await res.json();
-      setLogs(data.logs || "");
+      setLogs(data.logs ?? "");
     } finally {
       setLogsLoading(false);
+      setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 100);
+    }
+  };
+
+  const handleLoadRuntimeLogs = async (project: HostingProject) => {
+    setRuntimeLogsLoading(true);
+    try {
+      const res = await authedFetch(`/api/hosting/projects/${project.id}/runtime-logs`);
+      const data = await res.json();
+      setRuntimeLogs(data.logs ?? "");
+    } finally {
+      setRuntimeLogsLoading(false);
       setTimeout(() => logsRef.current?.scrollTo({ top: logsRef.current.scrollHeight }), 100);
     }
   };
@@ -639,7 +701,7 @@ export default function HostingPage() {
   };
 
   const copyLogs = () => {
-    navigator.clipboard.writeText(logs);
+    navigator.clipboard.writeText(logType === "build" ? logs : runtimeLogs);
     setCopiedLogs(true);
     setTimeout(() => setCopiedLogs(false), 2000);
   };
@@ -980,8 +1042,9 @@ export default function HostingPage() {
                       key={tab.id}
                       onClick={() => {
                         setDetailTab(tab.id);
-                        if (tab.id === "logs" && !logs && selectedProject) {
-                          handleLoadLogs(selectedProject);
+                        if (tab.id === "logs" && selectedProject) {
+                          if (logType === "build" && !logs) handleLoadLogs(selectedProject);
+                          if (logType === "runtime" && !runtimeLogs) handleLoadRuntimeLogs(selectedProject);
                         }
                       }}
                       className={cn(
@@ -1123,42 +1186,121 @@ export default function HostingPage() {
                     )}
 
                     {/* ─ Logs tab ─ */}
-                    {detailTab === "logs" && (
-                      <div className="flex flex-col h-full">
-                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                            <Terminal className="w-3.5 h-3.5" />
-                            <span>Build Logs</span>
-                            {(logsLoading || selectedProject.status === "deploying") && (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                    {detailTab === "logs" && (() => {
+                      const isDeploying = selectedProject.status === "deploying";
+                      const isRunning  = selectedProject.status === "running";
+                      const isFailed   = selectedProject.status === "failed";
+                      const activeLog  = logType === "build" ? logs : runtimeLogs;
+                      const isLive     = logType === "build" ? isDeploying : (isRunning || isFailed);
+                      const isLoading  = logType === "build" ? logsLoading : runtimeLogsLoading;
+                      const lines      = stripAnsi(activeLog).split("\n");
+                      return (
+                        <div className="flex flex-col h-full">
+                          {/* Toolbar */}
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-border shrink-0 gap-2">
+                            {/* Log type tabs */}
+                            <div className="flex p-0.5 rounded-lg bg-zinc-900 border border-zinc-800 gap-0.5">
+                              <button
+                                type="button"
+                                onClick={() => { setLogType("build"); if (!logs) handleLoadLogs(selectedProject); }}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all",
+                                  logType === "build" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                                )}
+                              >
+                                <Terminal className="w-3 h-3" />
+                                Build
+                                {isDeploying && logType === "build" && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                                )}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => { setLogType("runtime"); if (!runtimeLogs) handleLoadRuntimeLogs(selectedProject); }}
+                                className={cn(
+                                  "flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium transition-all",
+                                  logType === "runtime" ? "bg-zinc-700 text-zinc-100" : "text-zinc-500 hover:text-zinc-300"
+                                )}
+                              >
+                                <Activity className="w-3 h-3" />
+                                Runtime
+                                {isRunning && logType === "runtime" && (
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                )}
+                              </button>
+                            </div>
+
+                            {/* Right controls */}
+                            <div className="flex items-center gap-1.5 ml-auto">
+                              {/* Live indicator */}
+                              {isLive && (
+                                <span className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                  Live
+                                </span>
+                              )}
+                              {isLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
+                              {/* Auto-scroll toggle */}
+                              <button
+                                onClick={() => setLogsAutoScroll(v => !v)}
+                                title={logsAutoScroll ? "Auto-scroll aktif" : "Auto-scroll mati"}
+                                className={cn(
+                                  "p-1.5 rounded-md transition-colors text-[10px] border",
+                                  logsAutoScroll ? "border-primary/40 bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-accent"
+                                )}
+                              >
+                                <ArrowDown className="w-3 h-3" />
+                              </button>
+                              {/* Refresh */}
+                              <button
+                                onClick={() => logType === "build" ? handleLoadLogs(selectedProject) : handleLoadRuntimeLogs(selectedProject)}
+                                className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors text-muted-foreground"
+                              >
+                                <RefreshCw className="w-3 h-3" />
+                              </button>
+                              {/* Copy */}
+                              <button onClick={copyLogs} className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors text-muted-foreground">
+                                {copiedLogs ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Log output */}
+                          <div
+                            ref={logsRef}
+                            className="flex-1 overflow-auto bg-zinc-950 p-3 font-mono text-[11px] leading-relaxed"
+                          >
+                            {isLoading && !activeLog ? (
+                              <div className="flex items-center gap-2 text-zinc-500 pt-2">
+                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                Memuat logs...
+                              </div>
+                            ) : !activeLog ? (
+                              <div className="text-zinc-600 pt-2">
+                                {logType === "build"
+                                  ? isDeploying ? "Menunggu output build dari VM..." : "Belum ada build log. Klik Deploy untuk memulai."
+                                  : !isRunning && !isFailed ? "Jalankan deployment terlebih dahulu untuk melihat runtime logs." : "Belum ada output runtime."}
+                              </div>
+                            ) : (
+                              lines.map((line, i) => (
+                                <div key={i} className={cn("whitespace-pre-wrap break-all", logLineClass(line))}>
+                                  {line || "\u00a0"}
+                                </div>
+                              ))
                             )}
                           </div>
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              onClick={() => handleLoadLogs(selectedProject)}
-                              className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors flex items-center gap-1"
-                            >
-                              <RefreshCw className="w-3 h-3" />
-                              Refresh
-                            </button>
-                            <button onClick={copyLogs} className="text-xs px-2.5 py-1 rounded-lg border border-border hover:bg-accent transition-colors flex items-center gap-1">
-                              {copiedLogs ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              {copiedLogs ? "Tersalin" : "Salin"}
-                            </button>
-                          </div>
+
+                          {/* Line count footer */}
+                          {activeLog && (
+                            <div className="px-3 py-1.5 border-t border-zinc-800 bg-zinc-950 text-[10px] text-zinc-600 shrink-0 flex items-center gap-2">
+                              <span>{lines.length} baris</span>
+                              {logType === "build" && isDeploying && <span className="text-amber-400">● Build sedang berjalan...</span>}
+                              {logType === "runtime" && isRunning && <span className="text-emerald-400">● Polling setiap 4 detik</span>}
+                            </div>
+                          )}
                         </div>
-                        <pre
-                          ref={logsRef}
-                          className="flex-1 p-4 text-[11px] font-mono text-zinc-300 bg-zinc-950 overflow-auto whitespace-pre-wrap leading-relaxed"
-                        >
-                          {logsLoading
-                            ? "Memuat logs..."
-                            : logs || (selectedProject.status === "deploying"
-                              ? "Menunggu output dari VM..."
-                              : "Belum ada log. Klik Deploy untuk memulai.")}
-                        </pre>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* ─ Env Vars tab ─ */}
                     {detailTab === "env" && (

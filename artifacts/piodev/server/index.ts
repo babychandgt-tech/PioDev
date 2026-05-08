@@ -4818,12 +4818,35 @@ app.get("/api/hosting/projects/:id/logs", requireAuth, async (req, res) => {
           await supabaseAdmin.from("hosting_projects").update({ status: "failed", updated_at: new Date().toISOString() }).eq("id", project.id);
         }
       }
-      res.json({ logs, deploymentId: latestDeploy.id, status: latestDeploy.status }); return;
+      res.json({ logs, deploymentId: latestDeploy.id, status: newDeployStatus }); return;
     }
   } catch (e) {
     console.warn("[Hosting] Logs fetch error:", (e as Error).message);
   }
-  res.json({ logs: "", deploymentId: latestDeploy.id, status: latestDeploy.status });
+  res.json({ logs: "", deploymentId: latestDeploy?.id ?? null, status: latestDeploy?.status ?? null });
+});
+
+// GET /api/hosting/projects/:id/runtime-logs — live container stdout from Coolify
+app.get("/api/hosting/projects/:id/runtime-logs", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (!project.coolify_app_uuid || !COOLIFY_API_URL || !COOLIFY_API_TOKEN) {
+    res.json({ logs: "" }); return;
+  }
+  try {
+    const r = await coolifyFetch(`/applications/${project.coolify_app_uuid}/logs`);
+    if (r.ok) {
+      const raw = await r.text();
+      let logs = "";
+      try { logs = (JSON.parse(raw) as { logs?: string }).logs ?? raw; } catch { logs = raw; }
+      res.json({ logs }); return;
+    }
+  } catch (e) {
+    console.warn("[Hosting] Runtime logs error:", (e as Error).message);
+  }
+  res.json({ logs: "" });
 });
 
 // ── GITHUB INTEGRATION (Auto Deploy) ──────────────────────────────────────────
