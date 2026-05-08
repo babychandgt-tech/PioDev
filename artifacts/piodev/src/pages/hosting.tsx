@@ -362,15 +362,30 @@ export default function HostingPage() {
     if (isAuthenticated) loadData();
   }, [isAuthenticated, loadData]);
 
+  // Auto-sync deploying projects every 5s — calls /sync (hits Coolify) instead of reading stale DB
   useEffect(() => {
-    const hasDeploying = projects.some(p => p.status === "deploying");
-    if (hasDeploying) {
-      pollRef.current = setInterval(loadData, 5000);
-    } else {
+    const deployingProjects = projects.filter(p => p.status === "deploying");
+    if (deployingProjects.length === 0) {
       if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+      return;
     }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [projects, loadData]);
+    const poll = async () => {
+      await Promise.all(deployingProjects.map(async (proj) => {
+        try {
+          const res = await authedFetch(`/api/hosting/projects/${proj.id}/sync`);
+          const data = await res.json();
+          if (res.ok && data.project) {
+            setProjects(prev => prev.map(p => p.id === proj.id ? data.project : p));
+            setSelectedProject(prev => prev?.id === proj.id ? data.project : prev);
+          }
+        } catch {}
+      }));
+    };
+    poll();
+    pollRef.current = setInterval(poll, 5000);
+    return () => { if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; } };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projects.filter(p => p.status === "deploying").map(p => p.id).join(",")]);
 
   const loadDetail = useCallback(async (project: HostingProject) => {
     setDetailLoading(true);
@@ -423,6 +438,13 @@ export default function HostingPage() {
     const isDeploying = selectedProject.status === "deploying";
     if (!isDeploying) {
       if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; }
+      // Final fetch to make sure we have the complete build output
+      if (!logs) {
+        authedFetch(`/api/hosting/projects/${selectedProject.id}/logs`)
+          .then(r => r.ok ? r.json() : null)
+          .then(data => { if (data?.logs) { setLogs(data.logs); scrollLogsToBottom(); } })
+          .catch(() => {});
+      }
       return;
     }
     const poll = async () => {
@@ -444,6 +466,22 @@ export default function HostingPage() {
     logsPollRef.current = setInterval(poll, 2000);
     return () => { if (logsPollRef.current) { clearInterval(logsPollRef.current); logsPollRef.current = null; } };
   }, [selectedProject?.id, selectedProject?.status, detailTab, logType, logsAutoScroll]);
+
+  // When status transitions from deploying → running/failed, fetch final build logs regardless of active tab
+  const prevStatusRef = useRef<string | null>(null);
+  useEffect(() => {
+    const prev = prevStatusRef.current;
+    const curr = selectedProject?.status ?? null;
+    prevStatusRef.current = curr;
+    if (prev === "deploying" && (curr === "running" || curr === "failed")) {
+      // Always fetch final build logs so they're ready when user switches to Logs tab
+      authedFetch(`/api/hosting/projects/${selectedProject!.id}/logs`)
+        .then(r => r.ok ? r.json() : null)
+        .then(data => { if (data?.logs) setLogs(data.logs); })
+        .catch(() => {});
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedProject?.status]);
 
   // Runtime log poller — runs every 4s while logs tab is open and project is running
   useEffect(() => {
@@ -1341,10 +1379,29 @@ export default function HostingPage() {
                                 Memuat logs...
                               </div>
                             ) : !activeLog ? (
-                              <div className="text-zinc-600 pt-2">
-                                {logType === "build"
-                                  ? isDeploying ? "Menunggu output build dari VM..." : "Belum ada build log. Klik Deploy untuk memulai."
-                                  : !isRunning && !isFailed ? "Jalankan deployment terlebih dahulu untuk melihat runtime logs." : "Belum ada output runtime."}
+                              <div className="pt-2">
+                                {logType === "build" && isDeploying ? (
+                                  <div className="flex flex-col gap-3">
+                                    <div className="flex items-center gap-2 text-zinc-500">
+                                      <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400" />
+                                      <span className="text-amber-400/80">Build sedang berjalan...</span>
+                                    </div>
+                                    <div className="space-y-1.5 pl-1">
+                                      {["Menghubungkan ke VM...", "Menunggu output Coolify..."].map((msg, i) => (
+                                        <div key={i} className="flex items-center gap-2 text-zinc-700 text-[10px]">
+                                          <span className="w-1 h-1 rounded-full bg-zinc-700" />
+                                          {msg}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-zinc-600">
+                                    {logType === "build"
+                                      ? "Belum ada build log. Klik Deploy untuk memulai."
+                                      : !isRunning && !isFailed ? "Jalankan deployment terlebih dahulu untuk melihat runtime logs." : "Belum ada output runtime."}
+                                  </span>
+                                )}
                               </div>
                             ) : (
                               lines.map((line, i) => (
