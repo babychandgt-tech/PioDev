@@ -4903,6 +4903,104 @@ app.post("/api/hosting/projects/:id/restart", requireAuth, async (req, res) => {
   }
 });
 
+// PUT /api/hosting/projects/:id/domain — set custom domain
+app.put("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { domain } = req.body as { domain: string };
+  if (!domain?.trim()) { res.status(400).json({ error: "Domain wajib diisi" }); return; }
+  const cleanDomain = domain.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/$/, "");
+  if (!/^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.[a-z]{2,}$/.test(cleanDomain)) {
+    res.status(400).json({ error: "Format domain tidak valid (contoh: www.namadomain.com atau namadomain.com)" }); return;
+  }
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  await supabaseAdmin.from("hosting_projects").update({
+    custom_domain: cleanDomain,
+    custom_domain_verified: false,
+    updated_at: new Date().toISOString(),
+  }).eq("id", project.id);
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      const fqdn = `https://${cleanDomain},https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+      const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+        method: "PATCH", body: JSON.stringify({ fqdn }),
+      });
+      console.log(`[Hosting] Domain set: ${cleanDomain} → Coolify PATCH ${patchRes.status}`);
+    } catch (e) {
+      console.warn("[Hosting] Coolify domain PATCH error:", (e as Error).message);
+    }
+  }
+  res.json({ success: true, custom_domain: cleanDomain });
+});
+
+// DELETE /api/hosting/projects/:id/domain — remove custom domain
+app.delete("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  await supabaseAdmin.from("hosting_projects").update({
+    custom_domain: null,
+    custom_domain_verified: false,
+    updated_at: new Date().toISOString(),
+  }).eq("id", project.id);
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN && project.subdomain) {
+    try {
+      const fqdn = `https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+      await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
+        method: "PATCH", body: JSON.stringify({ fqdn }),
+      });
+    } catch (e) {
+      console.warn("[Hosting] Coolify domain revert error:", (e as Error).message);
+    }
+  }
+  res.json({ success: true });
+});
+
+// GET /api/hosting/projects/:id/domain/verify — check DNS CNAME propagation
+app.get("/api/hosting/projects/:id/domain/verify", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  const customDomain = (project as any).custom_domain as string | null;
+  if (!customDomain) { res.status(400).json({ error: "Belum ada custom domain" }); return; }
+  const expectedTarget = `${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+  try {
+    // Check www prefixed or root domain
+    const checkDomain = customDomain.startsWith("www.") ? customDomain : `www.${customDomain}`;
+    const [cnameRes, aRes] = await Promise.all([
+      fetch(`https://dns.google/resolve?name=${encodeURIComponent(checkDomain)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }),
+      fetch(`https://dns.google/resolve?name=${encodeURIComponent(customDomain)}&type=CNAME`, { signal: AbortSignal.timeout(8000) }),
+    ]);
+    const [cnameData, aData]: { Answer?: { type: number; data: string }[] }[] = await Promise.all([
+      cnameRes.ok ? cnameRes.json() : Promise.resolve({}),
+      aRes.ok ? aRes.json() : Promise.resolve({}),
+    ]);
+    const allAnswers = [
+      ...(cnameData.Answer ?? []).filter(a => a.type === 5),
+      ...(aData.Answer ?? []).filter(a => a.type === 5),
+    ];
+    const found = allAnswers.map(a => a.data.replace(/\.$/, "").toLowerCase());
+    const verified = found.some(f => f.includes((project.subdomain ?? "").toLowerCase()));
+    if (verified) {
+      await supabaseAdmin.from("hosting_projects").update({
+        custom_domain_verified: true, updated_at: new Date().toISOString(),
+      }).eq("id", project.id);
+    }
+    res.json({
+      verified,
+      checked_domain: checkDomain,
+      expected: expectedTarget,
+      found,
+      reason: verified ? "CNAME terverifikasi" : "CNAME belum mengarah ke subdomain yang benar. Tunggu propagasi DNS (5–30 menit).",
+    });
+  } catch {
+    res.json({ verified: false, reason: "Timeout atau gagal menjangkau DNS resolver. Coba beberapa saat lagi." });
+  }
+});
+
 // GET /api/hosting/projects/:id/sync
 app.get("/api/hosting/projects/:id/sync", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
