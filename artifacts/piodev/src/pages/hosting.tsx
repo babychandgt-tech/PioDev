@@ -181,6 +181,10 @@ export default function HostingPage() {
   const [githubStatus, setGithubStatus] = useState<GithubStatus | null>(null);
   const [togglingAutoDeploy, setTogglingAutoDeploy] = useState(false);
   const [connectingGithub, setConnectingGithub] = useState(false);
+  const [showGithubPat, setShowGithubPat] = useState(false);
+  const [githubPat, setGithubPat] = useState("");
+  const [githubPatVisible, setGithubPatVisible] = useState(false);
+  const [githubPatError, setGithubPatError] = useState<string | null>(null);
 
   const logsRef = useRef<HTMLPreElement>(null);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
@@ -196,60 +200,11 @@ export default function HostingPage() {
     authedFetch("/api/hosting/github/status").then(r => r.json()).then(setGithubStatus).catch(() => {});
   }, [isAuthenticated]);
 
-  // Handle OAuth redirect back from GitHub (capture provider_token and store it)
+  // Clean up any stale OAuth state from previous broken attempts
   useEffect(() => {
-    if (!isAuthenticated) return;
-    const pending = localStorage.getItem("gh_link_pending");
-    if (!pending) return;
-
-    (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const githubToken = (session as any)?.provider_token as string | undefined;
-
-      if (!githubToken) {
-        localStorage.removeItem("gh_link_pending");
-        localStorage.removeItem("gh_link_refresh_token");
-        return;
-      }
-
-      localStorage.removeItem("gh_link_pending");
-
-      // If we fell back to signInWithOAuth, restore the original user session first
-      const savedRefreshToken = localStorage.getItem("gh_link_refresh_token");
-      if (savedRefreshToken) {
-        localStorage.removeItem("gh_link_refresh_token");
-        // Restore original session before calling the API
-        const { data: restored } = await supabase.auth.refreshSession({ refresh_token: savedRefreshToken });
-        if (restored.session) {
-          const res = await fetch("/api/hosting/github/connect", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${restored.session.access_token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ provider_token: githubToken }),
-          });
-          const data = await res.json();
-          if (data.connected) {
-            setGithubStatus({ connected: true, username: data.username });
-            toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
-          }
-          return;
-        }
-      }
-
-      // linkIdentity path — session is already correct
-      authedFetch("/api/hosting/github/connect", {
-        method: "POST",
-        body: JSON.stringify({ provider_token: githubToken }),
-      }).then(r => r.json()).then(data => {
-        if (data.connected) {
-          setGithubStatus({ connected: true, username: data.username });
-          toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
-        }
-      }).catch(() => {});
-    })();
-  }, [isAuthenticated]);
+    localStorage.removeItem("gh_link_pending");
+    localStorage.removeItem("gh_link_refresh_token");
+  }, []);
 
   const runDetect = useCallback(async (url: string, branch: string) => {
     if (!url || !url.includes("github.com")) return;
@@ -588,46 +543,35 @@ export default function HostingPage() {
     setTimeout(() => setCopiedLogs(false), 2000);
   };
 
-  const handleGithubConnect = async () => {
-    setConnectingGithub(true);
-    try {
-      // Try linkIdentity first (requires enable_manual_linking in Supabase)
-      const { error: linkError } = await (supabase.auth as any).linkIdentity({
-        provider: "github",
-        options: {
-          scopes: "repo admin:repo_hook",
-          redirectTo: window.location.href,
-        },
-      });
+  const handleGithubConnect = () => {
+    setGithubPat("");
+    setGithubPatError(null);
+    setGithubPatVisible(false);
+    setShowGithubPat(true);
+  };
 
-      if (!linkError) {
-        // Success — browser will be redirected to GitHub by Supabase
-        localStorage.setItem("gh_link_pending", "1");
+  const handleSaveGithubPat = async () => {
+    const token = githubPat.trim();
+    if (!token) { setGithubPatError("Token tidak boleh kosong."); return; }
+    setConnectingGithub(true);
+    setGithubPatError(null);
+    try {
+      const res = await authedFetch("/api/hosting/github/connect", {
+        method: "POST",
+        body: JSON.stringify({ provider_token: token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setGithubPatError(data.error ?? "Token tidak valid. Pastikan scope 'repo' dan 'admin:repo_hook' aktif.");
         return;
       }
-
-      // Fallback: use signInWithOAuth and preserve the current session via refresh_token
-      const { data: sessionData } = await supabase.auth.getSession();
-      const refreshToken = sessionData.session?.refresh_token;
-      if (refreshToken) {
-        localStorage.setItem("gh_link_pending", "1");
-        localStorage.setItem("gh_link_refresh_token", refreshToken);
-      } else {
-        localStorage.setItem("gh_link_pending", "1");
-      }
-
-      await supabase.auth.signInWithOAuth({
-        provider: "github",
-        options: {
-          scopes: "repo admin:repo_hook",
-          redirectTo: window.location.href,
-        },
-      });
-      // Browser will redirect — execution stops here
-    } catch (e) {
-      localStorage.removeItem("gh_link_pending");
-      localStorage.removeItem("gh_link_refresh_token");
-      toast({ title: "Gagal menghubungkan GitHub", description: (e as Error).message, variant: "destructive" });
+      setGithubStatus({ connected: true, username: data.username });
+      setShowGithubPat(false);
+      setGithubPat("");
+      toast({ title: "GitHub terhubung!", description: `Akun @${data.username} berhasil ditautkan.` });
+    } catch {
+      setGithubPatError("Terjadi kesalahan. Coba lagi.");
+    } finally {
       setConnectingGithub(false);
     }
   };
@@ -1656,6 +1600,104 @@ export default function HostingPage() {
       </AnimatePresence>
 
       {/* Delete confirm */}
+      {/* ── GitHub PAT Dialog ── */}
+      <AnimatePresence>
+        {showGithubPat && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/60 z-50 backdrop-blur-sm"
+              onClick={() => { if (!connectingGithub) setShowGithubPat(false); }}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ type: "spring", damping: 25, stiffness: 300 }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            >
+              <div className="bg-card border border-border rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-zinc-800 flex items-center justify-center shrink-0">
+                      <Github className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h2 className="font-semibold text-sm">Hubungkan GitHub</h2>
+                      <p className="text-xs text-muted-foreground">Gunakan Personal Access Token (PAT)</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowGithubPat(false)}
+                    disabled={connectingGithub}
+                    className="p-1.5 rounded-lg hover:bg-accent transition-colors text-muted-foreground disabled:opacity-50"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Instructions */}
+                <div className="bg-zinc-900/60 border border-border rounded-xl p-4 space-y-2 text-xs text-muted-foreground">
+                  <p className="font-medium text-foreground text-[11px] uppercase tracking-wider">Cara membuat PAT:</p>
+                  <ol className="space-y-1.5 list-decimal list-inside">
+                    <li>Buka <a href="https://github.com/settings/tokens/new" target="_blank" rel="noreferrer" className="text-primary underline underline-offset-2 hover:text-primary/80">github.com/settings/tokens/new</a></li>
+                    <li>Beri nama token, lalu centang scope: <span className="font-mono text-foreground bg-zinc-800 px-1 py-0.5 rounded">repo</span> dan <span className="font-mono text-foreground bg-zinc-800 px-1 py-0.5 rounded">admin:repo_hook</span></li>
+                    <li>Klik <span className="font-medium text-foreground">Generate token</span>, lalu salin tokennya</li>
+                  </ol>
+                </div>
+
+                {/* Token input */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground">Personal Access Token</label>
+                  <div className="relative">
+                    <input
+                      type={githubPatVisible ? "text" : "password"}
+                      placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                      value={githubPat}
+                      onChange={e => { setGithubPat(e.target.value); setGithubPatError(null); }}
+                      onKeyDown={e => { if (e.key === "Enter") handleSaveGithubPat(); }}
+                      className="w-full pl-3 pr-10 py-2.5 rounded-xl bg-background border border-border text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 placeholder:text-muted-foreground/40 transition-all"
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setGithubPatVisible(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      {githubPatVisible ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                  {githubPatError && (
+                    <p className="text-xs text-red-400 flex items-center gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" /> {githubPatError}
+                    </p>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => setShowGithubPat(false)}
+                    disabled={connectingGithub}
+                    className="flex-1 py-2.5 rounded-xl border border-border text-sm font-medium hover:bg-accent transition-colors disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                  <button
+                    onClick={handleSaveGithubPat}
+                    disabled={connectingGithub || !githubPat.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {connectingGithub ? <Loader2 className="w-4 h-4 animate-spin" /> : <Link className="w-4 h-4" />}
+                    {connectingGithub ? "Menghubungkan..." : "Hubungkan"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       <AlertDialog open={!!deleteTarget} onOpenChange={open => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent className="max-w-sm rounded-2xl">
           <AlertDialogHeader>
