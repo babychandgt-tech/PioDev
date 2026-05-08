@@ -629,6 +629,8 @@ export default function HostingPage() {
       });
       if (!res.ok) { toast({ title: "Gagal simpan env vars", variant: "destructive" }); return; }
       setSelectedProject(prev => prev ? { ...prev, env_vars } as any : prev);
+      setEnvRows(Object.entries(env_vars).map(([key, value]) => ({ key, value: String(value), hidden: true })));
+      setEnvDotMode(false);
       setEnvEditing(false);
       toast({ title: "Env vars disimpan", description: "Deploy ulang untuk menerapkan perubahan." });
     } finally {
