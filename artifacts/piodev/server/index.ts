@@ -4937,9 +4937,9 @@ app.delete("/api/hosting/projects/:id/domain", requireAuth, async (req, res) => 
   }).eq("id", project.id);
   if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN && project.subdomain) {
     try {
-      const fqdn = `https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+      const domains = `https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
       await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
-        method: "PATCH", body: JSON.stringify({ fqdn }),
+        method: "PATCH", body: JSON.stringify({ domains }),
       });
     } catch (e) {
       console.warn("[Hosting] Coolify domain revert error:", (e as Error).message);
@@ -4988,9 +4988,9 @@ app.get("/api/hosting/projects/:id/domain/verify", requireAuth, async (req, res)
       // Now register the custom domain in Coolify — DNS is confirmed, so Coolify can provision SSL
       if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN && project.subdomain) {
         try {
-          const fqdn = `https://${customDomain},https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
+          const domains = `https://${customDomain},https://${project.subdomain}.${COOLIFY_BASE_DOMAIN}`;
           const patchRes = await coolifyFetch(`/applications/${project.coolify_app_uuid}`, {
-            method: "PATCH", body: JSON.stringify({ fqdn }),
+            method: "PATCH", body: JSON.stringify({ domains }),
           });
           const patchBody = await patchRes.text().catch(() => "");
           if (patchRes.ok) {
