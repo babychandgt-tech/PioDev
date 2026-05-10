@@ -1565,103 +1565,89 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold text-foreground mb-1">Broadcast Email</h2>
-        <p className="text-sm text-muted-foreground">Kirim email langsung ke semua pengguna atau pengguna tertentu.</p>
+    <div className="flex-1 flex flex-col gap-4 min-h-0">
+
+      {/* ── Top bar: title + send button ──────────────────────────────────── */}
+      <div className="flex items-center justify-between gap-4 shrink-0">
+        <div>
+          <h2 className="text-base font-semibold text-foreground leading-tight">Broadcast Email</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Kirim email ke semua atau pengguna tertentu.</p>
+        </div>
+        <button
+          onClick={() => setConfirmOpen(true)}
+          disabled={sending || !subject.trim() || !body.trim() || (target === "select" && selected.size === 0)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 shrink-0"
+        >
+          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
+        </button>
       </div>
 
-      {/* SMTP missing warning */}
+      {/* ── Alerts (SMTP / result) ─────────────────────────────────────────── */}
       {smtpMissing && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 flex gap-3">
-          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
-          <div className="text-sm">
-            <p className="font-medium text-amber-800 dark:text-amber-300 mb-1">SMTP belum dikonfigurasi</p>
-            <p className="text-amber-700 dark:text-amber-400 leading-relaxed">
-              Tambahkan variabel berikut ke <strong>environment variables / secrets</strong>:
-              <br /><code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_HOST</code>,{" "}
-              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_PORT</code>,{" "}
-              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_USER</code>,{" "}
-              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_PASS</code>,{" "}
-              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_FROM</code> (opsional, default pakai SMTP_USER).
-            </p>
+        <div className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3 flex gap-3 items-start">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-xs flex-1">
+            <span className="font-semibold text-amber-800 dark:text-amber-300">SMTP belum dikonfigurasi. </span>
+            <span className="text-amber-700 dark:text-amber-400">
+              Tambahkan secret: <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_HOST</code>{" "}
+              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_PORT</code>{" "}
+              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_USER</code>{" "}
+              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_PASS</code>{" "}
+              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_FROM</code>
+            </span>
           </div>
+          <button onClick={() => setSmtpMissing(false)} className="shrink-0 text-amber-500 hover:text-amber-700"><X className="w-4 h-4" /></button>
         </div>
       )}
-
-      {/* Result */}
       {result && (
         <div className={cn(
-          "rounded-xl border p-4 flex gap-3 items-start",
+          "shrink-0 rounded-xl border px-4 py-3 flex gap-3 items-center",
           result.failed === 0
             ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800"
             : "border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800"
         )}>
-          <Check className={cn("w-5 h-5 shrink-0 mt-0.5", result.failed === 0 ? "text-green-600" : "text-amber-500")} />
-          <div className="text-sm flex-1">
-            <p className={cn("font-medium mb-1", result.failed === 0 ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300")}>
-              Selesai — {result.sent} berhasil, {result.failed} gagal dari {result.total} penerima
-            </p>
-            {result.errors.length > 0 && (
-              <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 mt-1">
-                {result.errors.map((e, i) => <li key={i} className="font-mono">{e}</li>)}
-              </ul>
-            )}
-          </div>
+          <Check className={cn("w-4 h-4 shrink-0", result.failed === 0 ? "text-green-600" : "text-amber-500")} />
+          <p className={cn("text-xs flex-1 font-medium", result.failed === 0 ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300")}>
+            Selesai — <strong>{result.sent}</strong> berhasil, <strong>{result.failed}</strong> gagal dari <strong>{result.total}</strong> penerima
+            {result.errors.length > 0 && ` · ${result.errors[0]}`}
+          </p>
           <button onClick={() => setResult(null)} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Left — Compose */}
-        <div className="space-y-4">
-          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
-            <h3 className="text-sm font-medium text-foreground">Tulis Email</h3>
+      {/* ── Main two-column area ───────────────────────────────────────────── */}
+      <div className="flex gap-4 flex-1 min-h-0">
 
-            {/* Subject */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block">Subject</label>
-              <Input
-                placeholder="Contoh: Update terbaru PioCode 🚀"
-                value={subject}
-                onChange={(e) => setSubject(e.target.value)}
-                className="text-sm"
-              />
-            </div>
+        {/* LEFT — Compose + Penerima */}
+        <div className="flex flex-col gap-3 w-[42%] shrink-0">
 
-            {/* Body */}
-            <div>
-              <label className="text-xs text-muted-foreground mb-1.5 block">Isi Email</label>
-              <textarea
-                placeholder={"Halo!\n\nKami ingin memberitahu kamu bahwa..."}
-                value={body}
-                onChange={(e) => setBody(e.target.value)}
-                rows={9}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-sans"
-              />
-              <p className="text-xs text-muted-foreground mt-1">Baris baru akan otomatis dikonversi ke dalam email HTML.</p>
-            </div>
-
-            {/* Preview toggle */}
-            <button
-              onClick={() => setPreview((v) => !v)}
-              className="text-xs text-primary hover:underline"
-            >
-              {preview ? "Sembunyikan preview" : "Lihat preview email"}
-            </button>
+          {/* Subject */}
+          <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-1.5 shrink-0">
+            <label className="text-xs font-medium text-muted-foreground">Subject</label>
+            <Input
+              placeholder="Contoh: Update terbaru PioCode 🚀"
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="text-sm h-9"
+            />
           </div>
 
-          {/* Target selection */}
-          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
-            <h3 className="text-sm font-medium text-foreground">Penerima</h3>
-            <div className="flex gap-3">
+          {/* Penerima */}
+          <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2.5 shrink-0">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-medium text-muted-foreground">Penerima</label>
+              {target === "select" && selected.size > 0 && (
+                <span className="text-xs text-primary font-medium">{selected.size} dipilih</span>
+              )}
+            </div>
+            {/* Toggle tabs */}
+            <div className="flex rounded-lg border border-border overflow-hidden text-xs">
               <button
                 onClick={() => setTarget("all")}
                 className={cn(
-                  "flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors",
-                  target === "all"
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border text-muted-foreground hover:bg-accent"
+                  "flex-1 py-1.5 font-medium transition-colors",
+                  target === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
                 )}
               >
                 Semua Pengguna
@@ -1669,71 +1655,71 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
               <button
                 onClick={() => setTarget("select")}
                 className={cn(
-                  "flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors",
-                  target === "select"
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-border text-muted-foreground hover:bg-accent"
+                  "flex-1 py-1.5 font-medium transition-colors border-l border-border",
+                  target === "select" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
                 )}
               >
                 Pilih Pengguna
               </button>
             </div>
 
+            {target === "all" && (
+              <p className="text-xs text-muted-foreground">Email akan dikirim ke semua pengguna yang sudah verifikasi email.</p>
+            )}
+
             {target === "select" && (
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
                   <input
                     type="text"
                     placeholder="Cari email atau nama..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                    className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
                   />
                 </div>
                 {usersLoading ? (
-                  <div className="flex items-center justify-center py-6 text-muted-foreground">
-                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Memuat pengguna...
+                  <div className="flex items-center justify-center py-4 text-muted-foreground text-xs gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
                   </div>
                 ) : (
                   <div className="rounded-lg border border-border overflow-hidden">
-                    {/* Select all */}
                     <div
-                      className="flex items-center gap-3 px-3 py-2 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
+                      className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
                       onClick={toggleAll}
                     >
                       <div className={cn(
-                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
-                        selected.size === filtered.length && filtered.length > 0
+                        "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        selected.size > 0 && selected.size === filtered.length
                           ? "bg-primary border-primary text-primary-foreground"
                           : "border-border"
                       )}>
-                        {selected.size === filtered.length && filtered.length > 0 && <Check className="w-2.5 h-2.5" />}
+                        {selected.size > 0 && selected.size === filtered.length && <Check className="w-2 h-2" />}
                       </div>
-                      <span className="text-xs font-medium text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})
                       </span>
                     </div>
-                    <div className="max-h-52 overflow-y-auto divide-y divide-border">
+                    <div className="max-h-36 overflow-y-auto divide-y divide-border">
                       {filtered.length === 0 ? (
-                        <div className="py-6 text-center text-sm text-muted-foreground">Tidak ada pengguna ditemukan.</div>
+                        <div className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan.</div>
                       ) : filtered.map((u) => (
                         <div
                           key={u.id}
-                          className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-accent transition-colors"
+                          className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent transition-colors"
                           onClick={() => toggleUser(u.id)}
                         >
                           <div className={cn(
-                            "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                            "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
                             selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
                           )}>
-                            {selected.has(u.id) && <Check className="w-2.5 h-2.5" />}
+                            {selected.has(u.id) && <Check className="w-2 h-2" />}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <div className="text-sm truncate">{u.email}</div>
-                            {u.full_name && <div className="text-xs text-muted-foreground truncate">{u.full_name}</div>}
+                            <div className="text-xs truncate">{u.email}</div>
                           </div>
-                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
+                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
                             {u.tier}
                           </span>
                         </div>
@@ -1745,44 +1731,44 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
             )}
           </div>
 
-          {/* Send button */}
-          <button
-            onClick={() => setConfirmOpen(true)}
-            disabled={sending || !subject.trim() || !body.trim() || (target === "select" && selected.size === 0)}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-          >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
-          </button>
+          {/* Body */}
+          <div className="rounded-xl border border-border bg-card px-4 py-3 flex flex-col gap-1.5 flex-1 min-h-0">
+            <label className="text-xs font-medium text-muted-foreground shrink-0">Isi Email</label>
+            <textarea
+              placeholder={"Halo!\n\nKami ingin memberitahu kamu bahwa..."}
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              className="flex-1 min-h-0 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-sans"
+            />
+            <p className="text-[10px] text-muted-foreground shrink-0">Baris baru otomatis dikonversi ke HTML.</p>
+          </div>
         </div>
 
-        {/* Right — Email preview */}
-        {preview && (
-          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
-            <h3 className="text-sm font-medium text-foreground">Preview Email</h3>
-            <div className="rounded-lg border border-border overflow-hidden bg-[#f4f4f5]">
-              {/* Header */}
-              <div className="bg-[#18181b] px-6 py-4">
-                <span className="text-white font-bold text-base">PioCode</span>
-              </div>
-              {/* Body */}
-              <div className="bg-white px-6 py-7">
-                <h2 className="font-bold text-[#18181b] text-lg mb-4 leading-snug">
-                  {subject || <span className="text-gray-400 font-normal italic">Subject email...</span>}
-                </h2>
-                <div className="text-[#3f3f46] text-sm leading-relaxed whitespace-pre-line">
-                  {body || <span className="text-gray-400 italic">Isi email akan tampil di sini...</span>}
-                </div>
-              </div>
-              {/* Footer */}
-              <div className="bg-white border-t border-[#e4e4e7] px-6 py-4">
-                <p className="text-xs text-[#a1a1aa] leading-relaxed">
-                  Kamu menerima email ini karena terdaftar di PioCode. Jika ini bukan kamu, abaikan email ini.
-                </p>
+        {/* RIGHT — Live email preview */}
+        <div className="flex-1 rounded-xl border border-border bg-card px-4 py-3 flex flex-col gap-2 min-h-0">
+          <div className="flex items-center gap-2 shrink-0">
+            <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+            <span className="text-xs font-medium text-muted-foreground">Preview Email</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border bg-[#f4f4f5]">
+            <div className="bg-[#18181b] px-5 py-3">
+              <span className="text-white font-bold text-sm tracking-tight">PioCode</span>
+            </div>
+            <div className="bg-white px-5 py-5">
+              <h2 className="font-bold text-[#18181b] text-base mb-3 leading-snug">
+                {subject || <span className="text-gray-400 font-normal italic text-sm">Subject email...</span>}
+              </h2>
+              <div className="text-[#3f3f46] text-sm leading-relaxed whitespace-pre-line min-h-[60px]">
+                {body || <span className="text-gray-400 italic text-sm">Isi email akan tampil di sini...</span>}
               </div>
             </div>
+            <div className="bg-white border-t border-[#e4e4e7] px-5 py-3">
+              <p className="text-[11px] text-[#a1a1aa] leading-relaxed">
+                Kamu menerima email ini karena terdaftar di PioCode. Jika ini bukan kamu, abaikan email ini.
+              </p>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
       {/* Confirm dialog */}
@@ -1954,7 +1940,10 @@ export default function AdminPage() {
         </div>
 
         {/* Scrollable content */}
-        <main className="flex-1 overflow-y-auto px-4 md:px-6 py-6">
+        <main className={cn(
+          "flex-1 overflow-y-auto px-4 md:px-6 py-6",
+          activeSection === "broadcast" && "flex flex-col overflow-hidden"
+        )}>
           {activeSection === "ringkasan" && (
             <SectionRingkasan stats={stats} dailyUsage={dailyUsage} />
           )}
