@@ -1483,18 +1483,19 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [target, setTarget] = useState<"all" | "select">("all");
+  const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set());
   const [users, setUsers] = useState<{ id: string; email: string; full_name: string; tier: string }[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [showList, setShowList] = useState(false);
   const [search, setSearch] = useState("");
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<{ sent: number; failed: number; total: number; errors: string[] } | null>(null);
   const [smtpMissing, setSmtpMissing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [preview, setPreview] = useState(false);
 
+  // Load users on mount — dibutuhkan untuk hitung tier & pilih manual
   useEffect(() => {
-    if (target !== "select" || users.length > 0) return;
     setUsersLoading(true);
     authHeader().then((h) =>
       fetch("/api/admin/users", { headers: h })
@@ -1506,12 +1507,21 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
         })
         .finally(() => setUsersLoading(false))
     );
-  }, [target, users.length]);
+  }, []);
 
   const filtered = users.filter((u) =>
     !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.full_name.toLowerCase().includes(search.toLowerCase())
   );
+
+  // Hitung jumlah penerima untuk mode "all" dengan filter tier
+  const tierFiltered = selectedTiers.size === 0
+    ? users
+    : users.filter((u) => selectedTiers.has(u.tier));
+
+  const recipientCount = target === "all"
+    ? (usersLoading ? "..." : tierFiltered.length)
+    : selected.size;
 
   function toggleUser(id: string) {
     setSelected((prev) => {
@@ -1526,7 +1536,13 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
     else setSelected(new Set(filtered.map((u) => u.id)));
   }
 
-  const recipientCount = target === "all" ? users.length || "semua" : selected.size;
+  function toggleTier(tier: string) {
+    setSelectedTiers((prev) => {
+      const next = new Set(prev);
+      next.has(tier) ? next.delete(tier) : next.add(tier);
+      return next;
+    });
+  }
 
   async function handleSend() {
     setConfirmOpen(false);
@@ -1541,6 +1557,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
           subject: subject.trim(),
           body: body.trim(),
           userIds: target === "all" ? "all" : Array.from(selected),
+          tiers: target === "all" && selectedTiers.size > 0 ? Array.from(selectedTiers) : undefined,
         }),
       });
       const data = await r.json();
@@ -1562,6 +1579,12 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
     free: "bg-muted text-muted-foreground",
     plus: "bg-blue-500/10 text-blue-600",
     pro: "bg-violet-500/10 text-violet-600",
+  };
+
+  const tierActivePill: Record<string, string> = {
+    free: "bg-zinc-700 text-white border-zinc-700",
+    plus: "bg-blue-500 text-white border-blue-500",
+    pro: "bg-violet-500 text-white border-violet-500",
   };
 
   return (
@@ -1663,68 +1686,126 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
               </button>
             </div>
 
+            {/* Mode: Semua — tier filter pills */}
             {target === "all" && (
-              <p className="text-xs text-muted-foreground">Email akan dikirim ke semua pengguna yang sudah verifikasi email.</p>
+              <div className="space-y-2">
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setSelectedTiers(new Set())}
+                    className={cn(
+                      "text-xs px-2.5 py-1 rounded-full border font-medium transition-colors",
+                      selectedTiers.size === 0
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "border-border text-muted-foreground hover:bg-accent"
+                    )}
+                  >
+                    Semua ({usersLoading ? "…" : users.length})
+                  </button>
+                  {(["free", "plus", "pro"] as const).map((tier) => {
+                    const count = users.filter((u) => u.tier === tier).length;
+                    const active = selectedTiers.has(tier);
+                    return (
+                      <button
+                        key={tier}
+                        onClick={() => toggleTier(tier)}
+                        className={cn(
+                          "text-xs px-2.5 py-1 rounded-full border font-medium capitalize transition-colors",
+                          active ? tierActivePill[tier] : "border-border text-muted-foreground hover:bg-accent"
+                        )}
+                      >
+                        {tier} ({usersLoading ? "…" : count})
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  {selectedTiers.size === 0
+                    ? `${usersLoading ? "…" : users.length} penerima — semua tier`
+                    : `${tierFiltered.length} penerima — tier ${Array.from(selectedTiers).join(", ")}`}
+                </p>
+              </div>
             )}
 
+            {/* Mode: Pilih — collapsible user list */}
             {target === "select" && (
               <div className="space-y-1.5">
-                <div className="relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                  <input
-                    type="text"
-                    placeholder="Cari email atau nama..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
-                  />
-                </div>
-                {usersLoading ? (
-                  <div className="flex items-center justify-center py-4 text-muted-foreground text-xs gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-border overflow-hidden">
-                    <div
-                      className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
-                      onClick={toggleAll}
-                    >
-                      <div className={cn(
-                        "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                        selected.size > 0 && selected.size === filtered.length
-                          ? "bg-primary border-primary text-primary-foreground"
-                          : "border-border"
-                      )}>
-                        {selected.size > 0 && selected.size === filtered.length && <Check className="w-2 h-2" />}
-                      </div>
-                      <span className="text-xs text-muted-foreground">
-                        {selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})
-                      </span>
+                {/* Ringkasan + tombol buka/tutup */}
+                <button
+                  onClick={() => setShowList((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors text-xs"
+                >
+                  <span className="text-muted-foreground">
+                    {selected.size > 0 ? `${selected.size} pengguna dipilih` : "Klik untuk pilih pengguna"}
+                  </span>
+                  {showList ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+                </button>
+
+                {showList && (
+                  <div className="space-y-1.5">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                      <input
+                        type="text"
+                        placeholder="Cari email atau nama..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                      />
                     </div>
-                    <div className="max-h-36 overflow-y-auto divide-y divide-border">
-                      {filtered.length === 0 ? (
-                        <div className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan.</div>
-                      ) : filtered.map((u) => (
+                    {usersLoading ? (
+                      <div className="flex items-center justify-center py-3 text-muted-foreground text-xs gap-2">
+                        <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
+                      </div>
+                    ) : (
+                      <div className="rounded-lg border border-border overflow-hidden">
                         <div
-                          key={u.id}
-                          className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent transition-colors"
-                          onClick={() => toggleUser(u.id)}
+                          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
+                          onClick={toggleAll}
                         >
                           <div className={cn(
                             "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                            selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                            selected.size > 0 && selected.size === filtered.length
+                              ? "bg-primary border-primary text-primary-foreground"
+                              : "border-border"
                           )}>
-                            {selected.has(u.id) && <Check className="w-2 h-2" />}
+                            {selected.size > 0 && selected.size === filtered.length && <Check className="w-2 h-2" />}
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs truncate">{u.email}</div>
-                          </div>
-                          <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
-                            {u.tier}
+                          <span className="text-xs text-muted-foreground flex-1">
+                            {selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})
                           </span>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowList(false); }}
+                            className="text-muted-foreground hover:text-foreground p-0.5 rounded"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
                         </div>
-                      ))}
-                    </div>
+                        <div className="max-h-32 overflow-y-auto divide-y divide-border">
+                          {filtered.length === 0 ? (
+                            <div className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan.</div>
+                          ) : filtered.map((u) => (
+                            <div
+                              key={u.id}
+                              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent transition-colors"
+                              onClick={() => toggleUser(u.id)}
+                            >
+                              <div className={cn(
+                                "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                                selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                              )}>
+                                {selected.has(u.id) && <Check className="w-2 h-2" />}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs truncate">{u.email}</div>
+                              </div>
+                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
+                                {u.tier}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
