@@ -135,6 +135,9 @@ export default function PremiumPricingPage() {
         "3 video AI per bulan",
         "10 voice AI per bulan (TTS, clone, design)",
         "Pustaka: 10 file (10 MB/file) · 100 hal/bulan",
+        "API key developer (Flash, Turbo, Qwen3-8B)",
+        "Saldo kredit Rp 7.500 bonus daftar",
+        "Hosting 1 project · Nano 256MB · Rp 30/deploy",
       ],
       cta: !isPremium
         ? { label: "Paket Saat Ini", disabled: true }
@@ -150,12 +153,14 @@ export default function PremiumPricingPage() {
       highlight: true,
       features: [
         "200.000 token per hari",
-        "Semua model premium",
+        "Semua model Plus & Pro",
         "25 gambar AI per hari",
         "12 video AI per bulan",
         "60 voice AI per bulan (TTS, clone, design)",
         "Pustaka: 20 file (20 MB/file) · 1.000 hal/bulan",
-        "API key untuk developer",
+        "API key — semua model Plus",
+        "Hosting 3 project · Micro 512MB · Rp 60/deploy",
+        "Custom domain hosting",
         "Bonus saldo Rp 75.000 (satu kali, saat upgrade)",
       ],
       cta: isAdmin
@@ -180,12 +185,14 @@ export default function PremiumPricingPage() {
       pricePeriod: "/bulan",
       features: [
         "360.000 token per hari",
-        "Semua model premium",
+        "Semua model Pro (frontier)",
         "40 gambar AI per hari",
         "20 video AI per bulan",
         "200 voice AI per bulan (TTS, clone, design)",
         "Pustaka: 35 file (30 MB/file) · 5.000 hal/bulan",
-        "API key untuk developer",
+        "API key — semua model Pro",
+        "Hosting 5 project · Small 1GB · Rp 120/deploy",
+        "Custom domain hosting",
         "Bonus saldo Rp 125.000 (satu kali, saat upgrade)",
       ],
       cta: isAdmin
@@ -506,9 +513,21 @@ const COMPARISON_GROUPS: Array<{ title: string; rows: Row[] }> = [
   {
     title: "Developer & API",
     rows: [
-      { label: "API key (BYOK)", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
-      { label: "Saldo IDR untuk pemakaian API", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
+      { label: "API key (BYOK)", free: "3 model terbatas", plus: { yes: true }, pro: { yes: true } },
+      { label: "Model via API", free: "Flash, Turbo, Qwen3-8B", plus: "Semua model Plus", pro: "Semua model Pro" },
+      { label: "Image & video via API", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
+      { label: "Saldo IDR untuk pemakaian API", free: "Rp 7.500 bonus daftar", plus: { yes: true }, pro: { yes: true } },
       { label: "Bonus saldo upgrade (satu kali)", free: "—", plus: "Rp 75.000", pro: "Rp 125.000" },
+    ],
+  },
+  {
+    title: "Hosting",
+    rows: [
+      { label: "Proyek aktif", free: "1", plus: "3", pro: "5" },
+      { label: "Memory per proyek", free: "256 MB (Nano)", plus: "512 MB (Micro)", pro: "1 GB (Small)" },
+      { label: "Biaya deploy", free: "Rp 30 / deploy", plus: "Rp 60 / deploy", pro: "Rp 120 / deploy" },
+      { label: "Custom domain", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
+      { label: "Auto-deploy dari GitHub", free: { yes: true }, plus: { yes: true }, pro: { yes: true } },
     ],
   },
   {
