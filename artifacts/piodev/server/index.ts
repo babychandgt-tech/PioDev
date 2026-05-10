@@ -2524,6 +2524,78 @@ app.post("/api/me/credit/top-up", requireAuth, async (_req, res) => {
   });
 });
 
+// ── GET /api/me/billing-summary — saldo + breakdown kategori bulan ini + transaksi terakhir ──
+app.get("/api/me/billing-summary", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+  const [profileRes, txMonthRes, txRecentRes] = await Promise.all([
+    supabaseAdmin
+      .from("profiles")
+      .select("credit_balance_idr, is_premium, premium_expires_at, role, tier")
+      .eq("id", userId)
+      .single(),
+    supabaseAdmin
+      .from("credit_transactions")
+      .select("amount_idr, type")
+      .eq("user_id", userId)
+      .gte("created_at", startOfMonth),
+    supabaseAdmin
+      .from("credit_transactions")
+      .select("id, amount_idr, type, metadata, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(30),
+  ]);
+
+  const profile = profileRes.data;
+  const tier = getTier(profile);
+  const isAdmin = profile?.role === "admin";
+  const isPremium = isAdmin || tier !== "free";
+
+  const byCategory: Record<string, number> = { chat: 0, image: 0, video: 0, voice: 0, hosting: 0, api: 0 };
+  let totalSpent = 0;
+  let totalIn = 0;
+
+  for (const tx of (txMonthRes.data ?? []) as { amount_idr: number; type: string }[]) {
+    const amt = tx.amount_idr ?? 0;
+    if (amt < 0) {
+      const spent = -amt;
+      totalSpent += spent;
+      const t = tx.type ?? "";
+      if (t.includes("chat"))    byCategory.chat    += spent;
+      else if (t.includes("image"))   byCategory.image   += spent;
+      else if (t.includes("video"))   byCategory.video   += spent;
+      else if (t.includes("voice"))   byCategory.voice   += spent;
+      else if (t.includes("hosting")) byCategory.hosting += spent;
+      else if (t.includes("api"))     byCategory.api     += spent;
+    } else {
+      totalIn += amt;
+    }
+  }
+
+  res.json({
+    balance_idr: (profile as any)?.credit_balance_idr ?? 0,
+    tier,
+    is_premium: isPremium,
+    is_admin: isAdmin,
+    this_month: {
+      total_spent: totalSpent,
+      total_in: totalIn,
+      by_category: byCategory,
+    },
+    recent_transactions: txRecentRes.data ?? [],
+    pricing: {
+      idr_per_token_num: IDR_PER_TOKEN_NUM,
+      idr_per_token_den: IDR_PER_TOKEN_DEN,
+      image_idr: IMAGE_COST_IDR,
+      video_idr: VIDEO_COST_IDR,
+    },
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── PUBLIC API (OpenAI-compatible) — diakses pakai pio-sk-... ────────────────
 // ═══════════════════════════════════════════════════════════════════════════════

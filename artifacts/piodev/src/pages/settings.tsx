@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic } from "lucide-react";
+import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic, Wallet, CreditCard, Server, Key, ArrowDownLeft, MessageSquare, Plus } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { useChat } from "@/hooks/use-chat";
@@ -11,13 +11,45 @@ import { cn } from "@/lib/utils";
 import { useShowTokenUsage, useTokenUsageData } from "@/hooks/use-token-usage";
 import { usePersonalization } from "@/hooks/use-personalization";
 
-type Section = "profil" | "personalisasi" | "penggunaan";
+type Section = "profil" | "personalisasi" | "penggunaan" | "billing";
 
 const navItems: { id: Section; label: string; icon: typeof User }[] = [
   { id: "profil", label: "Profil", icon: User },
   { id: "personalisasi", label: "Personalisasi", icon: Sparkles },
   { id: "penggunaan", label: "Penggunaan", icon: BarChart2 },
+  { id: "billing", label: "Billing", icon: Wallet },
 ];
+
+type BillingSummary = {
+  balance_idr: number;
+  tier: string;
+  is_premium: boolean;
+  is_admin: boolean;
+  this_month: {
+    total_spent: number;
+    total_in: number;
+    by_category: Record<string, number>;
+  };
+  recent_transactions: { id: string; amount_idr: number; type: string; metadata: any; created_at: string }[];
+  pricing: { idr_per_token_num: number; idr_per_token_den: number; image_idr: number; video_idr: number };
+};
+
+function getTxLabel(type: string): { label: string; icon: typeof User } {
+  if (type?.includes("usage_chat"))    return { label: "Chat AI", icon: MessageSquare };
+  if (type?.includes("usage_image"))   return { label: "Generate Gambar", icon: ImageIcon };
+  if (type?.includes("usage_video"))   return { label: "Generate Video", icon: Clapperboard };
+  if (type?.includes("usage_voice"))   return { label: "Voice Studio", icon: Mic };
+  if (type?.includes("usage_hosting")) return { label: "Hosting", icon: Server };
+  if (type?.includes("usage_api"))     return { label: "API Eksternal", icon: Key };
+  if (type === "top_up")               return { label: "Top Up Saldo", icon: ArrowDownLeft };
+  if (type?.includes("bonus_plus_trial")) return { label: "Bonus Trial Plus", icon: Star };
+  if (type?.includes("bonus_plus"))    return { label: "Bonus Upgrade Plus", icon: Star };
+  if (type?.includes("bonus_pro"))     return { label: "Bonus Upgrade Pro", icon: Star };
+  if (type?.includes("bonus"))         return { label: "Bonus Kredit", icon: Star };
+  if (type?.includes("admin_credit_add"))    return { label: "Kredit dari Admin", icon: Shield };
+  if (type?.includes("admin_credit_deduct")) return { label: "Koreksi Admin", icon: Shield };
+  return { label: type ?? "Transaksi", icon: CreditCard };
+}
 
 export default function Settings() {
   const [, navigate] = useLocation();
@@ -61,6 +93,24 @@ export default function Settings() {
       });
       if (!cancelled && res.ok) setUsageSummary(await res.json());
       if (!cancelled) setUsageSummaryLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [activeSection]);
+
+  const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
+  const [billingSummaryLoading, setBillingSummaryLoading] = useState(false);
+
+  useEffect(() => {
+    if (activeSection !== "billing") return;
+    let cancelled = false;
+    setBillingSummaryLoading(true);
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch("/api/me/billing-summary", {
+        headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+      });
+      if (!cancelled && res.ok) setBillingSummary(await res.json());
+      if (!cancelled) setBillingSummaryLoading(false);
     })();
     return () => { cancelled = true; };
   }, [activeSection]);
@@ -616,6 +666,191 @@ export default function Settings() {
                       {personaSaving ? "Menyimpan..." : "Tersimpan. Berlaku mulai pesan berikutnya."}
                     </p>
                   </div>
+                </div>
+              )}
+
+              {activeSection === "billing" && (
+                <div className="space-y-6">
+                  <div className="hidden md:block">
+                    <h2 className="text-lg font-semibold text-foreground mb-1">Billing & Saldo</h2>
+                    <p className="text-sm text-muted-foreground">Pantau saldo kredit dan riwayat pengeluaran kamu.</p>
+                  </div>
+
+                  {billingSummaryLoading || !billingSummary ? (
+                    <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
+                      <span className="inline-block w-2 h-2 rounded-full bg-primary/40 animate-pulse mr-2" />
+                      Memuat data...
+                    </div>
+                  ) : (
+                    <>
+                      {/* Saldo card */}
+                      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+                        <div className="flex items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Saldo Kredit</p>
+                            <p className="text-3xl sm:text-4xl font-bold text-foreground tabular-nums">
+                              Rp {billingSummary.balance_idr.toLocaleString("id-ID")}
+                            </p>
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Berlaku untuk Chat AI, Gambar, Video, Voice, Hosting & API
+                            </p>
+                          </div>
+                          <button
+                            disabled
+                            title="Segera hadir"
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-semibold opacity-50 cursor-not-allowed"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Top Up
+                          </button>
+                        </div>
+                        <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-md font-bold uppercase tracking-wide",
+                            billingSummary.is_admin ? "bg-red-500/10 text-red-500" :
+                            billingSummary.tier === "pro" ? "bg-purple-500/10 text-purple-600 dark:text-purple-400" :
+                            billingSummary.tier === "plus" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400" :
+                            "bg-muted text-muted-foreground"
+                          )}>
+                            {billingSummary.is_admin ? "Admin" : billingSummary.tier}
+                          </span>
+                          <span className="text-xs text-muted-foreground">
+                            Bulan ini:{" "}
+                            <span className="text-foreground font-medium">
+                              Rp {billingSummary.this_month.total_spent.toLocaleString("id-ID")}
+                            </span>{" "}
+                            terpakai
+                            {billingSummary.this_month.total_in > 0 && (
+                              <>
+                                {" "}·{" "}
+                                <span className="text-green-500 font-medium">
+                                  +Rp {billingSummary.this_month.total_in.toLocaleString("id-ID")}
+                                </span>{" "}
+                                masuk
+                              </>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Breakdown kategori bulan ini */}
+                      {billingSummary.this_month.total_spent > 0 && (
+                        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4">
+                          <h3 className="text-sm font-semibold text-foreground">Pengeluaran bulan ini</h3>
+                          {(
+                            [
+                              { key: "chat",    label: "Chat AI",      icon: MessageSquare, color: "bg-blue-500" },
+                              { key: "image",   label: "Gambar",       icon: ImageIcon,     color: "bg-purple-500" },
+                              { key: "video",   label: "Video",        icon: Clapperboard,  color: "bg-rose-500" },
+                              { key: "voice",   label: "Voice Studio", icon: Mic,           color: "bg-orange-500" },
+                              { key: "hosting", label: "Hosting",      icon: Server,        color: "bg-emerald-500" },
+                              { key: "api",     label: "API",          icon: Key,           color: "bg-cyan-500" },
+                            ] as const
+                          )
+                            .filter(({ key }) => (billingSummary.this_month.by_category[key] ?? 0) > 0)
+                            .map(({ key, label, icon: Icon, color }) => {
+                              const amount = billingSummary.this_month.by_category[key] ?? 0;
+                              const pct = Math.round((amount / billingSummary.this_month.total_spent) * 100);
+                              return (
+                                <div key={key} className="space-y-1.5">
+                                  <div className="flex items-center justify-between text-sm">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                      <span className="text-foreground font-medium">{label}</span>
+                                      <span className="text-xs text-muted-foreground">{pct}%</span>
+                                    </div>
+                                    <span className="text-foreground font-medium tabular-nums text-xs sm:text-sm shrink-0">
+                                      Rp {amount.toLocaleString("id-ID")}
+                                    </span>
+                                  </div>
+                                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                    <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
+                                  </div>
+                                </div>
+                              );
+                            })}
+                        </div>
+                      )}
+
+                      {/* Riwayat transaksi */}
+                      <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                        <div className="px-5 py-4 border-b border-border">
+                          <h3 className="text-sm font-semibold text-foreground">Riwayat transaksi</h3>
+                        </div>
+                        {billingSummary.recent_transactions.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
+                            <CreditCard className="w-8 h-8 text-muted-foreground/40" />
+                            <p className="text-sm text-muted-foreground">Belum ada transaksi</p>
+                          </div>
+                        ) : (
+                          <div className="divide-y divide-border">
+                            {billingSummary.recent_transactions.map((tx) => {
+                              const isCredit = tx.amount_idr >= 0;
+                              const { label, icon: TxIcon } = getTxLabel(tx.type);
+                              return (
+                                <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5">
+                                  <div className={cn(
+                                    "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                    isCredit ? "bg-green-500/10" : "bg-muted"
+                                  )}>
+                                    <TxIcon className={cn("w-3.5 h-3.5", isCredit ? "text-green-500" : "text-muted-foreground")} />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-foreground truncate">{label}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(tx.created_at).toLocaleDateString("id-ID", {
+                                        day: "numeric", month: "short", year: "numeric",
+                                        hour: "2-digit", minute: "2-digit",
+                                      })}
+                                    </p>
+                                  </div>
+                                  <span className={cn(
+                                    "text-sm font-semibold tabular-nums shrink-0",
+                                    isCredit ? "text-green-500" : "text-foreground"
+                                  )}>
+                                    {isCredit ? "+" : "−"}Rp {Math.abs(tx.amount_idr).toLocaleString("id-ID")}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Tarif penggunaan */}
+                      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+                        <h3 className="text-sm font-semibold text-foreground mb-3">Tarif penggunaan</h3>
+                        <div className="space-y-2.5">
+                          {[
+                            {
+                              label: "Chat AI",
+                              value: `${billingSummary.pricing.idr_per_token_den} token = Rp ${billingSummary.pricing.idr_per_token_num}`,
+                            },
+                            {
+                              label: "Generate Gambar",
+                              value: `Rp ${billingSummary.pricing.image_idr.toLocaleString("id-ID")} / gambar`,
+                            },
+                            {
+                              label: "Generate Video",
+                              value: `Rp ${billingSummary.pricing.video_idr.toLocaleString("id-ID")} / video`,
+                            },
+                            {
+                              label: "Hosting (Nano)",
+                              value: "Rp 30 / jam",
+                            },
+                          ].map(({ label, value }) => (
+                            <div key={label} className="flex items-center justify-between gap-3 text-sm">
+                              <span className="text-muted-foreground">{label}</span>
+                              <span className="text-foreground font-medium tabular-nums">{value}</span>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-4 pt-3 border-t border-border">
+                          Top up kredit segera hadir. Untuk sementara, kredit bisa ditambah melalui admin.
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
