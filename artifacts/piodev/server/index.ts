@@ -4147,7 +4147,7 @@ const COOLIFY_API_TOKEN = process.env.COOLIFY_API_TOKEN ?? "";
 const COOLIFY_BASE_DOMAIN = process.env.COOLIFY_BASE_DOMAIN ?? "app.pio.codes";
 const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 3, pro: 5 };
 const HOSTING_MEMORY_MB: Record<string, number> = { free: 256, plus: 512, pro: 1024 };
-const HOSTING_DEPLOY_COST_IDR: Record<string, number> = { free: 30, plus: 60, pro: 120 };
+const HOSTING_HOURLY_COST_IDR: Record<string, number> = { free: 30, plus: 60, pro: 120 };
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET ?? "";
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
@@ -4877,29 +4877,6 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Proyek belum terhubung ke Coolify. Hapus dan buat ulang proyek setelah Coolify dikonfigurasi." }); return;
   }
 
-  // Credit check & deduction — ditagih per deploy
-  const { data: deployerProfile } = await supabaseAdmin.from("profiles").select("credit_balance_idr, tier, role").eq("id", userId).single();
-  const deployerIsAdmin = deployerProfile?.role === "admin";
-  const deployerTier = getTier(deployerProfile ?? null);
-  const deployCostIdr = HOSTING_DEPLOY_COST_IDR[deployerTier] ?? HOSTING_DEPLOY_COST_IDR.free;
-  if (!deployerIsAdmin) {
-    const balance = deployerProfile?.credit_balance_idr ?? 0;
-    if (balance < deployCostIdr) {
-      res.status(402).json({
-        error: `Saldo tidak cukup untuk deploy (butuh Rp ${deployCostIdr.toLocaleString("id-ID")}, saldo kamu Rp ${balance.toLocaleString("id-ID")}). Top up saldo dulu ya.`,
-        required_idr: deployCostIdr,
-        balance_idr: balance,
-      });
-      return;
-    }
-    await deductCredit(userId, deployCostIdr, "hosting_deploy", {
-      project_id: project.id,
-      project_name: project.name,
-      tier: deployerTier,
-      cost_idr: deployCostIdr,
-    });
-  }
-
   const { data: deployment } = await supabaseAdmin.from("hosting_deployments").insert({
     project_id: project.id, user_id: userId, status: "queued", triggered_by: "manual",
   }).select().single();
@@ -5067,6 +5044,43 @@ app.post("/api/hosting/projects/:id/restart", requireAuth, async (req, res) => {
   } catch (e) {
     res.status(500).json({ error: (e as Error).message });
   }
+});
+
+// POST /api/hosting/projects/:id/resume — nyalakan ulang project yang di-suspend karena kredit habis
+app.post("/api/hosting/projects/:id/resume", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { data: project } = await supabaseAdmin
+    .from("hosting_projects").select("*").eq("id", req.params.id).eq("user_id", userId).single();
+  if (!project) { res.status(404).json({ error: "Proyek tidak ditemukan" }); return; }
+  if (project.status !== "suspended") {
+    res.status(400).json({ error: "Proyek tidak dalam status suspended" }); return;
+  }
+  const { data: profile } = await supabaseAdmin.from("profiles").select("credit_balance_idr, tier, role").eq("id", userId).single();
+  const isAdminUser = profile?.role === "admin";
+  const tier = getTier(profile ?? null);
+  const hourlyCost = HOSTING_HOURLY_COST_IDR[tier] ?? HOSTING_HOURLY_COST_IDR.free;
+  const balance = profile?.credit_balance_idr ?? 0;
+  if (!isAdminUser && balance < hourlyCost) {
+    res.status(402).json({
+      error: `Saldo tidak cukup untuk menghidupkan kembali project (butuh minimal Rp ${hourlyCost.toLocaleString("id-ID")} untuk 1 jam running, saldo kamu Rp ${balance.toLocaleString("id-ID")}).`,
+      required_idr: hourlyCost,
+      balance_idr: balance,
+    });
+    return;
+  }
+  if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+    try {
+      await coolifyFetch(`/applications/${project.coolify_app_uuid}/start`, { method: "POST" });
+    } catch (e) {
+      console.warn(`[Hosting] Resume start failed for ${project.id}:`, (e as Error).message);
+    }
+  }
+  await supabaseAdmin.from("hosting_projects").update({
+    status: "running",
+    updated_at: new Date().toISOString(),
+  }).eq("id", project.id);
+  console.log(`[Hosting] Project ${project.id} resumed by user ${userId}`);
+  res.json({ success: true });
 });
 
 // PUT /api/hosting/projects/:id/domain — set custom domain (DB only; Coolify registration happens after DNS verify)
@@ -5696,6 +5710,69 @@ app.post("/api/hosting/webhook/github", async (req, res) => {
     })();
   }
 });
+
+// ── Hourly hosting billing cron ──────────────────────────────────────────────
+// Tiap jam: deduct kredit untuk setiap project yang sedang running.
+// Kalau saldo kurang → stop container di Coolify + set status = 'suspended'.
+async function runHostingBillingCron() {
+  try {
+    const { data: runningProjects } = await supabaseAdmin
+      .from("hosting_projects")
+      .select("id, user_id, name, coolify_app_uuid")
+      .eq("status", "running");
+    if (!runningProjects?.length) return;
+
+    // Ambil semua profile user yang punya project running sekaligus
+    const userIds = [...new Set(runningProjects.map((p: any) => p.user_id as string))];
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, credit_balance_idr, tier, role")
+      .in("id", userIds);
+    const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+
+    for (const project of runningProjects) {
+      try {
+        const profile = profileMap.get(project.user_id);
+        if (profile?.role === "admin") continue; // admin gratis
+        const tier = getTier(profile ?? null);
+        const hourlyCost = HOSTING_HOURLY_COST_IDR[tier] ?? HOSTING_HOURLY_COST_IDR.free;
+        const balance = profile?.credit_balance_idr ?? 0;
+
+        if (balance < hourlyCost) {
+          // Saldo kurang → suspend project
+          if (project.coolify_app_uuid && COOLIFY_API_URL && COOLIFY_API_TOKEN) {
+            await coolifyFetch(`/applications/${project.coolify_app_uuid}/stop`, { method: "POST" })
+              .catch((e: Error) => console.warn(`[Hosting Cron] Stop failed for ${project.id}:`, e.message));
+          }
+          await supabaseAdmin.from("hosting_projects").update({
+            status: "suspended",
+            updated_at: new Date().toISOString(),
+          }).eq("id", project.id);
+          console.log(`[Hosting Cron] Suspended project ${project.id} (${project.name}) — saldo tidak cukup (${balance} < ${hourlyCost})`);
+        } else {
+          // Deduct kredit per jam
+          await deductCredit(project.user_id, hourlyCost, "hosting_hourly", {
+            project_id: project.id,
+            project_name: project.name,
+            tier,
+            cost_idr: hourlyCost,
+          });
+          console.log(`[Hosting Cron] Billed Rp ${hourlyCost} for project ${project.id} (${project.name}), tier=${tier}`);
+        }
+      } catch (e) {
+        console.warn(`[Hosting Cron] Error processing project ${project.id}:`, (e as Error).message);
+      }
+    }
+  } catch (e) {
+    console.warn("[Hosting Cron] Fatal error:", (e as Error).message);
+  }
+}
+
+// Jalankan pertama kali setelah 1 jam, lalu tiap jam
+setTimeout(() => {
+  runHostingBillingCron();
+  setInterval(runHostingBillingCron, 60 * 60 * 1000);
+}, 60 * 60 * 1000);
 
 // Serve static files in production (dist/public built by Vite)
 if (IS_PRODUCTION) {
