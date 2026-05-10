@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Key, Plus, Copy, Trash2, AlertTriangle, Check, ArrowLeft, ArrowRight, Code, Zap, Clock, Sparkles, MessageSquare, Image as ImageIcon, Video, FileText, ScanText, Lock, Lightbulb, AlertCircle, Rocket, BookOpen, Layers, Eye, EyeOff, Loader2, Activity, Pencil, X as XIcon, CreditCard, History, ArrowUp, ArrowDown, Gift, Wand2, ShieldCheck, Inbox, RefreshCw, Cpu, Crown } from "lucide-react";
+import { Key, Plus, Copy, Trash2, AlertTriangle, Check, ArrowLeft, ArrowRight, Code, Zap, Clock, Sparkles, MessageSquare, Image as ImageIcon, Video, FileText, ScanText, Lock, Lightbulb, AlertCircle, Rocket, BookOpen, Layers, Eye, EyeOff, Loader2, Activity, Pencil, X as XIcon, CreditCard, Wand2, ShieldCheck, RefreshCw, Cpu, Crown } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useAuth } from "@/hooks/use-auth";
@@ -84,7 +84,7 @@ export default function ApiKeysPage() {
   const [copied, setCopied] = useState(false);
 
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<"keys" | "history" | "models" | "docs">("keys");
+  const [activeTab, setActiveTab] = useState<"keys" | "models" | "docs">("keys");
 
   // Reveal state per key id: full plaintext key (kalo lagi ditampilin)
   const [revealed, setRevealed] = useState<Record<string, string>>({});
@@ -375,9 +375,6 @@ export default function ApiKeysPage() {
         <div className="flex gap-1 border-b border-border mb-6">
           <TabButton active={activeTab === "keys"} onClick={() => setActiveTab("keys")}>
             <Key className="w-4 h-4" /> Keys saya
-          </TabButton>
-          <TabButton active={activeTab === "history"} onClick={() => setActiveTab("history")}>
-            <History className="w-4 h-4" /> Riwayat
           </TabButton>
           <TabButton active={activeTab === "models"} onClick={() => setActiveTab("models")}>
             <Cpu className="w-4 h-4" /> Models
@@ -701,8 +698,6 @@ export default function ApiKeysPage() {
             )}
           </>
         )}
-
-        {activeTab === "history" && !error && <RiwayatTab />}
 
         {activeTab === "models" && <ModelsSection />}
 
@@ -1061,309 +1056,7 @@ function MiniUsageStat({ icon: Icon, label, value, color }: { icon: any; label: 
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// ── RIWAYAT TAB — daftar transaksi saldo (paginated) ─────────────────────────
-// ═══════════════════════════════════════════════════════════════════════════════
 
-type CreditSummary = {
-  days: number;
-  count: number;
-  total_spent: number;
-  total_top_up: number;
-  total_bonus: number;
-};
-
-const TX_TYPE_INFO: Record<string, { label: string; icon: any; tone: "spend" | "income" | "bonus" | "admin" }> = {
-  bonus_plus_upgrade: { label: "Bonus upgrade Plus", icon: Gift, tone: "bonus" },
-  bonus_pro_upgrade: { label: "Bonus upgrade Pro", icon: Gift, tone: "bonus" },
-  bonus_plus_trial: { label: "Bonus trial Plus", icon: Sparkles, tone: "bonus" },
-  top_up: { label: "Top up saldo", icon: ArrowDown, tone: "income" },
-  usage_chat: { label: "Chat completion", icon: MessageSquare, tone: "spend" },
-  usage_embedding: { label: "Embedding", icon: Layers, tone: "spend" },
-  usage_image: { label: "Generate gambar", icon: ImageIcon, tone: "spend" },
-  usage_video: { label: "Generate video", icon: Video, tone: "spend" },
-  usage_ocr: { label: "OCR / scan teks", icon: ScanText, tone: "spend" },
-  admin_credit_add: { label: "Penambahan oleh admin", icon: ShieldCheck, tone: "admin" },
-  admin_credit_deduct: { label: "Pengurangan oleh admin", icon: ShieldCheck, tone: "admin" },
-  admin_adjust: { label: "Penyesuaian admin", icon: ShieldCheck, tone: "admin" },
-};
-
-function getTxInfo(type: string) {
-  return TX_TYPE_INFO[type] ?? { label: type.replace(/_/g, " "), icon: Activity, tone: "spend" as const };
-}
-
-function formatRelativeTime(s: string) {
-  const then = new Date(s).getTime();
-  if (Number.isNaN(then)) return "—";
-  const diffSec = Math.floor((Date.now() - then) / 1000);
-  if (diffSec < 60) return "Baru saja";
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} menit lalu`;
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} jam lalu`;
-  if (diffSec < 86400 * 7) return `${Math.floor(diffSec / 86400)} hari lalu`;
-  return formatDate(s);
-}
-
-function formatAbsoluteTime(s: string) {
-  const d = new Date(s);
-  if (Number.isNaN(d.getTime())) return "—";
-  return d.toLocaleString("id-ID", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
-}
-
-function txSubtitle(tx: CreditTransaction): string | null {
-  const m = tx.metadata ?? {};
-  const parts: string[] = [];
-  if (m.model) parts.push(String(m.model));
-  if (typeof m.tokens === "number") parts.push(`${m.tokens.toLocaleString("id-ID")} token`);
-  if (typeof m.count === "number" && m.count > 1) parts.push(`${m.count} item`);
-  if (m.note && typeof m.note === "string") parts.push(m.note);
-  if (m.source === "claim_trial") parts.push("Klaim trial");
-  if (m.stream === true) parts.push("stream");
-  return parts.length ? parts.join(" • ") : null;
-}
-
-function RiwayatTab() {
-  const [items, setItems] = useState<CreditTransaction[]>([]);
-  const [summary, setSummary] = useState<CreditSummary | null>(null);
-  const [total, setTotal] = useState(0);
-  const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const PAGE_SIZE = 20;
-
-  async function load(offset = 0) {
-    if (offset === 0) setLoading(true); else setLoadingMore(true);
-    setError(null);
-    try {
-      const res = await authedFetch(`/api/me/credit/transactions?limit=${PAGE_SIZE}&offset=${offset}`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Gagal memuat riwayat");
-      setItems((prev) => (offset === 0 ? data.transactions : [...prev, ...data.transactions]));
-      setTotal(data.total ?? 0);
-      setHasMore(!!data.has_more);
-      if (data.summary) setSummary(data.summary);
-    } catch (e: any) {
-      setError(e?.message || "Gagal memuat riwayat");
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-    }
-  }
-
-  useEffect(() => { load(0); }, []);
-
-  if (loading) {
-    return (
-      <div className="space-y-3" data-testid="riwayat-loading">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="h-16 rounded-xl border border-border bg-muted/30 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-5 flex items-start gap-3" data-testid="riwayat-error">
-        <AlertCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Gagal memuat riwayat</p>
-          <p className="text-xs text-muted-foreground mt-0.5">{error}</p>
-        </div>
-        <button
-          onClick={() => load(0)}
-          className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-muted transition inline-flex items-center gap-1.5 shrink-0"
-        >
-          <RefreshCw className="w-3.5 h-3.5" /> Coba lagi
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-5" data-testid="riwayat-tab">
-      {/* Summary cards (30 hari terakhir) */}
-      {summary && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <SummaryCard
-            icon={<ArrowUp className="w-4 h-4" />}
-            label="Dipakai 30 hari"
-            value={formatIdr(summary.total_spent)}
-            tone="spend"
-            testId="summary-spent"
-          />
-          <SummaryCard
-            icon={<ArrowDown className="w-4 h-4" />}
-            label="Top up 30 hari"
-            value={formatIdr(summary.total_top_up)}
-            tone="income"
-            testId="summary-topup"
-          />
-          <SummaryCard
-            icon={<Gift className="w-4 h-4" />}
-            label="Bonus 30 hari"
-            value={formatIdr(summary.total_bonus)}
-            tone="bonus"
-            testId="summary-bonus"
-          />
-        </div>
-      )}
-
-      {/* Empty state */}
-      {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-10 text-center" data-testid="riwayat-empty">
-          <Inbox className="w-10 h-10 mx-auto text-muted-foreground/60 mb-3" />
-          <p className="text-sm font-medium">Belum ada transaksi</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-            Riwayat penggunaan saldo bakal nongol di sini begitu kamu mulai pakai API atau dapet bonus/top up.
-          </p>
-        </div>
-      ) : (
-        <>
-          {/* Desktop table */}
-          <div className="hidden md:block border border-border rounded-xl overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="bg-muted/50">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium whitespace-nowrap">Tipe</th>
-                  <th className="text-left px-4 py-3 font-medium">Detail</th>
-                  <th className="text-left px-4 py-3 font-medium whitespace-nowrap">Tanggal</th>
-                  <th className="text-right px-4 py-3 font-medium whitespace-nowrap">Jumlah</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((tx) => {
-                  const info = getTxInfo(tx.type);
-                  const Icon = info.icon;
-                  const subtitle = txSubtitle(tx);
-                  const positive = tx.amount_idr >= 0;
-                  return (
-                    <tr key={tx.id} className="border-t border-border" data-testid={`tx-row-${tx.id}`}>
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className={cn(
-                            "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
-                            info.tone === "spend" && "bg-muted text-muted-foreground",
-                            info.tone === "income" && "bg-emerald-500/10 text-emerald-500",
-                            info.tone === "bonus" && "bg-primary/10 text-primary",
-                            info.tone === "admin" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                          )}>
-                            <Icon className="w-4 h-4" />
-                          </div>
-                          <span className="font-medium whitespace-nowrap">{info.label}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-muted-foreground">
-                        {subtitle ? <span className="break-words">{subtitle}</span> : <span className="opacity-50">—</span>}
-                      </td>
-                      <td className="px-4 py-3 align-top text-muted-foreground whitespace-nowrap" title={formatAbsoluteTime(tx.created_at)}>
-                        {formatRelativeTime(tx.created_at)}
-                      </td>
-                      <td className={cn(
-                        "px-4 py-3 align-top text-right font-mono font-medium whitespace-nowrap",
-                        positive ? "text-emerald-500" : "text-foreground"
-                      )}>
-                        {positive ? "+" : "−"}{formatIdr(Math.abs(tx.amount_idr))}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile cards */}
-          <div className="md:hidden space-y-2">
-            {items.map((tx) => {
-              const info = getTxInfo(tx.type);
-              const Icon = info.icon;
-              const subtitle = txSubtitle(tx);
-              const positive = tx.amount_idr >= 0;
-              return (
-                <div key={tx.id} className="rounded-xl border border-border bg-card p-3 flex items-start gap-3" data-testid={`tx-card-${tx.id}`}>
-                  <div className={cn(
-                    "w-9 h-9 rounded-lg flex items-center justify-center shrink-0",
-                    info.tone === "spend" && "bg-muted text-muted-foreground",
-                    info.tone === "income" && "bg-emerald-500/10 text-emerald-500",
-                    info.tone === "bonus" && "bg-primary/10 text-primary",
-                    info.tone === "admin" && "bg-amber-500/10 text-amber-600 dark:text-amber-400",
-                  )}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{info.label}</p>
-                        {subtitle && <p className="text-xs text-muted-foreground mt-0.5 break-words">{subtitle}</p>}
-                      </div>
-                      <span className={cn(
-                        "font-mono text-sm font-medium whitespace-nowrap shrink-0",
-                        positive ? "text-emerald-500" : "text-foreground"
-                      )}>
-                        {positive ? "+" : "−"}{formatIdr(Math.abs(tx.amount_idr))}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1.5">{formatRelativeTime(tx.created_at)}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Load more / counter */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-            <p className="text-xs text-muted-foreground">
-              Menampilkan <span className="font-medium text-foreground">{items.length}</span> dari{" "}
-              <span className="font-medium text-foreground">{total}</span> transaksi
-            </p>
-            {hasMore && (
-              <button
-                onClick={() => load(items.length)}
-                disabled={loadingMore}
-                className="text-sm px-4 py-2 rounded-lg border border-border hover:bg-muted transition inline-flex items-center gap-2 disabled:opacity-50"
-                data-testid="button-load-more"
-              >
-                {loadingMore ? (
-                  <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Memuat…</>
-                ) : (
-                  <>Muat lebih banyak <ArrowRight className="w-3.5 h-3.5" /></>
-                )}
-              </button>
-            )}
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function SummaryCard({
-  icon, label, value, tone, testId,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  tone: "spend" | "income" | "bonus";
-  testId?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4" data-testid={testId}>
-      <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
-        <div className={cn(
-          "w-6 h-6 rounded-md flex items-center justify-center",
-          tone === "spend" && "bg-muted text-muted-foreground",
-          tone === "income" && "bg-emerald-500/10 text-emerald-500",
-          tone === "bonus" && "bg-primary/10 text-primary",
-        )}>
-          {icon}
-        </div>
-        <span>{label}</span>
-      </div>
-      <p className="text-xl font-bold tracking-tight">{value}</p>
-    </div>
-  );
-}
 
 function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
   return (
