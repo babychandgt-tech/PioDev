@@ -33,7 +33,7 @@ import {
   Zap, MessageSquare, TrendingUp, Newspaper, Plus,
   Check, Loader2, Tag, AlertCircle,
   MoreHorizontal, Pencil, Eye, ChevronLeft, ChevronRight, ArrowUpDown,
-  Copy, ChevronDown, ChevronUp, Cpu,
+  Copy, ChevronDown, ChevronUp, Cpu, Mail, Send, X, AlertTriangle,
 } from "lucide-react";
 import { CHAIN_CATEGORIES } from "@/lib/model-chains";
 import { cn } from "@/lib/utils";
@@ -43,14 +43,15 @@ import {
   DEFAULT_PRICING, type PricingConfig,
 } from "@/hooks/use-pricing-config";
 
-type Section = "ringkasan" | "pengguna" | "harga" | "changelog" | "model-chain";
+type Section = "ringkasan" | "pengguna" | "harga" | "changelog" | "model-chain" | "broadcast";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
-  { id: "ringkasan",    label: "Ringkasan",     icon: LayoutDashboard },
-  { id: "pengguna",     label: "Pengguna",      icon: Users },
-  { id: "harga",        label: "Harga & Promo", icon: Tag },
-  { id: "changelog",    label: "What's New",    icon: Newspaper },
-  { id: "model-chain",  label: "Model Chain",   icon: Cpu },
+  { id: "ringkasan",    label: "Ringkasan",      icon: LayoutDashboard },
+  { id: "pengguna",     label: "Pengguna",       icon: Users },
+  { id: "harga",        label: "Harga & Promo",  icon: Tag },
+  { id: "changelog",    label: "What's New",     icon: Newspaper },
+  { id: "model-chain",  label: "Model Chain",    icon: Cpu },
+  { id: "broadcast",    label: "Broadcast Email", icon: Mail },
 ];
 
 function useToast() {
@@ -1477,6 +1478,337 @@ function SectionModelChain() {
   );
 }
 
+// ── SectionBroadcast ──────────────────────────────────────────────────────────
+function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [subject, setSubject] = useState("");
+  const [body, setBody] = useState("");
+  const [target, setTarget] = useState<"all" | "select">("all");
+  const [users, setUsers] = useState<{ id: string; email: string; full_name: string; tier: string }[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [sending, setSending] = useState(false);
+  const [result, setResult] = useState<{ sent: number; failed: number; total: number; errors: string[] } | null>(null);
+  const [smtpMissing, setSmtpMissing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [preview, setPreview] = useState(false);
+
+  useEffect(() => {
+    if (target !== "select" || users.length > 0) return;
+    setUsersLoading(true);
+    authHeader().then((h) =>
+      fetch("/api/admin/users", { headers: h })
+        .then((r) => r.json())
+        .then((d) => {
+          setUsers((d.users ?? []).map((u: any) => ({
+            id: u.id, email: u.email ?? "", full_name: u.full_name ?? "", tier: u.tier,
+          })));
+        })
+        .finally(() => setUsersLoading(false))
+    );
+  }, [target, users.length]);
+
+  const filtered = users.filter((u) =>
+    !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
+    u.full_name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function toggleUser(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (selected.size === filtered.length) setSelected(new Set());
+    else setSelected(new Set(filtered.map((u) => u.id)));
+  }
+
+  const recipientCount = target === "all" ? users.length || "semua" : selected.size;
+
+  async function handleSend() {
+    setConfirmOpen(false);
+    setSending(true);
+    setResult(null);
+    setSmtpMissing(false);
+    try {
+      const r = await fetch("/api/admin/broadcast-email", {
+        method: "POST",
+        headers: await authHeader(),
+        body: JSON.stringify({
+          subject: subject.trim(),
+          body: body.trim(),
+          userIds: target === "all" ? "all" : Array.from(selected),
+        }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        if (data.smtp_missing) { setSmtpMissing(true); }
+        else { showToast(data.error ?? "Gagal mengirim email.", false); }
+        return;
+      }
+      setResult(data);
+      showToast(`Email terkirim ke ${data.sent} pengguna.`, true);
+    } catch (e: any) {
+      showToast(e.message, false);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const tierBadgeColor: Record<string, string> = {
+    free: "bg-muted text-muted-foreground",
+    plus: "bg-blue-500/10 text-blue-600",
+    pro: "bg-violet-500/10 text-violet-600",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-base font-semibold text-foreground mb-1">Broadcast Email</h2>
+        <p className="text-sm text-muted-foreground">Kirim email langsung ke semua pengguna atau pengguna tertentu.</p>
+      </div>
+
+      {/* SMTP missing warning */}
+      {smtpMissing && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4 flex gap-3">
+          <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+          <div className="text-sm">
+            <p className="font-medium text-amber-800 dark:text-amber-300 mb-1">SMTP belum dikonfigurasi</p>
+            <p className="text-amber-700 dark:text-amber-400 leading-relaxed">
+              Tambahkan variabel berikut ke <strong>environment variables / secrets</strong>:
+              <br /><code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_HOST</code>,{" "}
+              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_PORT</code>,{" "}
+              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_USER</code>,{" "}
+              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_PASS</code>,{" "}
+              <code className="font-mono text-xs bg-amber-100 dark:bg-amber-900 px-1 py-0.5 rounded">SMTP_FROM</code> (opsional, default pakai SMTP_USER).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Result */}
+      {result && (
+        <div className={cn(
+          "rounded-xl border p-4 flex gap-3 items-start",
+          result.failed === 0
+            ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800"
+            : "border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800"
+        )}>
+          <Check className={cn("w-5 h-5 shrink-0 mt-0.5", result.failed === 0 ? "text-green-600" : "text-amber-500")} />
+          <div className="text-sm flex-1">
+            <p className={cn("font-medium mb-1", result.failed === 0 ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300")}>
+              Selesai — {result.sent} berhasil, {result.failed} gagal dari {result.total} penerima
+            </p>
+            {result.errors.length > 0 && (
+              <ul className="text-xs text-amber-700 dark:text-amber-400 space-y-0.5 mt-1">
+                {result.errors.map((e, i) => <li key={i} className="font-mono">{e}</li>)}
+              </ul>
+            )}
+          </div>
+          <button onClick={() => setResult(null)} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {/* Left — Compose */}
+        <div className="space-y-4">
+          <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+            <h3 className="text-sm font-medium text-foreground">Tulis Email</h3>
+
+            {/* Subject */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">Subject</label>
+              <Input
+                placeholder="Contoh: Update terbaru PioCode 🚀"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="text-sm"
+              />
+            </div>
+
+            {/* Body */}
+            <div>
+              <label className="text-xs text-muted-foreground mb-1.5 block">Isi Email</label>
+              <textarea
+                placeholder={"Halo!\n\nKami ingin memberitahu kamu bahwa..."}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                rows={9}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-sans"
+              />
+              <p className="text-xs text-muted-foreground mt-1">Baris baru akan otomatis dikonversi ke dalam email HTML.</p>
+            </div>
+
+            {/* Preview toggle */}
+            <button
+              onClick={() => setPreview((v) => !v)}
+              className="text-xs text-primary hover:underline"
+            >
+              {preview ? "Sembunyikan preview" : "Lihat preview email"}
+            </button>
+          </div>
+
+          {/* Target selection */}
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <h3 className="text-sm font-medium text-foreground">Penerima</h3>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setTarget("all")}
+                className={cn(
+                  "flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors",
+                  target === "all"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border text-muted-foreground hover:bg-accent"
+                )}
+              >
+                Semua Pengguna
+              </button>
+              <button
+                onClick={() => setTarget("select")}
+                className={cn(
+                  "flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-colors",
+                  target === "select"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border text-muted-foreground hover:bg-accent"
+                )}
+              >
+                Pilih Pengguna
+              </button>
+            </div>
+
+            {target === "select" && (
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Cari email atau nama..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2 rounded-lg border border-input bg-background text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
+                {usersLoading ? (
+                  <div className="flex items-center justify-center py-6 text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin mr-2" /> Memuat pengguna...
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-border overflow-hidden">
+                    {/* Select all */}
+                    <div
+                      className="flex items-center gap-3 px-3 py-2 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
+                      onClick={toggleAll}
+                    >
+                      <div className={cn(
+                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                        selected.size === filtered.length && filtered.length > 0
+                          ? "bg-primary border-primary text-primary-foreground"
+                          : "border-border"
+                      )}>
+                        {selected.size === filtered.length && filtered.length > 0 && <Check className="w-2.5 h-2.5" />}
+                      </div>
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})
+                      </span>
+                    </div>
+                    <div className="max-h-52 overflow-y-auto divide-y divide-border">
+                      {filtered.length === 0 ? (
+                        <div className="py-6 text-center text-sm text-muted-foreground">Tidak ada pengguna ditemukan.</div>
+                      ) : filtered.map((u) => (
+                        <div
+                          key={u.id}
+                          className="flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-accent transition-colors"
+                          onClick={() => toggleUser(u.id)}
+                        >
+                          <div className={cn(
+                            "w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors",
+                            selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                          )}>
+                            {selected.has(u.id) && <Check className="w-2.5 h-2.5" />}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm truncate">{u.email}</div>
+                            {u.full_name && <div className="text-xs text-muted-foreground truncate">{u.full_name}</div>}
+                          </div>
+                          <span className={cn("text-xs px-2 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
+                            {u.tier}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Send button */}
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={sending || !subject.trim() || !body.trim() || (target === "select" && selected.size === 0)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
+          </button>
+        </div>
+
+        {/* Right — Email preview */}
+        {preview && (
+          <div className="rounded-xl border border-border bg-card p-5 space-y-3">
+            <h3 className="text-sm font-medium text-foreground">Preview Email</h3>
+            <div className="rounded-lg border border-border overflow-hidden bg-[#f4f4f5]">
+              {/* Header */}
+              <div className="bg-[#18181b] px-6 py-4">
+                <span className="text-white font-bold text-base">PioCode</span>
+              </div>
+              {/* Body */}
+              <div className="bg-white px-6 py-7">
+                <h2 className="font-bold text-[#18181b] text-lg mb-4 leading-snug">
+                  {subject || <span className="text-gray-400 font-normal italic">Subject email...</span>}
+                </h2>
+                <div className="text-[#3f3f46] text-sm leading-relaxed whitespace-pre-line">
+                  {body || <span className="text-gray-400 italic">Isi email akan tampil di sini...</span>}
+                </div>
+              </div>
+              {/* Footer */}
+              <div className="bg-white border-t border-[#e4e4e7] px-6 py-4">
+                <p className="text-xs text-[#a1a1aa] leading-relaxed">
+                  Kamu menerima email ini karena terdaftar di PioCode. Jika ini bukan kamu, abaikan email ini.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Confirm dialog */}
+      <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Kirim broadcast email?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>Email dengan subject <strong className="text-foreground">&quot;{subject}&quot;</strong> akan dikirim ke{" "}
+                  <strong className="text-foreground">{recipientCount} penerima</strong>.
+                </p>
+                <p>Email yang sudah dikirim tidak bisa ditarik kembali.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Batal</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSend}>Ya, Kirim Sekarang</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -1645,6 +1977,9 @@ export default function AdminPage() {
           )}
           {activeSection === "model-chain" && (
             <SectionModelChain />
+          )}
+          {activeSection === "broadcast" && (
+            <SectionBroadcast showToast={showToast} />
           )}
         </main>
 

@@ -6,6 +6,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import mammoth from "mammoth";
+import nodemailer from "nodemailer";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
@@ -600,6 +601,106 @@ async function loadPricingConfig(force = false): Promise<PricingConfig> {
 app.get("/api/pricing-config", async (_req, res) => {
   const config = await loadPricingConfig();
   res.json(config);
+});
+
+// ── POST /api/admin/broadcast-email ──────────────────────────────────────────
+// Kirim email broadcast ke semua user atau user terpilih, pakai SMTP yang
+// dikonfigurasi lewat env var SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.
+app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, res) => {
+  const { subject, body, userIds } = req.body as {
+    subject?: string;
+    body?: string;
+    userIds?: string[] | "all";
+  };
+  if (!subject?.trim()) { res.status(400).json({ error: "Subject wajib diisi." }); return; }
+  if (!body?.trim()) { res.status(400).json({ error: "Isi email wajib diisi." }); return; }
+
+  const smtpHost = process.env.SMTP_HOST;
+  const smtpPort = Number(process.env.SMTP_PORT ?? 587);
+  const smtpUser = process.env.SMTP_USER;
+  const smtpPass = process.env.SMTP_PASS;
+  const smtpFrom = process.env.SMTP_FROM || smtpUser;
+
+  if (!smtpHost || !smtpUser || !smtpPass) {
+    res.status(503).json({
+      error: "SMTP belum dikonfigurasi. Tambahkan SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS (dan opsional SMTP_FROM) ke environment variables.",
+      smtp_missing: true,
+    });
+    return;
+  }
+
+  const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
+  if (authErr) { res.status(500).json({ error: authErr.message }); return; }
+
+  let recipients: { id: string; email: string }[];
+  if (!userIds || userIds === "all") {
+    recipients = authUsers.users
+      .filter((u) => u.email && u.email_confirmed_at)
+      .map((u) => ({ id: u.id, email: u.email! }));
+  } else {
+    const idSet = new Set(userIds as string[]);
+    recipients = authUsers.users
+      .filter((u) => u.email && idSet.has(u.id))
+      .map((u) => ({ id: u.id, email: u.email! }));
+  }
+
+  if (recipients.length === 0) {
+    res.status(400).json({ error: "Tidak ada penerima yang valid." }); return;
+  }
+
+  const transporter = nodemailer.createTransport({
+    host: smtpHost,
+    port: smtpPort,
+    secure: smtpPort === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+
+  const buildHtml = (subj: string, txt: string) => `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${subj}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 16px;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <tr><td style="background:#18181b;padding:24px 36px;">
+        <span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">PioCode</span>
+      </td></tr>
+      <tr><td style="padding:32px 36px;">
+        <h2 style="margin:0 0 18px;font-size:20px;font-weight:700;color:#18181b;line-height:1.3;">${subj}</h2>
+        <div style="font-size:15px;color:#3f3f46;line-height:1.75;">${txt.replace(/\n/g, "<br>")}</div>
+      </td></tr>
+      <tr><td style="padding:20px 36px;border-top:1px solid #e4e4e7;">
+        <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.5;">Kamu menerima email ini karena terdaftar di PioCode. Jika ini bukan kamu, abaikan email ini.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+
+  let sent = 0;
+  let failed = 0;
+  const errors: string[] = [];
+
+  for (let i = 0; i < recipients.length; i++) {
+    const r = recipients[i];
+    try {
+      await transporter.sendMail({
+        from: smtpFrom,
+        to: r.email,
+        subject: subject.trim(),
+        html: buildHtml(subject.trim(), body.trim()),
+      });
+      sent++;
+    } catch (e: any) {
+      failed++;
+      errors.push(`${r.email}: ${e.message}`);
+    }
+    // throttle: delay tiap 10 email
+    if (i > 0 && i % 10 === 0) await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+
+  console.log(`[Broadcast Email] subject="${subject}" total=${recipients.length} sent=${sent} failed=${failed}`);
+  res.json({ ok: true, sent, failed, total: recipients.length, errors: errors.slice(0, 20) });
 });
 
 // PUT /api/admin/pricing-config — admin only
