@@ -2596,6 +2596,54 @@ app.get("/api/me/billing-summary", requireAuth, async (req, res) => {
   });
 });
 
+// ── GET /api/me/transactions?month=YYYY-MM — riwayat transaksi per bulan ──
+app.get("/api/me/transactions", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const monthParam = req.query.month as string;
+
+  let startDate: Date;
+  let endDate: Date;
+
+  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
+    const [year, month] = monthParam.split("-").map(Number);
+    startDate = new Date(year, month - 1, 1);
+    endDate   = new Date(year, month, 1);
+  } else {
+    const now = new Date();
+    startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    endDate   = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+
+  const { data, error } = await supabaseAdmin
+    .from("credit_transactions")
+    .select("id, amount_idr, type, metadata, created_at")
+    .eq("user_id", userId)
+    .gte("created_at", startDate.toISOString())
+    .lt("created_at", endDate.toISOString())
+    .order("created_at", { ascending: false });
+
+  if (error) return res.status(500).json({ error: error.message });
+
+  const txs = data ?? [];
+
+  // Group by date label
+  const groupMap: Record<string, typeof txs> = {};
+  for (const tx of txs) {
+    const key = new Date(tx.created_at).toLocaleDateString("id-ID", {
+      weekday: "long", day: "numeric", month: "long", year: "numeric",
+    });
+    if (!groupMap[key]) groupMap[key] = [];
+    groupMap[key].push(tx);
+  }
+
+  res.json({
+    transactions: txs,
+    grouped: Object.entries(groupMap).map(([date, items]) => ({ date, items })),
+    total_spent: txs.filter(t => t.amount_idr < 0).reduce((s, t) => s + (-t.amount_idr), 0),
+    total_in:    txs.filter(t => t.amount_idr >= 0).reduce((s, t) => s + t.amount_idr, 0),
+  });
+});
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // ── PUBLIC API (OpenAI-compatible) — diakses pakai pio-sk-... ────────────────
 // ═══════════════════════════════════════════════════════════════════════════════

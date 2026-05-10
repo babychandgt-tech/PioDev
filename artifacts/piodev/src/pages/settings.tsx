@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic, Wallet, CreditCard, Server, Key, ArrowDownLeft, MessageSquare, Plus } from "lucide-react";
+import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic, Wallet, CreditCard, Server, Key, ArrowDownLeft, MessageSquare, Plus, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { useChat } from "@/hooks/use-chat";
@@ -106,6 +106,26 @@ export default function Settings() {
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [billingSummaryLoading, setBillingSummaryLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingTab, setBillingTab] = useState<"informasi" | "riwayat">("informasi");
+
+  const getMonthOptions = () => {
+    const opts: { label: string; value: string }[] = [];
+    const now = new Date();
+    for (let i = 0; i < 6; i++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
+      opts.push({ label, value });
+    }
+    return opts;
+  };
+  const monthOptions = getMonthOptions();
+  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
+
+  type HistoryTx = { id: string; amount_idr: number; type: string; metadata: any; created_at: string };
+  type HistoryData = { grouped: { date: string; items: HistoryTx[] }[]; total_spent: number; total_in: number };
+  const [historyData, setHistoryData] = useState<HistoryData | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   useEffect(() => {
     if (activeSection !== "billing") return;
@@ -130,6 +150,25 @@ export default function Settings() {
     })();
     return () => { cancelled = true; };
   }, [activeSection]);
+
+  useEffect(() => {
+    if (activeSection !== "billing" || billingTab !== "riwayat") return;
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryData(null);
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch(`/api/me/transactions?month=${selectedMonth}`, {
+          headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+        });
+        if (!cancelled && res.ok) setHistoryData(await res.json());
+      } catch { /* noop */ } finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeSection, billingTab, selectedMonth]);
 
   const [name, setName] = useState(user?.name || "");
   const [nameSaving, setNameSaving] = useState(false);
@@ -710,7 +749,7 @@ export default function Settings() {
                     </div>
                   ) : (
                     <>
-                      {/* Saldo card */}
+                      {/* ── Saldo card ── */}
                       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
                         <div className="flex items-start justify-between gap-4">
                           <div>
@@ -760,134 +799,183 @@ export default function Settings() {
                         </div>
                       </div>
 
-                      {/* Breakdown kategori bulan ini */}
-                      {billingSummary.this_month.total_spent > 0 && (
-                        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4">
-                          <h3 className="text-sm font-semibold text-foreground">Pengeluaran bulan ini</h3>
-                          {(
-                            [
-                              { key: "chat",    label: "Chat AI",      icon: MessageSquare, color: "bg-blue-500" },
-                              { key: "image",   label: "Gambar",       icon: ImageIcon,     color: "bg-purple-500" },
-                              { key: "video",   label: "Video",        icon: Clapperboard,  color: "bg-rose-500" },
-                              { key: "voice",   label: "Voice Studio", icon: Mic,           color: "bg-orange-500" },
-                              { key: "hosting", label: "Hosting",      icon: Server,        color: "bg-emerald-500" },
-                              { key: "api",     label: "API",          icon: Key,           color: "bg-cyan-500" },
-                            ] as const
-                          )
-                            .filter(({ key }) => (billingSummary.this_month.by_category[key] ?? 0) > 0)
-                            .map(({ key, label, icon: Icon, color }) => {
-                              const amount = billingSummary.this_month.by_category[key] ?? 0;
-                              const pct = Math.round((amount / billingSummary.this_month.total_spent) * 100);
-                              return (
-                                <div key={key} className="space-y-1.5">
-                                  <div className="flex items-center justify-between text-sm">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                                      <span className="text-foreground font-medium">{label}</span>
-                                      <span className="text-xs text-muted-foreground">{pct}%</span>
+                      {/* ── Tab switcher ── */}
+                      <div className="flex gap-1 p-1 rounded-xl bg-muted w-fit">
+                        {(["informasi", "riwayat"] as const).map((t) => (
+                          <button
+                            key={t}
+                            onClick={() => setBillingTab(t)}
+                            className={cn(
+                              "px-4 py-1.5 rounded-lg text-sm font-medium transition-all",
+                              billingTab === t
+                                ? "bg-card text-foreground shadow-sm"
+                                : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            {t === "informasi" ? "Informasi" : "Riwayat"}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* ── Tab: Informasi ── */}
+                      {billingTab === "informasi" && (
+                        <>
+                          {billingSummary.this_month.total_spent > 0 && (
+                            <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4">
+                              <h3 className="text-sm font-semibold text-foreground">Pengeluaran bulan ini</h3>
+                              {(
+                                [
+                                  { key: "chat",    label: "Chat AI",      icon: MessageSquare, color: "bg-blue-500" },
+                                  { key: "image",   label: "Gambar",       icon: ImageIcon,     color: "bg-purple-500" },
+                                  { key: "video",   label: "Video",        icon: Clapperboard,  color: "bg-rose-500" },
+                                  { key: "voice",   label: "Voice Studio", icon: Mic,           color: "bg-orange-500" },
+                                  { key: "hosting", label: "Hosting",      icon: Server,        color: "bg-emerald-500" },
+                                  { key: "api",     label: "API",          icon: Key,           color: "bg-cyan-500" },
+                                ] as const
+                              )
+                                .filter(({ key }) => (billingSummary.this_month.by_category[key] ?? 0) > 0)
+                                .map(({ key, label, icon: Icon, color }) => {
+                                  const amount = billingSummary.this_month.by_category[key] ?? 0;
+                                  const pct = Math.round((amount / billingSummary.this_month.total_spent) * 100);
+                                  return (
+                                    <div key={key} className="space-y-1.5">
+                                      <div className="flex items-center justify-between text-sm">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <Icon className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                                          <span className="text-foreground font-medium">{label}</span>
+                                          <span className="text-xs text-muted-foreground">{pct}%</span>
+                                        </div>
+                                        <span className="text-foreground font-medium tabular-nums text-xs sm:text-sm shrink-0">
+                                          Rp {amount.toLocaleString("id-ID")}
+                                        </span>
+                                      </div>
+                                      <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                        <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
+                                      </div>
                                     </div>
-                                    <span className="text-foreground font-medium tabular-nums text-xs sm:text-sm shrink-0">
-                                      Rp {amount.toLocaleString("id-ID")}
-                                    </span>
+                                  );
+                                })}
+                            </div>
+                          )}
+
+                          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+                            <h3 className="text-sm font-semibold text-foreground mb-3">Tarif penggunaan</h3>
+                            <div className="space-y-3">
+                              {[
+                                { label: "API Key — Chat",   desc: "Akses via API key eksternal",  value: `${billingSummary.pricing.idr_per_token_den} token = Rp ${billingSummary.pricing.idr_per_token_num}` },
+                                { label: "API Key — Gambar", desc: "Generate gambar via API",       value: `Rp ${billingSummary.pricing.image_idr.toLocaleString("id-ID")} / gambar` },
+                                { label: "Hosting — Nano",   desc: "256MB RAM, 0.25 vCPU",         value: "Rp 30 / jam" },
+                                { label: "Hosting — Micro",  desc: "512MB RAM, 0.5 vCPU",          value: "Rp 60 / jam" },
+                                { label: "Hosting — Small",  desc: "1GB RAM, 1 vCPU",              value: "Rp 120 / jam" },
+                              ].map(({ label, desc, value }) => (
+                                <div key={label} className="flex items-start justify-between gap-3 text-sm">
+                                  <div>
+                                    <span className="text-foreground font-medium">{label}</span>
+                                    <p className="text-xs text-muted-foreground">{desc}</p>
                                   </div>
-                                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                                    <div className={cn("h-full rounded-full transition-all", color)} style={{ width: `${pct}%` }} />
-                                  </div>
+                                  <span className="text-foreground tabular-nums shrink-0">{value}</span>
                                 </div>
-                              );
-                            })}
-                        </div>
+                              ))}
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-4 pt-3 border-t border-border">
+                              Fitur Chat, Gambar, Video, dan Voice di web menggunakan kuota bulanan — tidak memotong saldo kredit ini.
+                            </p>
+                          </div>
+                        </>
                       )}
 
-                      {/* Riwayat transaksi */}
-                      <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                        <div className="px-5 py-4 border-b border-border">
-                          <h3 className="text-sm font-semibold text-foreground">Riwayat transaksi</h3>
-                        </div>
-                        {billingSummary.recent_transactions.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center py-12 gap-2 text-center">
-                            <CreditCard className="w-8 h-8 text-muted-foreground/40" />
-                            <p className="text-sm text-muted-foreground">Belum ada transaksi</p>
-                          </div>
-                        ) : (
-                          <div className="divide-y divide-border">
-                            {billingSummary.recent_transactions.map((tx) => {
-                              const isCredit = tx.amount_idr >= 0;
-                              const { label, icon: TxIcon } = getTxLabel(tx.type);
-                              return (
-                                <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5">
-                                  <div className={cn(
-                                    "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
-                                    isCredit ? "bg-green-500/10" : "bg-muted"
-                                  )}>
-                                    <TxIcon className={cn("w-3.5 h-3.5", isCredit ? "text-green-500" : "text-muted-foreground")} />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-foreground truncate">{label}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(tx.created_at).toLocaleDateString("id-ID", {
-                                        day: "numeric", month: "short", year: "numeric",
-                                        hour: "2-digit", minute: "2-digit",
-                                      })}
-                                    </p>
-                                  </div>
-                                  <span className={cn(
-                                    "text-sm font-semibold tabular-nums shrink-0",
-                                    isCredit ? "text-green-500" : "text-foreground"
-                                  )}>
-                                    {isCredit ? "+" : "−"}Rp {Math.abs(tx.amount_idr).toLocaleString("id-ID")}
-                                  </span>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Tarif penggunaan */}
-                      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
-                        <h3 className="text-sm font-semibold text-foreground mb-3">Tarif penggunaan</h3>
-                        <div className="space-y-2.5">
-                          {[
-                            {
-                              label: "API Key — Chat",
-                              desc: "Akses via API key eksternal",
-                              value: `${billingSummary.pricing.idr_per_token_den} token = Rp ${billingSummary.pricing.idr_per_token_num}`,
-                            },
-                            {
-                              label: "API Key — Gambar",
-                              desc: "Generate gambar via API",
-                              value: `Rp ${billingSummary.pricing.image_idr.toLocaleString("id-ID")} / gambar`,
-                            },
-                            {
-                              label: "Hosting — Nano",
-                              desc: "256MB RAM, 0.25 vCPU",
-                              value: "Rp 30 / jam",
-                            },
-                            {
-                              label: "Hosting — Micro",
-                              desc: "512MB RAM, 0.5 vCPU",
-                              value: "Rp 60 / jam",
-                            },
-                            {
-                              label: "Hosting — Small",
-                              desc: "1GB RAM, 1 vCPU",
-                              value: "Rp 120 / jam",
-                            },
-                          ].map(({ label, desc, value }) => (
-                            <div key={label} className="flex items-start justify-between gap-3 text-sm">
-                              <div>
-                                <span className="text-foreground font-medium">{label}</span>
-                                <p className="text-xs text-muted-foreground">{desc}</p>
-                              </div>
-                              <span className="text-foreground tabular-nums shrink-0">{value}</span>
+                      {/* ── Tab: Riwayat ── */}
+                      {billingTab === "riwayat" && (
+                        <div className="rounded-2xl border border-border bg-card overflow-hidden">
+                          {/* Header + filter bulan */}
+                          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                            <h3 className="text-sm font-semibold text-foreground">Riwayat transaksi</h3>
+                            <div className="relative">
+                              <select
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                className="appearance-none text-xs font-medium bg-muted text-foreground border-0 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
+                              >
+                                {monthOptions.map((o) => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
                             </div>
-                          ))}
+                          </div>
+
+                          {historyLoading ? (
+                            <div className="flex items-center justify-center py-14 text-muted-foreground text-sm gap-2">
+                              <span className="w-2 h-2 rounded-full bg-primary/40 animate-pulse" />
+                              Memuat riwayat...
+                            </div>
+                          ) : !historyData || historyData.grouped.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-14 gap-2 text-center">
+                              <CreditCard className="w-8 h-8 text-muted-foreground/30" />
+                              <p className="text-sm text-muted-foreground">Tidak ada transaksi bulan ini</p>
+                            </div>
+                          ) : (
+                            <>
+                              {/* Ringkasan bulan */}
+                              <div className="flex items-center gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs">
+                                <span className="flex items-center gap-1.5 text-muted-foreground">
+                                  <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
+                                  Keluar:{" "}
+                                  <span className="text-foreground font-semibold tabular-nums">
+                                    Rp {historyData.total_spent.toLocaleString("id-ID")}
+                                  </span>
+                                </span>
+                                {historyData.total_in > 0 && (
+                                  <span className="flex items-center gap-1.5 text-muted-foreground">
+                                    <TrendingUp className="w-3.5 h-3.5 text-green-500" />
+                                    Masuk:{" "}
+                                    <span className="text-green-500 font-semibold tabular-nums">
+                                      +Rp {historyData.total_in.toLocaleString("id-ID")}
+                                    </span>
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Grouped by date */}
+                              {historyData.grouped.map(({ date, items }) => (
+                                <div key={date}>
+                                  <div className="px-5 py-2 bg-muted/30 border-b border-border">
+                                    <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">{date}</p>
+                                  </div>
+                                  <div className="divide-y divide-border">
+                                    {items.map((tx) => {
+                                      const isCredit = tx.amount_idr >= 0;
+                                      const { label, icon: TxIcon } = getTxLabel(tx.type);
+                                      return (
+                                        <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5">
+                                          <div className={cn(
+                                            "w-8 h-8 rounded-full flex items-center justify-center shrink-0",
+                                            isCredit ? "bg-green-500/10" : "bg-muted"
+                                          )}>
+                                            <TxIcon className={cn("w-3.5 h-3.5", isCredit ? "text-green-500" : "text-muted-foreground")} />
+                                          </div>
+                                          <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium text-foreground truncate">{label}</p>
+                                            <p className="text-xs text-muted-foreground">
+                                              {new Date(tx.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
+                                            </p>
+                                          </div>
+                                          <span className={cn(
+                                            "text-sm font-semibold tabular-nums shrink-0",
+                                            isCredit ? "text-green-500" : "text-foreground"
+                                          )}>
+                                            {isCredit ? "+" : "−"}Rp {Math.abs(tx.amount_idr).toLocaleString("id-ID")}
+                                          </span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </>
+                          )}
                         </div>
-                        <p className="text-xs text-muted-foreground mt-4 pt-3 border-t border-border">
-                          Fitur Chat, Gambar, Video, dan Voice di web menggunakan kuota bulanan — tidak memotong saldo kredit ini.
-                        </p>
-                      </div>
+                      )}
                     </>
                   )}
                 </div>
