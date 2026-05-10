@@ -63,7 +63,13 @@ export default function Settings() {
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isDesktopSidebarOpen, setIsDesktopSidebarOpen] = useState(true);
-  const [activeSection, setActiveSection] = useState<Section>("profil");
+
+  const initialSection = (): Section => {
+    const p = new URLSearchParams(window.location.search).get("section");
+    if (p === "billing" || p === "penggunaan" || p === "personalisasi") return p;
+    return "profil";
+  };
+  const [activeSection, setActiveSection] = useState<Section>(initialSection);
 
   const { data: persona, save: savePersona, isSaving: personaSaving } = usePersonalization();
 

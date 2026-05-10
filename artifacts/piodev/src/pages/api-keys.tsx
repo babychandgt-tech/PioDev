@@ -1013,19 +1013,29 @@ function SaldoCard({ credit, onTopUp }: { credit: CreditInfo; onTopUp: () => voi
         {isAdmin ? "Tanpa Batas" : formatIdr(balance)}
       </p>
 
-      {/* Status line — singkat */}
-      <p className={cn(
-        "text-xs mt-1.5",
-        isEmpty ? "text-rose-500 font-medium" : isLow ? "text-amber-500 font-medium" : "text-muted-foreground"
-      )}>
-        {isAdmin
-          ? "Akun admin · gak di-charge"
-          : isEmpty
-          ? "Saldo habis. Top up untuk lanjut pakai API."
-          : isLow
-          ? "Saldo menipis."
-          : "Tanpa reset harian."}
-      </p>
+      {/* Status line + link ke billing */}
+      <div className="flex items-center justify-between gap-2 mt-1.5">
+        <p className={cn(
+          "text-xs",
+          isEmpty ? "text-rose-500 font-medium" : isLow ? "text-amber-500 font-medium" : "text-muted-foreground"
+        )}>
+          {isAdmin
+            ? "Akun admin · gak di-charge"
+            : isEmpty
+            ? "Saldo habis. Top up untuk lanjut pakai API."
+            : isLow
+            ? "Saldo menipis."
+            : "Tanpa reset harian."}
+        </p>
+        {!isAdmin && (
+          <a
+            href="/settings?section=billing"
+            className="text-xs text-muted-foreground hover:text-primary transition-colors shrink-0"
+          >
+            Lihat riwayat →
+          </a>
+        )}
+      </div>
     </div>
   );
 }
