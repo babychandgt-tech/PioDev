@@ -137,7 +137,7 @@ export default function PremiumPricingPage() {
         "Pustaka: 10 file (10 MB/file) · 100 hal/bulan",
         "API key developer (Flash, Turbo, Qwen3-8B)",
         "Saldo kredit Rp 7.500 bonus daftar",
-        "Hosting 1 project · Nano 256MB · Rp 30/deploy",
+        "Hosting 1 project · Nano 256MB · Rp 30/jam",
       ],
       cta: !isPremium
         ? { label: "Paket Saat Ini", disabled: true }
@@ -159,7 +159,7 @@ export default function PremiumPricingPage() {
         "60 voice AI per bulan (TTS, clone, design)",
         "Pustaka: 20 file (20 MB/file) · 1.000 hal/bulan",
         "API key — semua model Plus",
-        "Hosting 3 project · Micro 512MB · Rp 60/deploy",
+        "Hosting 3 project · Micro 512MB · Rp 60/jam",
         "Custom domain hosting",
         "Bonus saldo Rp 75.000 (satu kali, saat upgrade)",
       ],
@@ -191,7 +191,7 @@ export default function PremiumPricingPage() {
         "200 voice AI per bulan (TTS, clone, design)",
         "Pustaka: 35 file (30 MB/file) · 5.000 hal/bulan",
         "API key — semua model Pro",
-        "Hosting 5 project · Small 1GB · Rp 120/deploy",
+        "Hosting 5 project · Small 1GB · Rp 120/jam",
         "Custom domain hosting",
         "Bonus saldo Rp 125.000 (satu kali, saat upgrade)",
       ],
@@ -525,7 +525,7 @@ const COMPARISON_GROUPS: Array<{ title: string; rows: Row[] }> = [
     rows: [
       { label: "Proyek aktif", free: "1", plus: "3", pro: "5" },
       { label: "Memory per proyek", free: "256 MB (Nano)", plus: "512 MB (Micro)", pro: "1 GB (Small)" },
-      { label: "Biaya deploy", free: "Rp 30 / deploy", plus: "Rp 60 / deploy", pro: "Rp 120 / deploy" },
+      { label: "Biaya hosting", free: "Rp 30 / jam", plus: "Rp 60 / jam", pro: "Rp 120 / jam" },
       { label: "Custom domain", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
       { label: "Auto-deploy dari GitHub", free: { yes: true }, plus: { yes: true }, pro: { yes: true } },
     ],

@@ -21,7 +21,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-type ProjectStatus = "inactive" | "deploying" | "running" | "failed" | "stopped";
+type ProjectStatus = "inactive" | "deploying" | "running" | "failed" | "stopped" | "suspended";
 
 interface HostingProject {
   id: string;
@@ -146,6 +146,7 @@ const STATUS_DOT: Record<ProjectStatus, string> = {
   failed:    "bg-red-500",
   stopped:   "bg-amber-500",
   inactive:  "bg-zinc-600",
+  suspended: "bg-orange-500",
 };
 
 const STATUS_LABEL: Record<ProjectStatus, string> = {
@@ -154,6 +155,7 @@ const STATUS_LABEL: Record<ProjectStatus, string> = {
   failed:    "Failed",
   stopped:   "Stopped",
   inactive:  "Inactive",
+  suspended: "Suspended",
 };
 
 function StatusPill({ status }: { status: ProjectStatus }) {
@@ -163,6 +165,7 @@ function StatusPill({ status }: { status: ProjectStatus }) {
     failed:    "text-red-400 bg-red-500/10 border-red-500/20",
     stopped:   "text-amber-400 bg-amber-500/10 border-amber-500/20",
     inactive:  "text-zinc-500 bg-zinc-500/10 border-zinc-500/20",
+    suspended: "text-orange-400 bg-orange-500/10 border-orange-500/20",
   };
   return (
     <span className={cn("inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border", colors[status])}>
@@ -247,6 +250,7 @@ export default function HostingPage() {
   const [deploying, setDeploying] = useState<string | null>(null);
   const [syncing, setSyncing] = useState<string | null>(null);
   const [restarting, setRestarting] = useState<string | null>(null);
+  const [resuming, setResuming] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<HostingProject | null>(null);
   const [deleting, setDeleting] = useState(false);
 
@@ -674,6 +678,21 @@ export default function HostingPage() {
     } finally { setRestarting(null); }
   };
 
+  const handleResume = async (project: HostingProject) => {
+    setResuming(project.id);
+    try {
+      const res = await authedFetch(`/api/hosting/projects/${project.id}/resume`, { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Gagal menghidupkan kembali", description: data.error, variant: "destructive" });
+        return;
+      }
+      setProjects(prev => prev.map(p => p.id === project.id ? { ...p, status: "running" } : p));
+      if (selectedProject?.id === project.id) setSelectedProject(prev => prev ? { ...prev, status: "running" } : prev);
+      toast({ title: `${project.name} dihidupkan kembali`, description: "Container sedang menyala." });
+    } finally { setResuming(null); }
+  };
+
   const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleting(true);
@@ -1065,7 +1084,7 @@ export default function HostingPage() {
                 <StatusPill status={selectedProject.status} />
                 <div className="hidden sm:flex items-center gap-1.5 shrink-0">
                   <button onClick={() => handleRestart(selectedProject)}
-                    disabled={restarting === selectedProject.id || selectedProject.status === "deploying" || !selectedProject.coolify_app_uuid}
+                    disabled={restarting === selectedProject.id || selectedProject.status === "deploying" || selectedProject.status === "suspended" || !selectedProject.coolify_app_uuid}
                     title="Restart container"
                     className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors disabled:opacity-40 text-muted-foreground hover:text-foreground">
                     <RotateCcw className={cn("w-3.5 h-3.5", restarting === selectedProject.id && "animate-spin")} />
@@ -1075,12 +1094,21 @@ export default function HostingPage() {
                     className="p-1.5 rounded-md border border-border hover:bg-accent transition-colors disabled:opacity-40 text-muted-foreground hover:text-foreground">
                     <RefreshCw className={cn("w-3.5 h-3.5", syncing === selectedProject.id && "animate-spin")} />
                   </button>
-                  <button onClick={() => handleDeploy(selectedProject)}
-                    disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
-                    {deploying === selectedProject.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
-                    Deploy
-                  </button>
+                  {selectedProject.status === "suspended" ? (
+                    <button onClick={() => handleResume(selectedProject)}
+                      disabled={resuming === selectedProject.id}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50">
+                      {resuming === selectedProject.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                      Hidupkan
+                    </button>
+                  ) : (
+                    <button onClick={() => handleDeploy(selectedProject)}
+                      disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
+                      {deploying === selectedProject.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Rocket className="w-3 h-3" />}
+                      Deploy
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -1129,6 +1157,22 @@ export default function HostingPage() {
                     {/* ── Overview tab ── */}
                     {detailTab === "overview" && (
                       <div className="p-5 space-y-5">
+                        {/* Suspended banner */}
+                        {selectedProject.status === "suspended" && (
+                          <div className="flex items-start gap-3 p-4 rounded-xl border border-orange-500/30 bg-orange-500/8">
+                            <AlertCircle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-orange-400">Proyek ditangguhkan</p>
+                              <p className="text-xs text-muted-foreground mt-0.5">Saldo kredit tidak cukup untuk membayar biaya hosting per jam. Isi saldo lalu klik <strong>Hidupkan</strong> untuk menyalakan kembali.</p>
+                            </div>
+                            <button onClick={() => handleResume(selectedProject)}
+                              disabled={resuming === selectedProject.id}
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500 text-white text-xs font-medium hover:bg-orange-600 transition-colors disabled:opacity-50 shrink-0">
+                              {resuming === selectedProject.id ? <Loader2 className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
+                              Hidupkan
+                            </button>
+                          </div>
+                        )}
                         {/* URL card */}
                         {selectedProject.public_url || selectedProject.custom_domain ? (
                           <a
@@ -1179,12 +1223,21 @@ export default function HostingPage() {
 
                         {/* Quick actions */}
                         <div className="flex items-center gap-2">
-                          <button onClick={() => handleDeploy(selectedProject)}
-                            disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
-                            {deploying === selectedProject.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
-                            Deploy
-                          </button>
+                          {selectedProject.status === "suspended" ? (
+                            <button onClick={() => handleResume(selectedProject)}
+                              disabled={resuming === selectedProject.id}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 text-white text-sm font-medium hover:bg-orange-600 transition-colors disabled:opacity-50">
+                              {resuming === selectedProject.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                              Hidupkan Kembali
+                            </button>
+                          ) : (
+                            <button onClick={() => handleDeploy(selectedProject)}
+                              disabled={deploying === selectedProject.id || selectedProject.status === "deploying"}
+                              className="flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50">
+                              {deploying === selectedProject.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Rocket className="w-4 h-4" />}
+                              Deploy
+                            </button>
+                          )}
                           <button onClick={() => { setDetailTab("logs"); handleLoadLogs(selectedProject); }}
                             className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-border hover:bg-accent text-sm transition-colors">
                             <Terminal className="w-4 h-4" /> Logs
