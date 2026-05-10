@@ -2599,15 +2599,16 @@ app.get("/api/me/billing-summary", requireAuth, async (req, res) => {
 // ── GET /api/me/transactions?month=YYYY-MM — riwayat transaksi per bulan ──
 app.get("/api/me/transactions", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
-  const monthParam = req.query.month as string;
+  const fromParam = req.query.from as string;
+  const toParam   = req.query.to   as string;
 
   let startDate: Date;
   let endDate: Date;
 
-  if (monthParam && /^\d{4}-\d{2}$/.test(monthParam)) {
-    const [year, month] = monthParam.split("-").map(Number);
-    startDate = new Date(year, month - 1, 1);
-    endDate   = new Date(year, month, 1);
+  const isoRe = /^\d{4}-\d{2}-\d{2}$/;
+  if (fromParam && toParam && isoRe.test(fromParam) && isoRe.test(toParam)) {
+    startDate = new Date(fromParam);
+    endDate   = new Date(toParam);
   } else {
     const now = new Date();
     startDate = new Date(now.getFullYear(), now.getMonth(), 1);

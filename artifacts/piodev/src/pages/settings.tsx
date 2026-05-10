@@ -34,6 +34,17 @@ type BillingSummary = {
   pricing: { idr_per_token_num: number; idr_per_token_den: number; image_idr: number; video_idr: number };
 };
 
+function txDetail(metadata: any): string | null {
+  if (!metadata) return null;
+  const parts: string[] = [];
+  if (metadata.model)                                    parts.push(String(metadata.model));
+  if (typeof metadata.tokens === "number")               parts.push(`${metadata.tokens.toLocaleString("id-ID")} token`);
+  if (typeof metadata.count === "number" && metadata.count > 1) parts.push(`${metadata.count} item`);
+  if (metadata.note && typeof metadata.note === "string") parts.push(metadata.note);
+  if (metadata.source === "claim_trial")                 parts.push("klaim trial");
+  return parts.length ? parts.join(" · ") : null;
+}
+
 function getTxLabel(type: string): { label: string; icon: typeof User } {
   if (type?.includes("usage_chat"))    return { label: "Chat AI", icon: MessageSquare };
   if (type?.includes("usage_image"))   return { label: "Generate Gambar", icon: ImageIcon };
@@ -108,19 +119,24 @@ export default function Settings() {
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingTab, setBillingTab] = useState<"informasi" | "riwayat">("informasi");
 
-  const getMonthOptions = () => {
-    const opts: { label: string; value: string }[] = [];
+  type Period = "this_month" | "last_month" | "3_months" | "6_months";
+  const PERIODS: { value: Period; label: string }[] = [
+    { value: "this_month",  label: "Bulan ini" },
+    { value: "last_month",  label: "Bulan lalu" },
+    { value: "3_months",    label: "3 bulan terakhir" },
+    { value: "6_months",    label: "6 bulan terakhir" },
+  ];
+  const getDateRange = (period: Period): { from: string; to: string } => {
     const now = new Date();
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      const label = d.toLocaleDateString("id-ID", { month: "long", year: "numeric" });
-      opts.push({ label, value });
+    const fmt = (d: Date) => d.toISOString().slice(0, 10);
+    switch (period) {
+      case "this_month":  return { from: fmt(new Date(now.getFullYear(), now.getMonth(), 1)),     to: fmt(new Date(now.getFullYear(), now.getMonth() + 1, 1)) };
+      case "last_month":  return { from: fmt(new Date(now.getFullYear(), now.getMonth() - 1, 1)), to: fmt(new Date(now.getFullYear(), now.getMonth(), 1)) };
+      case "3_months":    return { from: fmt(new Date(now.getFullYear(), now.getMonth() - 2, 1)), to: fmt(new Date(now.getFullYear(), now.getMonth() + 1, 1)) };
+      case "6_months":    return { from: fmt(new Date(now.getFullYear(), now.getMonth() - 5, 1)), to: fmt(new Date(now.getFullYear(), now.getMonth() + 1, 1)) };
     }
-    return opts;
   };
-  const monthOptions = getMonthOptions();
-  const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
+  const [selectedPeriod, setSelectedPeriod] = useState<Period>("this_month");
 
   type HistoryTx = { id: string; amount_idr: number; type: string; metadata: any; created_at: string };
   type HistoryData = { grouped: { date: string; items: HistoryTx[] }[]; total_spent: number; total_in: number };
@@ -159,7 +175,8 @@ export default function Settings() {
     (async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        const res = await fetch(`/api/me/transactions?month=${selectedMonth}`, {
+        const { from, to } = getDateRange(selectedPeriod);
+        const res = await fetch(`/api/me/transactions?from=${from}&to=${to}`, {
           headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
         });
         if (!cancelled && res.ok) setHistoryData(await res.json());
@@ -168,7 +185,7 @@ export default function Settings() {
       }
     })();
     return () => { cancelled = true; };
-  }, [activeSection, billingTab, selectedMonth]);
+  }, [activeSection, billingTab, selectedPeriod]);
 
   const [name, setName] = useState(user?.name || "");
   const [nameSaving, setNameSaving] = useState(false);
@@ -887,20 +904,24 @@ export default function Settings() {
                       {/* ── Tab: Riwayat ── */}
                       {billingTab === "riwayat" && (
                         <div className="rounded-2xl border border-border bg-card overflow-hidden">
-                          {/* Header + filter bulan */}
-                          <div className="px-5 py-4 border-b border-border flex items-center justify-between gap-3 flex-wrap">
+                          {/* Header + period pills */}
+                          <div className="px-5 py-4 border-b border-border space-y-3">
                             <h3 className="text-sm font-semibold text-foreground">Riwayat transaksi</h3>
-                            <div className="relative">
-                              <select
-                                value={selectedMonth}
-                                onChange={(e) => setSelectedMonth(e.target.value)}
-                                className="appearance-none text-xs font-medium bg-muted text-foreground border-0 rounded-lg pl-3 pr-7 py-1.5 cursor-pointer focus:outline-none focus:ring-1 focus:ring-primary"
-                              >
-                                {monthOptions.map((o) => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </select>
-                              <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground pointer-events-none" />
+                            <div className="flex flex-wrap gap-1.5">
+                              {PERIODS.map((p) => (
+                                <button
+                                  key={p.value}
+                                  onClick={() => setSelectedPeriod(p.value)}
+                                  className={cn(
+                                    "px-3 py-1 rounded-full text-xs font-medium transition-all",
+                                    selectedPeriod === p.value
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted text-muted-foreground hover:text-foreground"
+                                  )}
+                                >
+                                  {p.label}
+                                </button>
+                              ))}
                             </div>
                           </div>
 
@@ -912,11 +933,11 @@ export default function Settings() {
                           ) : !historyData || historyData.grouped.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-14 gap-2 text-center">
                               <CreditCard className="w-8 h-8 text-muted-foreground/30" />
-                              <p className="text-sm text-muted-foreground">Tidak ada transaksi bulan ini</p>
+                              <p className="text-sm text-muted-foreground">Tidak ada transaksi pada periode ini</p>
                             </div>
                           ) : (
                             <>
-                              {/* Ringkasan bulan */}
+                              {/* Ringkasan periode */}
                               <div className="flex items-center gap-4 px-5 py-3 bg-muted/40 border-b border-border text-xs">
                                 <span className="flex items-center gap-1.5 text-muted-foreground">
                                   <TrendingDown className="w-3.5 h-3.5 text-rose-500" />
@@ -946,6 +967,7 @@ export default function Settings() {
                                     {items.map((tx) => {
                                       const isCredit = tx.amount_idr >= 0;
                                       const { label, icon: TxIcon } = getTxLabel(tx.type);
+                                      const detail = txDetail(tx.metadata);
                                       return (
                                         <div key={tx.id} className="flex items-center gap-3 px-5 py-3.5">
                                           <div className={cn(
@@ -956,7 +978,10 @@ export default function Settings() {
                                           </div>
                                           <div className="flex-1 min-w-0">
                                             <p className="text-sm font-medium text-foreground truncate">{label}</p>
-                                            <p className="text-xs text-muted-foreground">
+                                            <p className="text-xs text-muted-foreground truncate">
+                                              {detail
+                                                ? <><span className="text-muted-foreground/70">{detail}</span>{" · "}</>
+                                                : null}
                                               {new Date(tx.created_at).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}
                                             </p>
                                           </div>
