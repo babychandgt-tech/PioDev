@@ -713,7 +713,7 @@ export default function Settings() {
                               Rp {billingSummary.balance_idr.toLocaleString("id-ID")}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2">
-                              Berlaku untuk Chat AI, Gambar, Video, Voice, Hosting & API
+                              Berlaku untuk akses via API Key eksternal & Hosting
                             </p>
                           </div>
                           <button
@@ -844,30 +844,42 @@ export default function Settings() {
                         <div className="space-y-2.5">
                           {[
                             {
-                              label: "Chat AI",
+                              label: "API Key — Chat",
+                              desc: "Akses via API key eksternal",
                               value: `${billingSummary.pricing.idr_per_token_den} token = Rp ${billingSummary.pricing.idr_per_token_num}`,
                             },
                             {
-                              label: "Generate Gambar",
+                              label: "API Key — Gambar",
+                              desc: "Generate gambar via API",
                               value: `Rp ${billingSummary.pricing.image_idr.toLocaleString("id-ID")} / gambar`,
                             },
                             {
-                              label: "Generate Video",
-                              value: `Rp ${billingSummary.pricing.video_idr.toLocaleString("id-ID")} / video`,
-                            },
-                            {
-                              label: "Hosting (Nano)",
+                              label: "Hosting — Nano",
+                              desc: "256MB RAM, 0.25 vCPU",
                               value: "Rp 30 / jam",
                             },
-                          ].map(({ label, value }) => (
-                            <div key={label} className="flex items-center justify-between gap-3 text-sm">
-                              <span className="text-muted-foreground">{label}</span>
-                              <span className="text-foreground font-medium tabular-nums">{value}</span>
+                            {
+                              label: "Hosting — Micro",
+                              desc: "512MB RAM, 0.5 vCPU",
+                              value: "Rp 60 / jam",
+                            },
+                            {
+                              label: "Hosting — Small",
+                              desc: "1GB RAM, 1 vCPU",
+                              value: "Rp 120 / jam",
+                            },
+                          ].map(({ label, desc, value }) => (
+                            <div key={label} className="flex items-start justify-between gap-3 text-sm">
+                              <div>
+                                <span className="text-foreground font-medium">{label}</span>
+                                <p className="text-xs text-muted-foreground">{desc}</p>
+                              </div>
+                              <span className="text-foreground tabular-nums shrink-0">{value}</span>
                             </div>
                           ))}
                         </div>
                         <p className="text-xs text-muted-foreground mt-4 pt-3 border-t border-border">
-                          Top up kredit segera hadir. Untuk sementara, kredit bisa ditambah melalui admin.
+                          Fitur Chat, Gambar, Video, dan Voice di web menggunakan kuota bulanan — tidak memotong saldo kredit ini.
                         </p>
                       </div>
                     </>
