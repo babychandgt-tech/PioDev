@@ -99,18 +99,28 @@ export default function Settings() {
 
   const [billingSummary, setBillingSummary] = useState<BillingSummary | null>(null);
   const [billingSummaryLoading, setBillingSummaryLoading] = useState(false);
+  const [billingError, setBillingError] = useState<string | null>(null);
 
   useEffect(() => {
     if (activeSection !== "billing") return;
     let cancelled = false;
     setBillingSummaryLoading(true);
+    setBillingError(null);
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const res = await fetch("/api/me/billing-summary", {
-        headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
-      });
-      if (!cancelled && res.ok) setBillingSummary(await res.json());
-      if (!cancelled) setBillingSummaryLoading(false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const res = await fetch("/api/me/billing-summary", {
+          headers: { Authorization: `Bearer ${session?.access_token ?? ""}` },
+        });
+        if (!cancelled) {
+          if (res.ok) setBillingSummary(await res.json());
+          else setBillingError("Gagal memuat data billing. Coba beberapa saat lagi.");
+        }
+      } catch {
+        if (!cancelled) setBillingError("Koneksi gagal. Periksa koneksi internet kamu.");
+      } finally {
+        if (!cancelled) setBillingSummaryLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [activeSection]);
@@ -676,10 +686,21 @@ export default function Settings() {
                     <p className="text-sm text-muted-foreground">Pantau saldo kredit dan riwayat pengeluaran kamu.</p>
                   </div>
 
-                  {billingSummaryLoading || !billingSummary ? (
+                  {billingSummaryLoading ? (
                     <div className="flex items-center justify-center py-16 text-muted-foreground text-sm">
                       <span className="inline-block w-2 h-2 rounded-full bg-primary/40 animate-pulse mr-2" />
                       Memuat data...
+                    </div>
+                  ) : billingError || !billingSummary ? (
+                    <div className="flex flex-col items-center justify-center py-16 gap-3 text-center">
+                      <CreditCard className="w-8 h-8 text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground">{billingError ?? "Data tidak tersedia."}</p>
+                      <button
+                        onClick={() => setActiveSection("profil" as Section)}
+                        className="text-xs text-primary hover:underline"
+                      >
+                        Kembali ke Profil
+                      </button>
                     </div>
                   ) : (
                     <>
