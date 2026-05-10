@@ -117,7 +117,8 @@ export default function ApiKeysPage() {
       if (cRes.ok) setCredit(await cRes.json());
 
       if (kRes.status === 403) {
-        setError("Fitur API key hanya untuk pengguna Plus. Upgrade ke Plus dulu ya!");
+        const errData = await kRes.json().catch(() => ({}));
+        setError(errData.error || "Gagal load API keys");
         setLoading(false);
         return;
       }
@@ -344,7 +345,7 @@ export default function ApiKeysPage() {
             <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm">{error}</p>
-              {error.includes("Plus") && (
+              {(error.includes("Plus") || error.includes("Upgrade")) && (
                 <button
                   onClick={() => navigate("/premium")}
                   className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600"
@@ -1661,7 +1662,7 @@ console.log(res.choices[0].message.content);`}</CodeBlock>
   );
 }
 
-type AccessTier = "plus_pro" | "pro_only";
+type AccessTier = "free" | "plus_pro" | "pro_only";
 
 interface ModelRow {
   id: string;
@@ -1717,7 +1718,7 @@ const CHAT_MODELS: ModelRow[] = [
   { id: "qwen3-14b", label: "Qwen3 14B", desc: "Dense model ukuran sedang — bagus untuk fine-grained task.", access: "plus_pro" },
 
   // ── Qwen3 small dense (lightweight, gratis untuk semua tier) ────────────
-  { id: "qwen3-8b", label: "Qwen3 8B", desc: "Dense ringan — autocomplete, classification, edge use case.", access: "plus_pro" },
+  { id: "qwen3-8b", label: "Qwen3 8B", desc: "Dense ringan — autocomplete, classification, edge use case.", access: "free" },
   { id: "qwen3-4b", label: "Qwen3 4B", desc: "Dense super ringan — embedded / on-device.", access: "plus_pro" },
   { id: "qwen3-1.7b", label: "Qwen3 1.7B", desc: "Dense mini — task simple, low-latency.", access: "plus_pro" },
   { id: "qwen3-0.6b", label: "Qwen3 0.6B", desc: "Dense paling kecil — eksperimen / prototipe.", access: "plus_pro" },
@@ -1802,9 +1803,9 @@ const CHAT_MODELS: ModelRow[] = [
   { id: "qwen-plus-2025-07-28", label: "Qwen Plus (2025-07-28)", desc: "Snapshot dated qwen-plus.", access: "plus_pro" },
   { id: "qwen-plus-2025-07-14", label: "Qwen Plus (2025-07-14)", desc: "Snapshot dated qwen-plus.", access: "plus_pro" },
   { id: "qwen-plus-2025-04-28", label: "Qwen Plus (2025-04-28)", desc: "Snapshot dated qwen-plus.", access: "plus_pro" },
-  { id: "qwen-flash", label: "Qwen Flash", desc: "Paling cepat & murah. Cocok untuk task ringan, autocomplete.", access: "plus_pro" },
+  { id: "qwen-flash", label: "Qwen Flash", desc: "Paling cepat & murah. Cocok untuk task ringan, autocomplete.", access: "free" },
   { id: "qwen-flash-2025-07-28", label: "Qwen Flash (2025-07-28)", desc: "Snapshot dated qwen-flash.", access: "plus_pro" },
-  { id: "qwen-turbo", label: "Qwen Turbo", desc: "Throughput tinggi, latency rendah. Bagus untuk volume besar.", access: "plus_pro" },
+  { id: "qwen-turbo", label: "Qwen Turbo", desc: "Throughput tinggi, latency rendah. Bagus untuk volume besar.", access: "free" },
   { id: "qwen-turbo-latest", label: "Qwen Turbo Latest", desc: "Alias rolling untuk qwen-turbo paling baru.", access: "plus_pro" },
   { id: "qwen-turbo-2025-04-28", label: "Qwen Turbo (2025-04-28)", desc: "Snapshot dated qwen-turbo.", access: "plus_pro" },
 
@@ -1923,6 +1924,13 @@ function AccessBadge({ access }: { access: AccessTier }) {
       </span>
     );
   }
+  if (access === "free") {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 whitespace-nowrap">
+        Semua tier
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium border bg-slate-500/10 text-slate-600 dark:text-slate-400 border-slate-500/20 whitespace-nowrap">
       Plus &amp; Pro
@@ -1940,9 +1948,9 @@ function ModelTable({ models, defaultHint }: { models: ModelRow[]; defaultHint: 
     setTimeout(() => setCopiedId((curr) => (curr === id ? null : curr)), 1500);
   };
 
-  // Sort: plus_pro (akses umum) dulu, baru pro_only (frontier) di bawah.
+  // Sort: free (semua tier) dulu, plus_pro berikutnya, pro_only di bawah.
   // Stable sort — urutan original (per family) dipertahankan dalam masing-masing tier.
-  const accessOrder: Record<AccessTier, number> = { plus_pro: 0, pro_only: 1 };
+  const accessOrder: Record<AccessTier, number> = { free: 0, plus_pro: 1, pro_only: 2 };
   const sortedModels = [...models].sort((a, b) => accessOrder[a.access] - accessOrder[b.access]);
 
   return (

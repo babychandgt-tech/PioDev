@@ -83,6 +83,12 @@ const DASHSCOPE_BASE = "https://dashscope-intl.aliyuncs.com";
 const DASHSCOPE_COMPATIBLE_BASE = `${DASHSCOPE_BASE}/compatible-mode/v1`;
 
 // Model-model yang hanya boleh dipakai user Plus/Pro/Admin (Free akan kena 403 MODEL_RESTRICTED)
+// Model yang boleh diakses Free user via API key (3 model paling ringan)
+const FREE_API_MODELS = new Set(["qwen-flash", "qwen-turbo", "qwen3-8b"]);
+
+// Bonus welcome untuk user baru
+const SIGNUP_BONUS_IDR = 7_500;
+
 const PREMIUM_ONLY_MODELS = new Set([
   // ── Qwen3 Max / Flagship (frontier) ─────────────────────────────────────
   "qwen3-max","qwen3-max-preview","qwen3-max-2026-01-23","qwen3-max-2025-09-23",
@@ -2047,13 +2053,6 @@ async function requireApiKey(
 
   const isAdmin = profile?.role === "admin";
   const userTier = getTier(profile ?? null); // "free" | "plus" | "pro"
-  const isPremium = isAdmin || userTier !== "free";
-  if (!isPremium) {
-    res.status(403).json({
-      error: { message: "API access requires an active Plus or Pro subscription.", type: "permission_denied" },
-    });
-    return;
-  }
 
   // Update last_used_at (fire and forget)
   supabaseAdmin.from("api_keys").update({ last_used_at: new Date().toISOString() }).eq("id", keyRow.id).then(() => {});
@@ -2063,6 +2062,8 @@ async function requireApiKey(
   (req as any).apiIsAdmin = isAdmin;
   // Admin diperlakukan setara Pro untuk pembatasan model
   (req as any).apiTier = isAdmin ? "pro" : userTier;
+  // Free tier: hanya boleh pakai 3 model ringan
+  (req as any).apiIsFreeRestricted = !isAdmin && userTier === "free";
   next();
 }
 
@@ -2233,19 +2234,6 @@ async function grantTierBonusOnce(
 app.get("/api/me/api-keys", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
 
-  // Cek user premium — gating sama kayak POST biar frontend bisa nampilin UI upgrade
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("is_premium, premium_expires_at, role")
-    .eq("id", userId)
-    .single();
-  const isAdmin = profile?.role === "admin";
-  const isPremium = isAdmin || isPremiumActive(profile ?? {});
-  if (!isPremium) {
-    res.status(403).json({ error: "Fitur API key hanya untuk pengguna Plus." });
-    return;
-  }
-
   const { data, error } = await supabaseAdmin
     .from("api_keys")
     .select("id, name, key_prefix, created_at, last_used_at, revoked_at, key_encrypted")
@@ -2301,22 +2289,9 @@ app.get("/api/me/api-keys/:id/reveal", requireAuth, async (req, res) => {
   res.json({ key: plain });
 });
 
-// ── POST /api/me/api-keys — buat key baru (cuma untuk user Plus/Admin) ───────
+// ── POST /api/me/api-keys — buat key baru (terbuka untuk semua tier) ─────────
 app.post("/api/me/api-keys", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
-
-  // Cek user premium
-  const { data: profile } = await supabaseAdmin
-    .from("profiles")
-    .select("is_premium, premium_expires_at, role")
-    .eq("id", userId)
-    .single();
-  const isAdmin = profile?.role === "admin";
-  const isPremium = isAdmin || isPremiumActive(profile ?? {});
-  if (!isPremium) {
-    res.status(403).json({ error: "Fitur API key hanya untuk pengguna Plus." });
-    return;
-  }
 
   let body: any = {};
   try {
@@ -2420,6 +2395,19 @@ app.get("/api/me/api-usage", requireAuth, async (req, res) => {
 // ── GET /api/me/credit — saldo credit + 20 transaksi terakhir ────────────────
 app.get("/api/me/credit", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
+
+  // Signup bonus — grant idempotently untuk user baru (cek sebelum baca saldo)
+  try {
+    const { count: bonusCount } = await supabaseAdmin
+      .from("credit_transactions")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("type", "bonus_signup");
+    if ((bonusCount ?? 0) === 0) {
+      await addCredit(userId, SIGNUP_BONUS_IDR, "bonus_signup", { note: "Bonus selamat datang untuk member baru" });
+    }
+  } catch { /* tabel belum ada, skip */ }
+
   const { data: profile } = await supabaseAdmin
     .from("profiles")
     .select("credit_balance_idr, is_premium, premium_expires_at, role, tier")
@@ -2716,6 +2704,19 @@ app.post("/v1/chat/completions", requireApiKey, async (req, res) => {
   // Tier gating: model Pro-only hanya untuk user Pro/Admin
   if (!assertProAccess(res, body.model, userTier, isAdmin)) return;
 
+  // Free tier restriction: hanya 3 model yang diizinkan
+  if ((req as any).apiIsFreeRestricted) {
+    const model = body.model ?? "";
+    if (model && !FREE_API_MODELS.has(model)) {
+      res.status(403).json({ error: {
+        message: `Model "${model}" tidak tersedia untuk tier Free. Model yang bisa dipakai via API: ${[...FREE_API_MODELS].join(", ")}. Upgrade ke Plus untuk akses semua model.`,
+        type: "permission_denied",
+        free_models: [...FREE_API_MODELS],
+      }});
+      return;
+    }
+  }
+
   const isStream = !!body.stream;
 
   let upstream: Response;
@@ -2827,6 +2828,12 @@ app.post("/v1/images/generations", requireApiKey, async (req, res) => {
   const isAdmin = (req as any).apiIsAdmin;
   const userTier = (req as any).apiTier as string;
 
+  // Free tier: image gen tidak tersedia via API
+  if ((req as any).apiIsFreeRestricted) {
+    res.status(403).json({ error: { message: "Image generation via API tidak tersedia untuk tier Free. Upgrade ke Plus.", type: "permission_denied" }});
+    return;
+  }
+
   // Credit check: harus ada minimal 1 image worth saldo (admin bypass)
   if (!isAdmin) {
     const balance = await getCreditBalance(userId);
@@ -2923,6 +2930,12 @@ app.post("/v1/videos/generations", requireApiKey, async (req, res) => {
   const userId = (req as any).apiUserId;
   const isAdmin = (req as any).apiIsAdmin;
   const userTier = (req as any).apiTier as string;
+
+  // Free tier: video gen tidak tersedia via API
+  if ((req as any).apiIsFreeRestricted) {
+    res.status(403).json({ error: { message: "Video generation via API tidak tersedia untuk tier Free. Upgrade ke Plus.", type: "permission_denied" }});
+    return;
+  }
 
   // Credit check: butuh minimal 1 video worth saldo
   if (!isAdmin) {
@@ -4132,7 +4145,9 @@ function isPortInUse(port: number): Promise<boolean> {
 const COOLIFY_API_URL = (process.env.COOLIFY_API_URL ?? "").replace(/\/$/, "");
 const COOLIFY_API_TOKEN = process.env.COOLIFY_API_TOKEN ?? "";
 const COOLIFY_BASE_DOMAIN = process.env.COOLIFY_BASE_DOMAIN ?? "app.pio.codes";
-const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 5, pro: 20 };
+const HOSTING_LIMITS: Record<string, number> = { free: 1, plus: 3, pro: 5 };
+const HOSTING_MEMORY_MB: Record<string, number> = { free: 256, plus: 512, pro: 1024 };
+const HOSTING_DEPLOY_COST_IDR: Record<string, number> = { free: 30, plus: 60, pro: 120 };
 const GITHUB_WEBHOOK_SECRET = process.env.GITHUB_WEBHOOK_SECRET ?? "";
 const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID ?? "";
 const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET ?? "";
@@ -4806,6 +4821,12 @@ app.post("/api/hosting/projects", requireAuth, async (req, res) => {
             method: "PATCH",
             body: JSON.stringify({ build_pack: "dockerfile", dockerfile }),
           }).catch((e) => console.warn("[Hosting] Dockerfile PATCH failed:", (e as Error).message));
+          // Apply memory limit based on tier (256MB Free, 512MB Plus, 1GB Pro)
+          const memoryMb = HOSTING_MEMORY_MB[tier] ?? HOSTING_MEMORY_MB.free;
+          await coolifyFetch(`/applications/${appData.uuid}`, {
+            method: "PATCH",
+            body: JSON.stringify({ memory: memoryMb, memory_swap: memoryMb }),
+          }).catch((e) => console.warn("[Hosting] Memory limit PATCH failed:", (e as Error).message));
           // Sync PORT and user env vars as runtime env vars
           await syncCoolifyEnvVars(appData.uuid, effectivePort, env_vars ?? {}).catch((e) =>
             console.warn("[Hosting] syncCoolifyEnvVars failed:", (e as Error).message)
@@ -4855,6 +4876,30 @@ app.post("/api/hosting/projects/:id/deploy", requireAuth, async (req, res) => {
   if (!project.coolify_app_uuid) {
     res.status(400).json({ error: "Proyek belum terhubung ke Coolify. Hapus dan buat ulang proyek setelah Coolify dikonfigurasi." }); return;
   }
+
+  // Credit check & deduction — ditagih per deploy
+  const { data: deployerProfile } = await supabaseAdmin.from("profiles").select("credit_balance_idr, tier, role").eq("id", userId).single();
+  const deployerIsAdmin = deployerProfile?.role === "admin";
+  const deployerTier = getTier(deployerProfile ?? null);
+  const deployCostIdr = HOSTING_DEPLOY_COST_IDR[deployerTier] ?? HOSTING_DEPLOY_COST_IDR.free;
+  if (!deployerIsAdmin) {
+    const balance = deployerProfile?.credit_balance_idr ?? 0;
+    if (balance < deployCostIdr) {
+      res.status(402).json({
+        error: `Saldo tidak cukup untuk deploy (butuh Rp ${deployCostIdr.toLocaleString("id-ID")}, saldo kamu Rp ${balance.toLocaleString("id-ID")}). Top up saldo dulu ya.`,
+        required_idr: deployCostIdr,
+        balance_idr: balance,
+      });
+      return;
+    }
+    await deductCredit(userId, deployCostIdr, "hosting_deploy", {
+      project_id: project.id,
+      project_name: project.name,
+      tier: deployerTier,
+      cost_idr: deployCostIdr,
+    });
+  }
+
   const { data: deployment } = await supabaseAdmin.from("hosting_deployments").insert({
     project_id: project.id, user_id: userId, status: "queued", triggered_by: "manual",
   }).select().single();
