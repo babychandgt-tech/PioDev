@@ -800,7 +800,7 @@ export default function Settings() {
                           <div>
                             <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Kredit</p>
                             <p className="text-3xl sm:text-4xl font-bold text-foreground tabular-nums">
-                              Rp {billingSummary.balance_idr.toLocaleString("id-ID")}
+                              Rp {(billingSummary.balance_idr ?? 0).toLocaleString("id-ID")}
                             </p>
                             <p className="text-xs text-muted-foreground mt-2">
                               Berlaku untuk akses via API Key eksternal & Hosting
@@ -827,14 +827,14 @@ export default function Settings() {
                           <span className="text-xs text-muted-foreground">
                             Bulan ini:{" "}
                             <span className="text-foreground font-medium">
-                              Rp {billingSummary.this_month.total_spent.toLocaleString("id-ID")}
+                              Rp {(billingSummary.this_month?.total_spent ?? 0).toLocaleString("id-ID")}
                             </span>{" "}
                             terpakai
                             {billingSummary.this_month.total_in > 0 && (
                               <>
                                 {" "}·{" "}
                                 <span className="text-green-500 font-medium">
-                                  +Rp {billingSummary.this_month.total_in.toLocaleString("id-ID")}
+                                  +Rp {(billingSummary.this_month?.total_in ?? 0).toLocaleString("id-ID")}
                                 </span>{" "}
                                 masuk
                               </>
@@ -907,7 +907,7 @@ export default function Settings() {
                             <div className="space-y-3">
                               {[
                                 { label: "API Key — Chat",   desc: "Akses via API key eksternal",  value: `${billingSummary.pricing.idr_per_token_den} token = Rp ${billingSummary.pricing.idr_per_token_num}` },
-                                { label: "API Key — Gambar", desc: "Generate gambar via API",       value: `Rp ${billingSummary.pricing.image_idr.toLocaleString("id-ID")} / gambar` },
+                                { label: "API Key — Gambar", desc: "Generate gambar via API",       value: `Rp ${(billingSummary.pricing?.image_idr ?? 0).toLocaleString("id-ID")} / gambar` },
                                 { label: "Hosting — Nano",   desc: "256MB RAM, 0.25 vCPU",         value: "Rp 30 / jam" },
                                 { label: "Hosting — Micro",  desc: "512MB RAM, 0.5 vCPU",          value: "Rp 60 / jam" },
                                 { label: "Hosting — Small",  desc: "1GB RAM, 1 vCPU",              value: "Rp 120 / jam" },

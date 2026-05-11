@@ -770,7 +770,7 @@ app.post("/api/redeem", requireAuth, async (req, res) => {
     .eq("id", rc.id);
 
   console.log(`[Redeem] userId=${userId} code="${rc.code}" amount=${rc.credit_amount_idr} newBalance=${newBalance}`);
-  res.json({ ok: true, credit_amount_idr: rc.credit_amount_idr, new_balance: newBalance, description: rc.description });
+  res.json({ ok: true, credit_added: rc.credit_amount_idr, new_balance_idr: newBalance, description: rc.description });
 });
 
 // ── GET /api/admin/redeem-codes ───────────────────────────────────────────────
