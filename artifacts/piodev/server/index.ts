@@ -62,8 +62,8 @@ const IDR_PER_TOKEN_NUM = 1;
 const IDR_PER_TOKEN_DEN = 2;
 const IMAGE_COST_IDR = 1_000;     // per gambar
 const VIDEO_COST_IDR = 10_000;    // per video
-const PLUS_UPGRADE_BONUS_IDR = 75_000;   // bonus sekali saat upgrade ke Plus
-const PRO_UPGRADE_BONUS_IDR  = 125_000;  // bonus sekali saat upgrade ke Pro
+const PLUS_UPGRADE_BONUS_IDR = 45_000;   // bonus sekali saat upgrade ke Plus
+const PRO_UPGRADE_BONUS_IDR  = 100_000;  // bonus sekali saat upgrade ke Pro
 
 // ── Trial Plus (uji coba gratis 1 bulan, sekali per akun) ─────────────────────
 // Bonus saldo trial = Rp 75.000 (sama nominal dengan bonus upgrade berbayar).
@@ -2410,9 +2410,9 @@ async function grantPlusBonusOnce(userId: string, sourceMetadata?: any): Promise
 
 /**
  * Grant bonus tier upgrade — idempotent per tier.
- * - Plus: Rp 75.000 sekali. Skip kalau user udah pernah dapet bonus Plus atau Pro.
- * - Pro: Rp 125.000 sekali. Kalau user udah pernah Plus, kasih selisih (Rp 50.000).
- *   Kalau belum pernah, kasih full Rp 125.000.
+ * - Plus: Rp 45.000 sekali. Skip kalau user udah pernah dapet bonus Plus atau Pro.
+ * - Pro: Rp 100.000 sekali. Kalau user udah pernah Plus, kasih selisih (Rp 55.000).
+ *   Kalau belum pernah, kasih full Rp 100.000.
  */
 async function grantTierBonusOnce(
   userId: string,

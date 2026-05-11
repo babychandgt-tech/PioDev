@@ -161,7 +161,7 @@ export default function PremiumPricingPage() {
         "API key — semua model Plus",
         "Hosting 3 project · Micro 512MB · Rp 60/jam",
         "Custom domain hosting",
-        "Bonus saldo Rp 75.000 (satu kali, saat upgrade)",
+        "Bonus saldo Rp 45.000 (satu kali, saat upgrade)",
       ],
       cta: isAdmin
         ? { label: "Admin · Bypass", disabled: true }
@@ -193,7 +193,7 @@ export default function PremiumPricingPage() {
         "API key — semua model Pro",
         "Hosting 5 project · Small 1GB · Rp 120/jam",
         "Custom domain hosting",
-        "Bonus saldo Rp 125.000 (satu kali, saat upgrade)",
+        "Bonus saldo Rp 100.000 (satu kali, saat upgrade)",
       ],
       cta: isAdmin
         ? { label: "Admin · Bypass", disabled: true }
@@ -532,7 +532,7 @@ const COMPARISON_GROUPS: Array<{ title: string; rows: Row[] }> = [
       { label: "Model via API", free: "Flash, Turbo, Qwen3-8B", plus: "Semua model Plus", pro: "Semua model Pro" },
       { label: "Image & video via API", free: { no: true }, plus: { yes: true }, pro: { yes: true } },
       { label: "Saldo IDR untuk pemakaian API", free: "Rp 7.500 bonus daftar", plus: { yes: true }, pro: { yes: true } },
-      { label: "Bonus saldo upgrade (satu kali)", free: "—", plus: "Rp 75.000", pro: "Rp 125.000" },
+      { label: "Bonus saldo upgrade (satu kali)", free: "—", plus: "Rp 45.000", pro: "Rp 100.000" },
     ],
   },
   {
