@@ -1761,7 +1761,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
         <div className="flex gap-4 flex-1 min-h-0">
 
           {/* LEFT — Compose */}
-          <div className="flex flex-col gap-3 w-[44%] shrink-0 min-h-0">
+          <div className="flex flex-col gap-3 w-[44%] shrink-0 min-h-0 overflow-y-auto pr-0.5">
 
             {/* Subject */}
             <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-1.5 shrink-0">
