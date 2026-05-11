@@ -1897,7 +1897,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
                 placeholder={"Halo {{nama}}!\n\nKami ingin memberitahu kamu bahwa..."}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
-                className="flex-1 min-h-0 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-mono"
+                className="flex-1 min-h-[220px] w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-mono"
               />
               {/* Placeholder chips */}
               <div className="shrink-0 space-y-1.5">
