@@ -468,12 +468,27 @@ function TierCard({ tier }: { tier: Tier }) {
 
       {/* Features */}
       <ul className="space-y-2.5 flex-1">
-        {tier.features.map((f, i) => (
+        {tier.features.slice(0, 5).map((f, i) => (
           <li key={i} className="flex items-start gap-2.5 text-xs sm:text-sm text-muted-foreground leading-relaxed">
             <Check className={cn("w-3.5 h-3.5 shrink-0 mt-0.5", checkClasses)} strokeWidth={2.5} />
             <span>{f}</span>
           </li>
         ))}
+        {tier.features.length > 5 && (
+          <li>
+            <button
+              onClick={() => {
+                document.getElementById("comparison-table")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+              className={cn(
+                "flex items-center gap-1 text-xs font-medium mt-1 hover:underline underline-offset-2 transition-colors",
+                isPlus ? "text-primary" : isPro ? "text-amber-600 dark:text-amber-400" : "text-foreground/60 hover:text-foreground",
+              )}
+            >
+              + {tier.features.length - 5} lainnya — lihat tabel perbandingan
+            </button>
+          </li>
+        )}
       </ul>
     </div>
   );
@@ -563,7 +578,7 @@ function ComparisonTable({ userTier, isAdmin }: { userTier: "free" | "plus" | "p
   );
 
   return (
-    <section className="mt-16 sm:mt-20" aria-labelledby="comparison-heading">
+    <section id="comparison-table" className="mt-16 sm:mt-20" aria-labelledby="comparison-heading">
       <div className="text-center mb-8">
         <h2 id="comparison-heading" className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
           Bandingin lengkap
