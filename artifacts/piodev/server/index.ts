@@ -609,11 +609,12 @@ app.get("/api/pricing-config", async (_req, res) => {
 // Mendukung placeholder: {{nama}} {{email}} {{tier}} {{saldo}} {{hari}} {{tanggal}} {{bulan}} {{tahun}}
 app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, res) => {
   const adminId = (req as any).userId;
-  const { subject, body, userIds, tiers } = req.body as {
+  const { subject, body, userIds, tiers, customEmails } = req.body as {
     subject?: string;
     body?: string;
     userIds?: string[] | "all";
     tiers?: string[];
+    customEmails?: string[];
   };
   if (!subject?.trim()) { res.status(400).json({ error: "Subject wajib diisi." }); return; }
   if (!body?.trim()) { res.status(400).json({ error: "Isi email wajib diisi." }); return; }
@@ -629,39 +630,47 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
     return;
   }
 
-  const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
-  if (authErr) { res.status(500).json({ error: authErr.message }); return; }
-
   let recipients: { id: string; email: string }[];
   let targetMode: string;
 
-  if (!userIds || userIds === "all") {
-    const filterByTier = tiers && tiers.length > 0 && tiers.length < 3;
-    if (filterByTier) {
-      targetMode = "tiers";
-      const { data: profiles } = await supabaseAdmin
-        .from("profiles")
-        .select("id, is_premium, premium_expires_at");
-      const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
-      recipients = authUsers.users
-        .filter((u) => {
-          if (!u.email || !u.email_confirmed_at) return false;
-          const userTier = getTier(profileMap.get(u.id) ?? null);
-          return tiers!.includes(userTier);
-        })
-        .map((u) => ({ id: u.id, email: u.email! }));
+  if (customEmails && customEmails.length > 0) {
+    targetMode = "custom";
+    recipients = customEmails
+      .map((e) => e.trim())
+      .filter((e) => e.includes("@"))
+      .map((e) => ({ id: "", email: e }));
+  } else {
+    const { data: authUsers, error: authErr } = await supabaseAdmin.auth.admin.listUsers();
+    if (authErr) { res.status(500).json({ error: authErr.message }); return; }
+
+    if (!userIds || userIds === "all") {
+      const filterByTier = tiers && tiers.length > 0 && tiers.length < 3;
+      if (filterByTier) {
+        targetMode = "tiers";
+        const { data: profiles } = await supabaseAdmin
+          .from("profiles")
+          .select("id, is_premium, premium_expires_at");
+        const profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+        recipients = authUsers.users
+          .filter((u) => {
+            if (!u.email || !u.email_confirmed_at) return false;
+            const userTier = getTier(profileMap.get(u.id) ?? null);
+            return tiers!.includes(userTier);
+          })
+          .map((u) => ({ id: u.id, email: u.email! }));
+      } else {
+        targetMode = "all";
+        recipients = authUsers.users
+          .filter((u) => u.email && u.email_confirmed_at)
+          .map((u) => ({ id: u.id, email: u.email! }));
+      }
     } else {
-      targetMode = "all";
+      targetMode = "select";
+      const idSet = new Set(userIds as string[]);
       recipients = authUsers.users
-        .filter((u) => u.email && u.email_confirmed_at)
+        .filter((u) => u.email && idSet.has(u.id))
         .map((u) => ({ id: u.id, email: u.email! }));
     }
-  } else {
-    targetMode = "select";
-    const idSet = new Set(userIds as string[]);
-    recipients = authUsers.users
-      .filter((u) => u.email && idSet.has(u.id))
-      .map((u) => ({ id: u.id, email: u.email! }));
   }
 
   if (recipients.length === 0) {

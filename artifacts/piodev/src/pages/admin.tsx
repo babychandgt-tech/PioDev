@@ -1556,7 +1556,8 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
   const [activeTab, setActiveTab] = useState<"tulis" | "riwayat">("tulis");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
-  const [target, setTarget] = useState<"all" | "select">("all");
+  const [target, setTarget] = useState<"all" | "select" | "custom">("all");
+  const [customEmails, setCustomEmails] = useState("");
   const [selectedTiers, setSelectedTiers] = useState<Set<string>>(new Set());
   const [users, setUsers] = useState<{ id: string; email: string; full_name: string; tier: string }[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
@@ -1620,8 +1621,15 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
     ? users
     : users.filter((u) => selectedTiers.has(u.tier));
 
+  const parsedCustomEmails = customEmails
+    .split(/[\n,]+/)
+    .map((e) => e.trim())
+    .filter((e) => e.includes("@"));
+
   const recipientCount = target === "all"
     ? (usersLoading ? "..." : tierFiltered.length)
+    : target === "custom"
+    ? parsedCustomEmails.length
     : selected.size;
 
   function toggleUser(id: string) {
@@ -1660,8 +1668,9 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
         body: JSON.stringify({
           subject: subject.trim(),
           body: body.trim(),
-          userIds: target === "all" ? "all" : Array.from(selected),
+          userIds: target === "custom" ? undefined : target === "all" ? "all" : Array.from(selected),
           tiers: target === "all" && selectedTiers.size > 0 ? Array.from(selectedTiers) : undefined,
+          customEmails: target === "custom" ? parsedCustomEmails : undefined,
         }),
       });
       const data = await r.json();
@@ -1690,7 +1699,9 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
     pro:  "bg-violet-500 text-white border-violet-500",
   };
 
-  const canSend = !sending && !!subject.trim() && !!body.trim() && (target !== "select" || selected.size > 0);
+  const canSend = !sending && !!subject.trim() && !!body.trim() &&
+    (target !== "select" || selected.size > 0) &&
+    (target !== "custom" || parsedCustomEmails.length > 0);
 
   return (
     <div className="flex-1 flex flex-col gap-3 min-h-0">
@@ -1792,7 +1803,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
                 )}
               </div>
               <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-                {(["all","select"] as const).map((t, i) => (
+                {(["all","select","custom"] as const).map((t, i) => (
                   <button
                     key={t}
                     onClick={() => setTarget(t)}
@@ -1802,7 +1813,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
                       target === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
                     )}
                   >
-                    {t === "all" ? "Semua Pengguna" : "Pilih Manual"}
+                    {t === "all" ? "Semua" : t === "select" ? "Pilih Manual" : "Email Custom"}
                   </button>
                 ))}
               </div>
@@ -1832,6 +1843,23 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
                     {selectedTiers.size === 0
                       ? `${usersLoading ? "…" : users.length} penerima — semua tier`
                       : `${tierFiltered.length} penerima — tier ${Array.from(selectedTiers).join(", ")}`}
+                  </p>
+                </div>
+              )}
+
+              {target === "custom" && (
+                <div className="space-y-1.5">
+                  <textarea
+                    placeholder={"test@example.com\nuser@gmail.com, another@email.com"}
+                    value={customEmails}
+                    onChange={(e) => setCustomEmails(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-lg border border-input bg-background px-3 py-2 text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-mono"
+                  />
+                  <p className="text-[10px] text-muted-foreground">
+                    {parsedCustomEmails.length > 0
+                      ? `${parsedCustomEmails.length} alamat email terdeteksi`
+                      : "Pisahkan dengan koma atau enter"}
                   </p>
                 </div>
               )}
