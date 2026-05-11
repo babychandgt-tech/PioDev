@@ -2317,10 +2317,13 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
       <>
         <div className="space-y-1.5">
           <label className="text-xs text-muted-foreground font-medium">Grant Tier <span className="opacity-60">(opsional)</span></label>
-          <Select value={f.grant_tier} onValueChange={(v) => setF((p) => ({ ...p, grant_tier: v as CodeForm["grant_tier"] }))}>
+          <Select
+            value={f.grant_tier === "" ? "none" : f.grant_tier}
+            onValueChange={(v) => setF((p) => ({ ...p, grant_tier: v === "none" ? "" : v as CodeForm["grant_tier"] }))}
+          >
             <SelectTrigger className="text-sm"><SelectValue placeholder="Tidak ada" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">Tidak ada (kredit saja)</SelectItem>
+              <SelectItem value="none">Tidak ada (kredit saja)</SelectItem>
               <SelectItem value="plus">Plus</SelectItem>
               <SelectItem value="pro">Pro</SelectItem>
             </SelectContent>
