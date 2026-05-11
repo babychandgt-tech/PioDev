@@ -726,6 +726,107 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
   res.json({ ok: true, sent, failed, total: recipients.length, errors: errors.slice(0, 20) });
 });
 
+// ── POST /api/redeem — user redeem code ──────────────────────────────────────
+app.post("/api/redeem", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { code } = req.body as { code?: string };
+  if (!code?.trim()) { res.status(400).json({ error: "Kode tidak boleh kosong." }); return; }
+
+  const normalized = code.trim().toUpperCase();
+
+  const { data: rc, error: rcErr } = await supabaseAdmin
+    .from("redeem_codes")
+    .select("*")
+    .eq("code", normalized)
+    .single();
+
+  if (rcErr || !rc) { res.status(404).json({ error: "Kode tidak ditemukan." }); return; }
+  if (!rc.is_active) { res.status(400).json({ error: "Kode ini sudah tidak aktif." }); return; }
+  if (rc.expires_at && new Date(rc.expires_at) < new Date()) {
+    res.status(400).json({ error: "Kode sudah kedaluwarsa." }); return;
+  }
+  if (rc.max_redemptions !== null && rc.current_redemptions >= rc.max_redemptions) {
+    res.status(400).json({ error: "Kuota kode ini sudah habis." }); return;
+  }
+
+  const { data: existing } = await supabaseAdmin
+    .from("code_redemptions")
+    .select("id")
+    .eq("code_id", rc.id)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing) { res.status(400).json({ error: "Kamu sudah pernah memakai kode ini." }); return; }
+
+  const newBalance = await addCredit(userId, rc.credit_amount_idr, "redeem_code", {
+    code: rc.code, code_id: rc.id, description: rc.description,
+  });
+
+  await supabaseAdmin.from("code_redemptions").insert({
+    code_id: rc.id, user_id: userId, credit_amount_idr: rc.credit_amount_idr,
+  });
+  await supabaseAdmin.from("redeem_codes")
+    .update({ current_redemptions: rc.current_redemptions + 1 })
+    .eq("id", rc.id);
+
+  console.log(`[Redeem] userId=${userId} code="${rc.code}" amount=${rc.credit_amount_idr} newBalance=${newBalance}`);
+  res.json({ ok: true, credit_amount_idr: rc.credit_amount_idr, new_balance: newBalance, description: rc.description });
+});
+
+// ── GET /api/admin/redeem-codes ───────────────────────────────────────────────
+app.get("/api/admin/redeem-codes", requireAuth, requireAdmin, async (_req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("redeem_codes").select("*").order("created_at", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ codes: data ?? [] });
+});
+
+// ── POST /api/admin/redeem-codes ──────────────────────────────────────────────
+app.post("/api/admin/redeem-codes", requireAuth, requireAdmin, async (req, res) => {
+  const userId = (req as any).userId;
+  const { code, description, credit_amount_idr, max_redemptions, expires_at } = req.body as {
+    code?: string; description?: string; credit_amount_idr?: number;
+    max_redemptions?: number | null; expires_at?: string | null;
+  };
+  if (!code?.trim()) { res.status(400).json({ error: "Kode wajib diisi." }); return; }
+  if (!credit_amount_idr || Number(credit_amount_idr) <= 0) {
+    res.status(400).json({ error: "Jumlah kredit harus lebih dari 0." }); return;
+  }
+  const { data, error } = await supabaseAdmin.from("redeem_codes").insert({
+    code: code.trim().toUpperCase(),
+    description: description?.trim() || null,
+    credit_amount_idr: Number(credit_amount_idr),
+    max_redemptions: max_redemptions != null && max_redemptions !== 0 ? Number(max_redemptions) : null,
+    expires_at: expires_at || null,
+    created_by: userId,
+  }).select().single();
+  if (error) {
+    if (error.code === "23505") { res.status(409).json({ error: "Kode sudah dipakai. Gunakan nama lain." }); }
+    else { res.status(500).json({ error: error.message }); }
+    return;
+  }
+  res.json({ ok: true, code: data });
+});
+
+// ── PATCH /api/admin/redeem-codes/:id ────────────────────────────────────────
+app.patch("/api/admin/redeem-codes/:id", requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const updates: Record<string, any> = {};
+  if (typeof req.body.is_active === "boolean") updates.is_active = req.body.is_active;
+  if (req.body.description !== undefined) updates.description = req.body.description;
+  const { error } = await supabaseAdmin.from("redeem_codes").update(updates).eq("id", id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
+// ── DELETE /api/admin/redeem-codes/:id ───────────────────────────────────────
+app.delete("/api/admin/redeem-codes/:id", requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabaseAdmin.from("redeem_codes").delete().eq("id", id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
+});
+
 // PUT /api/admin/pricing-config — admin only
 app.put("/api/admin/pricing-config", requireAuth, requireAdmin, async (req, res) => {
   const userId = (req as any).userId;

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Key, Plus, Copy, Trash2, AlertTriangle, Check, ArrowLeft, ArrowRight, Code, Zap, Clock, Sparkles, MessageSquare, Image as ImageIcon, Video, FileText, ScanText, Lock, Lightbulb, AlertCircle, Rocket, BookOpen, Layers, Eye, EyeOff, Loader2, Activity, Pencil, X as XIcon, CreditCard, Wand2, ShieldCheck, RefreshCw, Cpu, Crown } from "lucide-react";
+import { Key, Plus, Copy, Trash2, AlertTriangle, Check, ArrowLeft, ArrowRight, Code, Zap, Clock, Sparkles, MessageSquare, Image as ImageIcon, Video, FileText, ScanText, Lock, Lightbulb, AlertCircle, Rocket, BookOpen, Layers, Eye, EyeOff, Loader2, Activity, Pencil, X as XIcon, CreditCard, Wand2, ShieldCheck, RefreshCw, Cpu, Crown, Gift, PartyPopper } from "lucide-react";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { useAuth } from "@/hooks/use-auth";
@@ -77,7 +77,11 @@ export default function ApiKeysPage() {
   const [error, setError] = useState<string | null>(null);
 
   const [showCreate, setShowCreate] = useState(false);
-  const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
+  const [redeemDialogOpen, setRedeemDialogOpen] = useState(false);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [redeemResult, setRedeemResult] = useState<{ credit_amount_idr: number; new_balance: number } | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<{ key: string; revealable: boolean; warning?: string } | null>(null);
@@ -133,13 +137,34 @@ export default function ApiKeysPage() {
     }
   }
 
-  function handleTopUp() {
-    setTopUpDialogOpen(true);
+  function handleOpenRedeem() {
+    setRedeemDialogOpen(true);
+    setRedeemCode("");
+    setRedeemError(null);
+    setRedeemResult(null);
   }
 
-  function handleGoToPlan() {
-    setTopUpDialogOpen(false);
-    navigate("/premium");
+  async function handleRedeem() {
+    if (!redeemCode.trim() || redeemLoading) return;
+    setRedeemLoading(true);
+    setRedeemError(null);
+    try {
+      const r = await authedFetch("/api/redeem", {
+        method: "POST",
+        body: JSON.stringify({ code: redeemCode.trim() }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setRedeemError(d.error ?? "Terjadi kesalahan.");
+        return;
+      }
+      setRedeemResult({ credit_amount_idr: d.credit_amount_idr, new_balance: d.new_balance });
+      await load();
+    } catch (e: any) {
+      setRedeemError(e.message ?? "Terjadi kesalahan.");
+    } finally {
+      setRedeemLoading(false);
+    }
   }
 
   useEffect(() => { if (user?.id) load(); /* eslint-disable-next-line */ }, [user?.id]);
@@ -360,7 +385,7 @@ export default function ApiKeysPage() {
         {/* Saldo Credit */}
         {credit && !error && (
           <div className="space-y-3 mb-6">
-            <SaldoCard credit={credit} onTopUp={handleTopUp} />
+            <SaldoCard credit={credit} onRedeem={handleOpenRedeem} />
             {usage && (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-2.5">
                 <MiniUsageStat icon={MessageSquare} label="Token" value={usage.usage.total_tokens} color="text-emerald-500" />
@@ -839,69 +864,135 @@ export default function ApiKeysPage() {
         )}
       </AnimatePresence>
 
-      {/* Top Up dialog — payment gateway placeholder + redirect ke /premium */}
+      {/* Redeem Code dialog */}
       <AnimatePresence>
-        {topUpDialogOpen && (
+        {redeemDialogOpen && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => setTopUpDialogOpen(false)}
+            onClick={() => { if (!redeemLoading) setRedeemDialogOpen(false); }}
             role="dialog"
             aria-modal="true"
-            aria-labelledby="topup-dialog-title"
+            aria-labelledby="redeem-dialog-title"
           >
             <motion.div
               initial={{ opacity: 0, scale: 0.96, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.96, y: 8 }}
               transition={{ duration: 0.18, ease: "easeOut" }}
-              className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-md p-5 sm:p-6 relative"
+              className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-sm p-5 sm:p-6 relative"
               onClick={(e) => e.stopPropagation()}
             >
               <button
-                onClick={() => setTopUpDialogOpen(false)}
-                className="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                onClick={() => setRedeemDialogOpen(false)}
+                disabled={redeemLoading}
+                className="absolute top-3 right-3 sm:top-4 sm:right-4 p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40"
                 aria-label="Tutup"
               >
                 <XIcon className="w-4 h-4" />
               </button>
 
-              <div className="flex items-center gap-3 mb-4 pr-8">
-                <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0">
-                  <CreditCard className="w-4 h-4 sm:w-5 sm:h-5" />
-                </div>
-                <div className="min-w-0">
-                  <h2 id="topup-dialog-title" className="text-base sm:text-lg font-semibold text-foreground leading-tight">
-                    Top Up Saldo
-                  </h2>
-                  <p className="text-xs text-muted-foreground mt-0.5">Belum tersedia.</p>
-                </div>
-              </div>
+              <AnimatePresence mode="wait">
+                {redeemResult ? (
+                  /* ── Success state ── */
+                  <motion.div
+                    key="success"
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="flex flex-col items-center text-center py-2 gap-4 pr-6"
+                  >
+                    <div className="w-16 h-16 rounded-full bg-green-500/15 flex items-center justify-center">
+                      <PartyPopper className="w-8 h-8 text-green-500" />
+                    </div>
+                    <div>
+                      <p className="text-lg font-bold text-foreground leading-tight">Berhasil!</p>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        <span className="font-semibold text-green-600">
+                          +{`Rp ${redeemResult.credit_amount_idr.toLocaleString("id-ID")}`}
+                        </span>{" "}
+                        telah ditambahkan ke saldo kamu.
+                      </p>
+                    </div>
+                    <div className="w-full rounded-xl bg-muted/50 border border-border px-4 py-3 text-center">
+                      <p className="text-xs text-muted-foreground mb-0.5">Saldo sekarang</p>
+                      <p className="text-2xl font-bold tabular-nums">
+                        Rp {redeemResult.new_balance.toLocaleString("id-ID")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setRedeemDialogOpen(false)}
+                      className="w-full h-10 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                    >
+                      Tutup
+                    </button>
+                  </motion.div>
+                ) : (
+                  /* ── Input state ── */
+                  <motion.div key="input" className="pr-6">
+                    <div className="flex items-center gap-3 mb-5">
+                      <div className="w-9 h-9 rounded-full bg-primary/15 flex items-center justify-center text-primary shrink-0">
+                        <Gift className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h2 id="redeem-dialog-title" className="text-base font-semibold text-foreground leading-tight">
+                          Redeem Kode
+                        </h2>
+                        <p className="text-xs text-muted-foreground mt-0.5">Masukkan kode untuk menambah saldo.</p>
+                      </div>
+                    </div>
 
-              <p className="text-sm text-foreground/90 leading-relaxed mb-5">
-                Payment gateway untuk top up saldo <strong>segera hadir</strong>. Sambil nunggu, kamu bisa coba paket Plus gratis 1 bulan dan dapet bonus saldo Rp 75.000.
-              </p>
+                    <div className="space-y-1.5 mb-4">
+                      <label className="text-xs text-muted-foreground font-medium">Kode Redeem</label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: WELCOME2025"
+                        value={redeemCode}
+                        onChange={(e) => {
+                          setRedeemCode(e.target.value.toUpperCase().replace(/\s/g, ""));
+                          setRedeemError(null);
+                        }}
+                        onKeyDown={(e) => { if (e.key === "Enter") handleRedeem(); }}
+                        disabled={redeemLoading}
+                        autoFocus
+                        className="w-full h-10 px-3 rounded-lg border border-input bg-background font-mono text-sm tracking-wider placeholder:text-muted-foreground placeholder:font-sans placeholder:tracking-normal focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 disabled:opacity-50"
+                      />
+                      {redeemError && (
+                        <motion.p
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="text-xs text-rose-500 flex items-center gap-1"
+                        >
+                          <AlertTriangle className="w-3 h-3 shrink-0" />
+                          {redeemError}
+                        </motion.p>
+                      )}
+                    </div>
 
-              <div className="flex flex-col-reverse sm:flex-row gap-2">
-                <button
-                  onClick={() => setTopUpDialogOpen(false)}
-                  className="w-full sm:flex-1 h-10 rounded-lg text-sm font-medium border border-border bg-background text-foreground hover:bg-muted transition-colors"
-                >
-                  Tutup
-                </button>
-                <button
-                  onClick={handleGoToPlan}
-                  className="w-full sm:flex-1 h-10 px-3 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap"
-                  data-testid="button-goto-trial"
-                >
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span>Ambil Trial</span>
-                  <ArrowRight className="w-4 h-4 shrink-0" />
-                </button>
-              </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setRedeemDialogOpen(false)}
+                        disabled={redeemLoading}
+                        className="flex-1 h-10 rounded-lg text-sm font-medium border border-border bg-background text-foreground hover:bg-muted transition-colors disabled:opacity-40"
+                      >
+                        Batal
+                      </button>
+                      <button
+                        onClick={handleRedeem}
+                        disabled={redeemLoading || !redeemCode.trim()}
+                        className="flex-1 h-10 rounded-lg text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
+                      >
+                        {redeemLoading
+                          ? <><Loader2 className="w-4 h-4 animate-spin" /> Memeriksa...</>
+                          : <><Gift className="w-4 h-4" /> Redeem</>
+                        }
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </motion.div>
           </motion.div>
         )}
@@ -978,7 +1069,7 @@ function StatusBadge({ tone, children }: { tone: "active" | "info" | "warning"; 
 // Konversi: 2 token = Rp 1 (cost = ceil(tokens / 2))
 const formatIdr = (n: number) => `Rp ${Math.max(0, Math.floor(n)).toLocaleString("id-ID")}`;
 
-function SaldoCard({ credit, onTopUp }: { credit: CreditInfo; onTopUp: () => void }) {
+function SaldoCard({ credit, onRedeem }: { credit: CreditInfo; onRedeem: () => void }) {
   const balance = credit.balance_idr;
   const isAdmin = credit.is_admin;
   const isLow = !isAdmin && balance > 0 && balance < 5_000;
@@ -986,20 +1077,17 @@ function SaldoCard({ credit, onTopUp }: { credit: CreditInfo; onTopUp: () => voi
 
   return (
     <div className="rounded-2xl border border-border bg-card p-5" data-testid="card-saldo">
-      {/* Label + Top Up trigger */}
+      {/* Label + Redeem trigger */}
       <div className="flex items-center justify-between gap-3 mb-2">
         <p className="text-xs text-muted-foreground uppercase tracking-wider">Saldo Credit</p>
         {!isAdmin && (
           <button
-            onClick={onTopUp}
+            onClick={onRedeem}
             className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary/80 transition"
-            data-testid="button-top-up"
+            data-testid="button-redeem"
           >
-            <Plus className="w-3.5 h-3.5" />
-            Top up
-            <span className="text-[9px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-primary/10 text-primary/70">
-              Segera
-            </span>
+            <Gift className="w-3.5 h-3.5" />
+            Redeem Kode
           </button>
         )}
       </div>
@@ -1018,7 +1106,7 @@ function SaldoCard({ credit, onTopUp }: { credit: CreditInfo; onTopUp: () => voi
           {isAdmin
             ? "Akun admin · gak di-charge"
             : isEmpty
-            ? "Saldo habis. Top up untuk lanjut pakai API."
+            ? "Saldo habis. Redeem kode untuk lanjut pakai API."
             : isLow
             ? "Saldo menipis."
             : "Tanpa reset harian."}

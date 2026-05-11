@@ -34,6 +34,7 @@ import {
   Check, Loader2, Tag, AlertCircle,
   MoreHorizontal, Pencil, Eye, ChevronLeft, ChevronRight, ArrowUpDown,
   Copy, ChevronDown, ChevronUp, Cpu, Mail, Send, X, AlertTriangle,
+  Gift, Calendar, Clock,
 } from "lucide-react";
 import { CHAIN_CATEGORIES } from "@/lib/model-chains";
 import { cn } from "@/lib/utils";
@@ -43,7 +44,7 @@ import {
   DEFAULT_PRICING, type PricingConfig,
 } from "@/hooks/use-pricing-config";
 
-type Section = "ringkasan" | "pengguna" | "harga" | "changelog" | "model-chain" | "broadcast";
+type Section = "ringkasan" | "pengguna" | "harga" | "changelog" | "model-chain" | "broadcast" | "redeem-codes";
 
 const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "ringkasan",    label: "Ringkasan",      icon: LayoutDashboard },
@@ -52,6 +53,7 @@ const NAV_ITEMS: { id: Section; label: string; icon: React.ElementType }[] = [
   { id: "changelog",    label: "What's New",     icon: Newspaper },
   { id: "model-chain",  label: "Model Chain",    icon: Cpu },
   { id: "broadcast",    label: "Broadcast Email", icon: Mail },
+  { id: "redeem-codes", label: "Kode Redeem",    icon: Gift },
 ];
 
 function useToast() {
@@ -1876,6 +1878,295 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
   );
 }
 
+// ── SectionRedeemCodes ────────────────────────────────────────────────────────
+type RedeemCode = {
+  id: string; code: string; description: string | null;
+  credit_amount_idr: number; max_redemptions: number | null;
+  current_redemptions: number; expires_at: string | null;
+  created_by: string | null; created_at: string; is_active: boolean;
+};
+
+function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+  const [codes, setCodes] = useState<RedeemCode[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
+  const [creating, setCreating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  async function loadCodes() {
+    setLoading(true);
+    const h = await authHeader();
+    const r = await fetch("/api/admin/redeem-codes", { headers: h });
+    const d = await r.json();
+    setCodes(d.codes ?? []);
+    setLoading(false);
+  }
+
+  useEffect(() => { loadCodes(); }, []);
+
+  async function handleCreate() {
+    if (!form.code.trim() || !form.credit_amount_idr) return;
+    setCreating(true);
+    const h = await authHeader();
+    const r = await fetch("/api/admin/redeem-codes", {
+      method: "POST", headers: h,
+      body: JSON.stringify({
+        code: form.code.trim(),
+        description: form.description.trim() || undefined,
+        credit_amount_idr: Number(form.credit_amount_idr),
+        max_redemptions: form.max_redemptions ? Number(form.max_redemptions) : null,
+        expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+      }),
+    });
+    const d = await r.json();
+    setCreating(false);
+    if (!r.ok) { showToast(d.error ?? "Gagal buat kode.", false); return; }
+    showToast(`Kode "${form.code.toUpperCase()}" berhasil dibuat.`, true);
+    setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
+    setShowCreate(false);
+    await loadCodes();
+  }
+
+  async function handleToggleActive(rc: RedeemCode) {
+    setTogglingId(rc.id);
+    const h = await authHeader();
+    await fetch(`/api/admin/redeem-codes/${rc.id}`, {
+      method: "PATCH", headers: h, body: JSON.stringify({ is_active: !rc.is_active }),
+    });
+    setTogglingId(null);
+    await loadCodes();
+  }
+
+  async function handleDelete(id: string) {
+    setDeletingId(id);
+    setConfirmDeleteId(null);
+    const h = await authHeader();
+    await fetch(`/api/admin/redeem-codes/${id}`, { method: "DELETE", headers: h });
+    setDeletingId(null);
+    await loadCodes();
+    showToast("Kode berhasil dihapus.", true);
+  }
+
+  function getStatus(rc: RedeemCode): { label: string; color: string } {
+    if (!rc.is_active) return { label: "Nonaktif", color: "bg-muted text-muted-foreground" };
+    if (rc.expires_at && new Date(rc.expires_at) < new Date()) return { label: "Kedaluwarsa", color: "bg-amber-500/10 text-amber-600" };
+    if (rc.max_redemptions !== null && rc.current_redemptions >= rc.max_redemptions) return { label: "Habis", color: "bg-rose-500/10 text-rose-600" };
+    return { label: "Aktif", color: "bg-green-500/10 text-green-600" };
+  }
+
+  const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "—";
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-4 shrink-0">
+        <div>
+          <h2 className="text-base font-semibold text-foreground leading-tight">Kode Redeem</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">Buat & kelola kode untuk membagikan kredit kepada pengguna.</p>
+        </div>
+        <button
+          onClick={() => setShowCreate((v) => !v)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
+        >
+          <Plus className="w-4 h-4" />
+          Buat Kode
+        </button>
+      </div>
+
+      {/* Create form */}
+      {showCreate && (
+        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold flex items-center gap-2"><Gift className="w-4 h-4 text-primary" /> Kode Baru</h3>
+            <button onClick={() => setShowCreate(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Kode *</label>
+              <Input
+                placeholder="WELCOME2024"
+                value={form.code}
+                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
+                className="text-sm h-9 font-mono tracking-wider"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Kredit (IDR) *</label>
+              <Input
+                type="number" placeholder="50000" min={1}
+                value={form.credit_amount_idr}
+                onChange={(e) => setForm((f) => ({ ...f, credit_amount_idr: e.target.value }))}
+                className="text-sm h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">Maks Pengguna <span className="text-muted-foreground/60">(kosong = tak terbatas)</span></label>
+              <Input
+                type="number" placeholder="100" min={1}
+                value={form.max_redemptions}
+                onChange={(e) => setForm((f) => ({ ...f, max_redemptions: e.target.value }))}
+                className="text-sm h-9"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Kedaluwarsa <span className="text-muted-foreground/60">(opsional)</span></label>
+              <Input
+                type="datetime-local"
+                value={form.expires_at}
+                onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
+                className="text-sm h-9"
+              />
+            </div>
+            <div className="sm:col-span-2 space-y-1">
+              <label className="text-xs text-muted-foreground">Deskripsi internal <span className="text-muted-foreground/60">(opsional, tidak dilihat user)</span></label>
+              <Input
+                placeholder="Misal: Kampanye Ramadan 2025"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                className="text-sm h-9"
+              />
+            </div>
+          </div>
+
+          {/* Preview */}
+          {form.code && form.credit_amount_idr && (
+            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs text-muted-foreground">
+              Kode <code className="font-mono font-semibold text-foreground">{form.code}</code> akan memberikan{" "}
+              <strong className="text-green-600">{formatIDR(Number(form.credit_amount_idr))}</strong> kredit
+              {form.max_redemptions ? ` ke maks ${form.max_redemptions} pengguna` : " ke pengguna tak terbatas"}
+              {form.expires_at ? ` hingga ${new Date(form.expires_at).toLocaleDateString("id-ID")}` : ""}.
+            </div>
+          )}
+
+          <div className="flex gap-2 pt-1">
+            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 rounded-lg text-sm border border-border hover:bg-accent transition-colors">
+              Batal
+            </button>
+            <button
+              onClick={handleCreate}
+              disabled={creating || !form.code.trim() || !form.credit_amount_idr}
+              className="px-4 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Simpan Kode
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* List */}
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-muted-foreground gap-2 text-sm">
+          <Loader2 className="w-4 h-4 animate-spin" /> Memuat...
+        </div>
+      ) : codes.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-muted-foreground gap-3">
+          <Gift className="w-10 h-10 opacity-20" />
+          <p className="text-sm">Belum ada kode redeem. Klik &quot;Buat Kode&quot; untuk mulai.</p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border overflow-hidden">
+          <table className="w-full text-sm min-w-[600px]">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kode</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kredit</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Dipakai</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kedaluwarsa</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
+                <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground text-right">Aksi</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {codes.map((rc) => {
+                const status = getStatus(rc);
+                return (
+                  <tr key={rc.id} className="hover:bg-muted/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <code className="font-mono font-semibold tracking-wider text-sm">{rc.code}</code>
+                        <button
+                          onClick={() => { navigator.clipboard.writeText(rc.code); showToast("Kode disalin!", true); }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          title="Salin kode"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </button>
+                      </div>
+                      {rc.description && (
+                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-[200px] truncate">{rc.description}</p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 font-semibold text-green-600 whitespace-nowrap">{formatIDR(rc.credit_amount_idr)}</td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      <span>{rc.current_redemptions}</span>
+                      <span className="text-muted-foreground/50">/{rc.max_redemptions !== null ? rc.max_redemptions : "∞"}</span>
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                      <div className="flex items-center gap-1">
+                        {rc.expires_at ? <><Clock className="w-3 h-3 shrink-0" />{fmtDate(rc.expires_at)}</> : "—"}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", status.color)}>
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5 justify-end">
+                        <button
+                          onClick={() => handleToggleActive(rc)}
+                          disabled={togglingId === rc.id}
+                          className={cn(
+                            "text-xs px-2.5 py-1 rounded-lg border font-medium transition-colors whitespace-nowrap",
+                            rc.is_active
+                              ? "border-border text-muted-foreground hover:bg-accent"
+                              : "border-primary/30 text-primary hover:bg-primary/10"
+                          )}
+                        >
+                          {togglingId === rc.id
+                            ? <Loader2 className="w-3 h-3 animate-spin inline" />
+                            : rc.is_active ? "Nonaktifkan" : "Aktifkan"
+                          }
+                        </button>
+                        {confirmDeleteId === rc.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => handleDelete(rc.id)}
+                              disabled={deletingId === rc.id}
+                              className="text-xs px-2 py-1 rounded-lg bg-rose-500 text-white hover:bg-rose-600 transition-colors font-medium"
+                            >
+                              {deletingId === rc.id ? <Loader2 className="w-3 h-3 animate-spin inline" /> : "Hapus?"}
+                            </button>
+                            <button onClick={() => setConfirmDeleteId(null)} className="text-xs px-2 py-1 rounded-lg border border-border hover:bg-accent transition-colors">
+                              Batal
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(rc.id)}
+                            className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-500 hover:bg-rose-500/10 transition-colors"
+                            title="Hapus kode"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPage() {
   const { user, isAdmin, isLoading: authLoading } = useAuth();
   const [, setLocation] = useLocation();
@@ -2050,6 +2341,9 @@ export default function AdminPage() {
           )}
           {activeSection === "broadcast" && (
             <SectionBroadcast showToast={showToast} />
+          )}
+          {activeSection === "redeem-codes" && (
+            <SectionRedeemCodes showToast={showToast} />
           )}
         </main>
 
