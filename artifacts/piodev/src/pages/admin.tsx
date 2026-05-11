@@ -1591,9 +1591,18 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
     setLogsLoading(true);
     authHeader().then((h) =>
       fetch("/api/admin/broadcast-logs", { headers: h })
-        .then((r) => r.json())
-        .then((d) => setLogs(d.logs ?? []))
-        .catch(() => showToast("Gagal memuat riwayat.", false))
+        .then(async (r) => {
+          const text = await r.text();
+          try {
+            const d = JSON.parse(text);
+            if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
+            setLogs(d.logs ?? []);
+          } catch (e: any) {
+            console.error("[broadcast-logs] parse error:", text.slice(0, 300));
+            throw e;
+          }
+        })
+        .catch((e: any) => showToast(`Gagal memuat riwayat: ${e.message}`, false))
         .finally(() => setLogsLoading(false))
     );
   }, [showToast]);
