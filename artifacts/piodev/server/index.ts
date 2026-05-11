@@ -4383,6 +4383,8 @@ const SITE_URL = process.env.SITE_URL ?? (
 );
 
 function getAppBaseUrl(): string {
+  // Explicit SITE_URL env var always wins — allows dev to point callbacks at production domain
+  if (process.env.SITE_URL) return process.env.SITE_URL;
   if (IS_PRODUCTION) return SITE_URL;
   const devDomain = process.env.REPLIT_DEV_DOMAIN;
   if (devDomain) return `https://${devDomain}:${process.env.PORT ?? 5000}`;
