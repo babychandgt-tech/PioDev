@@ -590,7 +590,7 @@ export default function ChatPage() {
                     "text-[10px] font-bold px-1.5 py-0.5 rounded-full leading-none",
                     isAdmin ? "bg-rose-500/10 text-rose-500" : "bg-primary/10 text-primary"
                   )}>
-                    {isAdmin ? "Admin" : "Plus"}
+                    {isAdmin ? "Admin" : userTier === "pro" ? "Pro" : "Plus"}
                   </span>
                 )}
                 <ChevronDown className={cn(
