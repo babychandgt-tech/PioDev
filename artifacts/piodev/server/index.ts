@@ -606,12 +606,14 @@ app.get("/api/pricing-config", async (_req, res) => {
 // ── POST /api/admin/broadcast-email ──────────────────────────────────────────
 // Kirim email broadcast ke semua user atau user terpilih, pakai SMTP yang
 // dikonfigurasi lewat env var SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM.
+// Mendukung placeholder: {{nama}} {{email}} {{tier}} {{saldo}} {{hari}} {{tanggal}} {{bulan}} {{tahun}}
 app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, res) => {
+  const adminId = (req as any).userId;
   const { subject, body, userIds, tiers } = req.body as {
     subject?: string;
     body?: string;
     userIds?: string[] | "all";
-    tiers?: string[]; // ["free","plus","pro"] — kosong/undefined = semua
+    tiers?: string[];
   };
   if (!subject?.trim()) { res.status(400).json({ error: "Subject wajib diisi." }); return; }
   if (!body?.trim()) { res.status(400).json({ error: "Isi email wajib diisi." }); return; }
@@ -623,10 +625,7 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
   const smtpFrom = process.env.SMTP_FROM || smtpUser;
 
   if (!smtpHost || !smtpUser || !smtpPass) {
-    res.status(503).json({
-      error: "SMTP belum dikonfigurasi.",
-      smtp_missing: true,
-    });
+    res.status(503).json({ error: "SMTP belum dikonfigurasi.", smtp_missing: true });
     return;
   }
 
@@ -634,11 +633,12 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
   if (authErr) { res.status(500).json({ error: authErr.message }); return; }
 
   let recipients: { id: string; email: string }[];
+  let targetMode: string;
 
   if (!userIds || userIds === "all") {
-    // Filter by tier jika diminta
     const filterByTier = tiers && tiers.length > 0 && tiers.length < 3;
     if (filterByTier) {
+      targetMode = "tiers";
       const { data: profiles } = await supabaseAdmin
         .from("profiles")
         .select("id, is_premium, premium_expires_at");
@@ -651,11 +651,13 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
         })
         .map((u) => ({ id: u.id, email: u.email! }));
     } else {
+      targetMode = "all";
       recipients = authUsers.users
         .filter((u) => u.email && u.email_confirmed_at)
         .map((u) => ({ id: u.id, email: u.email! }));
     }
   } else {
+    targetMode = "select";
     const idSet = new Set(userIds as string[]);
     recipients = authUsers.users
       .filter((u) => u.email && idSet.has(u.id))
@@ -666,6 +668,35 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
     res.status(400).json({ error: "Tidak ada penerima yang valid." }); return;
   }
 
+  // Fetch profiles untuk placeholder resolution (nama, saldo, tier)
+  const { data: profileData } = await supabaseAdmin
+    .from("profiles")
+    .select("id, full_name, credit_balance_idr, is_premium, premium_expires_at")
+    .in("id", recipients.map((r) => r.id));
+  const profileMap = new Map((profileData ?? []).map((p: any) => [p.id, p]));
+
+  // Placeholder resolver per recipient
+  const now = new Date();
+  const BULAN_ID = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+  const HARI_ID = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+
+  function resolvePlaceholders(template: string, recipient: { id: string; email: string }): string {
+    const profile = profileMap.get(recipient.id);
+    const nama = profile?.full_name?.trim() || recipient.email.split("@")[0];
+    const tier = getTier(profile ?? null);
+    const tierLabel = tier === "pro" ? "Pro" : tier === "plus" ? "Plus" : "Free";
+    const saldo = Number(profile?.credit_balance_idr ?? 0);
+    return template
+      .replace(/\{\{nama\}\}/gi, nama)
+      .replace(/\{\{email\}\}/gi, recipient.email)
+      .replace(/\{\{tier\}\}/gi, tierLabel)
+      .replace(/\{\{saldo\}\}/gi, `Rp ${saldo.toLocaleString("id-ID")}`)
+      .replace(/\{\{tanggal\}\}/gi, String(now.getDate()).padStart(2, "0"))
+      .replace(/\{\{bulan\}\}/gi, BULAN_ID[now.getMonth()])
+      .replace(/\{\{tahun\}\}/gi, String(now.getFullYear()))
+      .replace(/\{\{hari\}\}/gi, HARI_ID[now.getDay()]);
+  }
+
   const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
@@ -673,22 +704,27 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
     auth: { user: smtpUser, pass: smtpPass },
   });
 
-  const buildHtml = (subj: string, txt: string) => `<!DOCTYPE html>
-<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${subj}</title></head>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:40px 16px;">
+  const buildHtml = (subj: string, bodyText: string) => `<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${subj}</title></head>
+<body style="margin:0;padding:0;background:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f1;padding:40px 16px;">
   <tr><td align="center">
-    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-      <tr><td style="background:#18181b;padding:24px 36px;">
-        <span style="font-size:18px;font-weight:700;color:#ffffff;letter-spacing:-0.3px;">PioCode</span>
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+      <tr><td style="background:#18181b;padding:28px 40px;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td><span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">PioCode</span></td>
+          <td align="right"><span style="font-size:11px;color:#71717a;letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">Pemberitahuan</span></td>
+        </tr></table>
       </td></tr>
-      <tr><td style="padding:32px 36px;">
-        <h2 style="margin:0 0 18px;font-size:20px;font-weight:700;color:#18181b;line-height:1.3;">${subj}</h2>
-        <div style="font-size:15px;color:#3f3f46;line-height:1.75;">${txt.replace(/\n/g, "<br>")}</div>
+      <tr><td style="padding:40px 40px 28px;">
+        <h2 style="margin:0 0 22px;font-size:22px;font-weight:700;color:#18181b;line-height:1.3;">${subj}</h2>
+        <div style="font-size:15px;color:#3f3f46;line-height:1.85;">${bodyText.replace(/\n/g, "<br>")}</div>
       </td></tr>
-      <tr><td style="padding:20px 36px;border-top:1px solid #e4e4e7;">
-        <p style="margin:0;font-size:12px;color:#a1a1aa;line-height:1.5;">Kamu menerima email ini karena terdaftar di PioCode. Jika tidak ingin menerima email semacam ini, hubungi kami.</p>
+      <tr><td style="padding:0 40px 36px;">
+        <a href="https://pio.codes" style="display:inline-block;padding:12px 28px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;letter-spacing:-0.2px;">Buka PioCode &rarr;</a>
+      </td></tr>
+      <tr><td style="padding:20px 40px 24px;border-top:1px solid #f4f4f5;background:#fafafa;">
+        <p style="margin:0;font-size:11px;color:#a1a1aa;line-height:1.7;">Kamu menerima email ini karena terdaftar di <a href="https://pio.codes" style="color:#71717a;text-decoration:none;font-weight:500;">PioCode</a>. Jika tidak ingin menerima email semacam ini, hubungi kami di <a href="mailto:noreply@pio.codes" style="color:#71717a;text-decoration:none;">noreply@pio.codes</a>.</p>
       </td></tr>
     </table>
   </td></tr>
@@ -701,13 +737,15 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
 
   for (let i = 0; i < recipients.length; i++) {
     const r = recipients[i];
+    const resolvedSubject = resolvePlaceholders(subject.trim(), r);
+    const resolvedBody    = resolvePlaceholders(body.trim(), r);
     try {
       await transporter.sendMail({
         from: smtpFrom,
         to: r.email,
-        subject: subject.trim(),
-        html: buildHtml(subject.trim(), body.trim()),
-        text: body.trim(), // plain-text fallback — penting untuk deliverability
+        subject: resolvedSubject,
+        html: buildHtml(resolvedSubject, resolvedBody),
+        text: resolvedBody,
         headers: {
           "List-Unsubscribe": `<mailto:${smtpUser}?subject=unsubscribe>`,
           "Precedence": "bulk",
@@ -722,8 +760,36 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
     if (i > 0 && i % 10 === 0) await new Promise((resolve) => setTimeout(resolve, 300));
   }
 
+  // Simpan log ke Supabase (fail silently supaya error log tidak block response)
+  try {
+    await supabaseAdmin.from("broadcast_logs").insert({
+      admin_id: adminId,
+      subject: subject.trim(),
+      body: body.trim(),
+      target_mode: targetMode,
+      target_tiers: tiers ?? null,
+      recipient_count: recipients.length,
+      sent_count: sent,
+      failed_count: failed,
+      errors: errors.length > 0 ? errors.slice(0, 20) : null,
+    });
+  } catch (e) {
+    console.error("[broadcast-email] gagal simpan log:", e);
+  }
+
   console.log(`[Broadcast Email] subject="${subject}" tiers=${JSON.stringify(tiers)} total=${recipients.length} sent=${sent} failed=${failed}`);
   res.json({ ok: true, sent, failed, total: recipients.length, errors: errors.slice(0, 20) });
+});
+
+// ── GET /api/admin/broadcast-logs ────────────────────────────────────────────
+app.get("/api/admin/broadcast-logs", requireAuth, requireAdmin, async (req, res) => {
+  const { data, error } = await supabaseAdmin
+    .from("broadcast_logs")
+    .select("id, created_at, subject, body, target_mode, target_tiers, recipient_count, sent_count, failed_count, errors")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ logs: data ?? [] });
 });
 
 // ── POST /api/redeem — user redeem code ──────────────────────────────────────

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useAdmin, type AdminUser } from "@/hooks/use-admin";
@@ -1481,7 +1481,79 @@ function SectionModelChain() {
 }
 
 // ── SectionBroadcast ──────────────────────────────────────────────────────────
-function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
+type BroadcastLog = {
+  id: string;
+  created_at: string;
+  subject: string;
+  body: string;
+  target_mode: string;
+  target_tiers: string[] | null;
+  recipient_count: number;
+  sent_count: number;
+  failed_count: number;
+  errors: string[] | null;
+};
+
+const PLACEHOLDERS = [
+  { key: "{{nama}}",    label: "Nama",    desc: "Nama lengkap pengguna",                  example: "Ahmad Fauzi" },
+  { key: "{{email}}",   label: "Email",   desc: "Alamat email pengguna",                  example: "contoh@email.com" },
+  { key: "{{tier}}",    label: "Tier",    desc: "Paket aktif pengguna",                   example: "Free / Plus / Pro" },
+  { key: "{{saldo}}",   label: "Saldo",   desc: "Saldo kredit pengguna saat ini",         example: "Rp 50.000" },
+  { key: "{{hari}}",    label: "Hari",    desc: "Nama hari dalam Bahasa Indonesia",       example: "Senin" },
+  { key: "{{tanggal}}", label: "Tanggal", desc: "Tanggal saat email dikirim (2 digit)",   example: "11" },
+  { key: "{{bulan}}",   label: "Bulan",   desc: "Nama bulan dalam Bahasa Indonesia",      example: "Mei" },
+  { key: "{{tahun}}",   label: "Tahun",   desc: "Tahun saat email dikirim",               example: "2026" },
+];
+
+const BULAN_PREVIEW = ["Januari","Februari","Maret","April","Mei","Juni","Juli","Agustus","September","Oktober","November","Desember"];
+const HARI_PREVIEW  = ["Minggu","Senin","Selasa","Rabu","Kamis","Jumat","Sabtu"];
+
+function resolvePreview(text: string): string {
+  const now = new Date();
+  return text
+    .replace(/\{\{nama\}\}/gi, "Ahmad")
+    .replace(/\{\{email\}\}/gi, "contoh@email.com")
+    .replace(/\{\{tier\}\}/gi, "Free")
+    .replace(/\{\{saldo\}\}/gi, "Rp 50.000")
+    .replace(/\{\{hari\}\}/gi, HARI_PREVIEW[now.getDay()])
+    .replace(/\{\{tanggal\}\}/gi, String(now.getDate()).padStart(2, "0"))
+    .replace(/\{\{bulan\}\}/gi, BULAN_PREVIEW[now.getMonth()])
+    .replace(/\{\{tahun\}\}/gi, String(now.getFullYear()));
+}
+
+function buildPreviewHtml(subject: string, bodyText: string): string {
+  const safeSubj = resolvePreview(subject) || "Subject email...";
+  const safeBody = resolvePreview(bodyText) || "Isi email akan tampil di sini...";
+  return `<!DOCTYPE html>
+<html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${safeSubj}</title></head>
+<body style="margin:0;padding:0;background:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f1;padding:32px 16px;">
+  <tr><td align="center">
+    <table width="560" cellpadding="0" cellspacing="0" style="max-width:560px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
+      <tr><td style="background:#18181b;padding:26px 36px;">
+        <table width="100%" cellpadding="0" cellspacing="0"><tr>
+          <td><span style="font-size:20px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">PioCode</span></td>
+          <td align="right"><span style="font-size:10px;color:#71717a;letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">Pemberitahuan</span></td>
+        </tr></table>
+      </td></tr>
+      <tr><td style="padding:36px 36px 24px;">
+        <h2 style="margin:0 0 20px;font-size:21px;font-weight:700;color:#18181b;line-height:1.3;">${safeSubj}</h2>
+        <div style="font-size:15px;color:#3f3f46;line-height:1.85;">${safeBody.replace(/\n/g, "<br>")}</div>
+      </td></tr>
+      <tr><td style="padding:0 36px 32px;">
+        <a href="https://pio.codes" style="display:inline-block;padding:11px 26px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;">Buka PioCode &rarr;</a>
+      </td></tr>
+      <tr><td style="padding:18px 36px 22px;border-top:1px solid #f4f4f5;background:#fafafa;">
+        <p style="margin:0;font-size:11px;color:#a1a1aa;line-height:1.7;">Kamu menerima email ini karena terdaftar di PioCode. Jika tidak ingin menerima email semacam ini, hubungi <a href="mailto:noreply@pio.codes" style="color:#71717a;text-decoration:none;">noreply@pio.codes</a>.</p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean) => void }) {
+  const [activeTab, setActiveTab] = useState<"tulis" | "riwayat">("tulis");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [target, setTarget] = useState<"all" | "select">("all");
@@ -1495,8 +1567,12 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
   const [result, setResult] = useState<{ sent: number; failed: number; total: number; errors: string[] } | null>(null);
   const [smtpMissing, setSmtpMissing] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+  const [logs, setLogs] = useState<BroadcastLog[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
-  // Load users on mount — dibutuhkan untuk hitung tier & pilih manual
   useEffect(() => {
     setUsersLoading(true);
     authHeader().then((h) =>
@@ -1511,12 +1587,26 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
     );
   }, []);
 
+  const loadLogs = useCallback(() => {
+    setLogsLoading(true);
+    authHeader().then((h) =>
+      fetch("/api/admin/broadcast-logs", { headers: h })
+        .then((r) => r.json())
+        .then((d) => setLogs(d.logs ?? []))
+        .catch(() => showToast("Gagal memuat riwayat.", false))
+        .finally(() => setLogsLoading(false))
+    );
+  }, [showToast]);
+
+  useEffect(() => {
+    if (activeTab === "riwayat") loadLogs();
+  }, [activeTab, loadLogs]);
+
   const filtered = users.filter((u) =>
     !search || u.email.toLowerCase().includes(search.toLowerCase()) ||
     u.full_name.toLowerCase().includes(search.toLowerCase())
   );
 
-  // Hitung jumlah penerima untuk mode "all" dengan filter tier
   const tierFiltered = selectedTiers.size === 0
     ? users
     : users.filter((u) => selectedTiers.has(u.tier));
@@ -1526,23 +1616,26 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
     : selected.size;
 
   function toggleUser(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
+    setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   }
-
   function toggleAll() {
     if (selected.size === filtered.length) setSelected(new Set());
     else setSelected(new Set(filtered.map((u) => u.id)));
   }
-
   function toggleTier(tier: string) {
-    setSelectedTiers((prev) => {
-      const next = new Set(prev);
-      next.has(tier) ? next.delete(tier) : next.add(tier);
-      return next;
+    setSelectedTiers((prev) => { const n = new Set(prev); n.has(tier) ? n.delete(tier) : n.add(tier); return n; });
+  }
+
+  function insertPlaceholder(ph: string) {
+    const el = bodyRef.current;
+    if (!el) { setBody((prev) => prev + ph); return; }
+    const start = el.selectionStart;
+    const end   = el.selectionEnd;
+    const next  = body.slice(0, start) + ph + body.slice(end);
+    setBody(next);
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + ph.length, start + ph.length);
     });
   }
 
@@ -1564,8 +1657,8 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
       });
       const data = await r.json();
       if (!r.ok) {
-        if (data.smtp_missing) { setSmtpMissing(true); }
-        else { showToast(data.error ?? "Gagal mengirim email.", false); }
+        if (data.smtp_missing) setSmtpMissing(true);
+        else showToast(data.error ?? "Gagal mengirim email.", false);
         return;
       }
       setResult(data);
@@ -1580,46 +1673,69 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
   const tierBadgeColor: Record<string, string> = {
     free: "bg-muted text-muted-foreground",
     plus: "bg-blue-500/10 text-blue-600",
-    pro: "bg-violet-500/10 text-violet-600",
+    pro:  "bg-violet-500/10 text-violet-600",
   };
-
   const tierActivePill: Record<string, string> = {
     free: "bg-zinc-700 text-white border-zinc-700",
     plus: "bg-blue-500 text-white border-blue-500",
-    pro: "bg-violet-500 text-white border-violet-500",
+    pro:  "bg-violet-500 text-white border-violet-500",
   };
 
-  return (
-    <div className="flex-1 flex flex-col gap-4 min-h-0">
+  const canSend = !sending && !!subject.trim() && !!body.trim() && (target !== "select" || selected.size > 0);
 
-      {/* ── Top bar: title + send button ──────────────────────────────────── */}
+  return (
+    <div className="flex-1 flex flex-col gap-3 min-h-0">
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between gap-4 shrink-0">
-        <div>
-          <h2 className="text-base font-semibold text-foreground leading-tight">Broadcast Email</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Kirim email ke semua atau pengguna tertentu.</p>
+        <div className="flex items-center gap-1 bg-muted/60 rounded-xl p-1">
+          {(["tulis", "riwayat"] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => setActiveTab(tab)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                activeTab === tab
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tab === "tulis" ? <Send className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+              {tab === "tulis" ? "Tulis Email" : "Riwayat"}
+              {tab === "riwayat" && logs.length > 0 && (
+                <span className="bg-muted text-muted-foreground text-[10px] px-1.5 rounded-full">{logs.length}</span>
+              )}
+            </button>
+          ))}
         </div>
-        <button
-          onClick={() => setConfirmOpen(true)}
-          disabled={sending || !subject.trim() || !body.trim() || (target === "select" && selected.size === 0)}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-40 shrink-0"
-        >
-          {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-          {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
-        </button>
+
+        {activeTab === "tulis" && (
+          <button
+            onClick={() => setConfirmOpen(true)}
+            disabled={!canSend}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 shrink-0"
+          >
+            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
+          </button>
+        )}
+        {activeTab === "riwayat" && (
+          <button onClick={loadLogs} disabled={logsLoading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50">
+            <RefreshCw className={cn("w-3 h-3", logsLoading && "animate-spin")} /> Refresh
+          </button>
+        )}
       </div>
 
-      {/* ── Alerts (SMTP / result) ─────────────────────────────────────────── */}
+      {/* ── Alerts ── */}
       {smtpMissing && (
         <div className="shrink-0 rounded-xl border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 px-4 py-3 flex gap-3 items-start">
           <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
           <div className="text-xs flex-1">
             <span className="font-semibold text-amber-800 dark:text-amber-300">SMTP belum dikonfigurasi. </span>
-            <span className="text-amber-700 dark:text-amber-400">
-              Tambahkan secret: <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_HOST</code>{" "}
-              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_PORT</code>{" "}
-              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_USER</code>{" "}
-              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_PASS</code>{" "}
-              <code className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded">SMTP_FROM</code>
+            <span className="text-amber-700 dark:text-amber-400">Tambahkan secret:{" "}
+              {["SMTP_HOST","SMTP_PORT","SMTP_USER","SMTP_PASS","SMTP_FROM"].map((k) => (
+                <code key={k} className="font-mono bg-amber-100 dark:bg-amber-900 px-1 rounded mx-0.5">{k}</code>
+              ))}
             </span>
           </div>
           <button onClick={() => setSmtpMissing(false)} className="shrink-0 text-amber-500 hover:text-amber-700"><X className="w-4 h-4" /></button>
@@ -1628,231 +1744,294 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
       {result && (
         <div className={cn(
           "shrink-0 rounded-xl border px-4 py-3 flex gap-3 items-center",
-          result.failed === 0
-            ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800"
-            : "border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800"
+          result.failed === 0 ? "border-green-200 bg-green-50 dark:bg-green-950/20 dark:border-green-800"
+                               : "border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800"
         )}>
           <Check className={cn("w-4 h-4 shrink-0", result.failed === 0 ? "text-green-600" : "text-amber-500")} />
           <p className={cn("text-xs flex-1 font-medium", result.failed === 0 ? "text-green-800 dark:text-green-300" : "text-amber-800 dark:text-amber-300")}>
             Selesai — <strong>{result.sent}</strong> berhasil, <strong>{result.failed}</strong> gagal dari <strong>{result.total}</strong> penerima
-            {result.errors.length > 0 && ` · ${result.errors[0]}`}
+            {result.errors?.length > 0 && <span className="opacity-70"> · {result.errors[0]}</span>}
           </p>
           <button onClick={() => setResult(null)} className="shrink-0 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
         </div>
       )}
 
-      {/* ── Main two-column area ───────────────────────────────────────────── */}
-      <div className="flex gap-4 flex-1 min-h-0">
+      {/* ══ TAB: TULIS ══ */}
+      {activeTab === "tulis" && (
+        <div className="flex gap-4 flex-1 min-h-0">
 
-        {/* LEFT — Compose + Penerima */}
-        <div className="flex flex-col gap-3 w-[42%] shrink-0">
+          {/* LEFT — Compose */}
+          <div className="flex flex-col gap-3 w-[44%] shrink-0 min-h-0">
 
-          {/* Subject */}
-          <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-1.5 shrink-0">
-            <label className="text-xs font-medium text-muted-foreground">Subject</label>
-            <Input
-              placeholder="Contoh: Update terbaru PioCode 🚀"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="text-sm h-9"
-            />
-          </div>
-
-          {/* Penerima */}
-          <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2.5 shrink-0">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium text-muted-foreground">Penerima</label>
-              {target === "select" && selected.size > 0 && (
-                <span className="text-xs text-primary font-medium">{selected.size} dipilih</span>
-              )}
-            </div>
-            {/* Toggle tabs */}
-            <div className="flex rounded-lg border border-border overflow-hidden text-xs">
-              <button
-                onClick={() => setTarget("all")}
-                className={cn(
-                  "flex-1 py-1.5 font-medium transition-colors",
-                  target === "all" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-                )}
-              >
-                Semua Pengguna
-              </button>
-              <button
-                onClick={() => setTarget("select")}
-                className={cn(
-                  "flex-1 py-1.5 font-medium transition-colors border-l border-border",
-                  target === "select" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
-                )}
-              >
-                Pilih Pengguna
-              </button>
+            {/* Subject */}
+            <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-1.5 shrink-0">
+              <label className="text-xs font-medium text-muted-foreground">Subject</label>
+              <Input
+                placeholder="Contoh: Update terbaru PioCode 🚀"
+                value={subject}
+                onChange={(e) => setSubject(e.target.value)}
+                className="text-sm h-9"
+              />
             </div>
 
-            {/* Mode: Semua — tier filter pills */}
-            {target === "all" && (
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-1.5">
+            {/* Penerima */}
+            <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-2.5 shrink-0">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">Penerima</label>
+                {target === "select" && selected.size > 0 && (
+                  <span className="text-xs text-primary font-medium">{selected.size} dipilih</span>
+                )}
+              </div>
+              <div className="flex rounded-lg border border-border overflow-hidden text-xs">
+                {(["all","select"] as const).map((t, i) => (
                   <button
-                    onClick={() => setSelectedTiers(new Set())}
+                    key={t}
+                    onClick={() => setTarget(t)}
                     className={cn(
-                      "text-xs px-2.5 py-1 rounded-full border font-medium transition-colors",
-                      selectedTiers.size === 0
-                        ? "bg-primary text-primary-foreground border-primary"
-                        : "border-border text-muted-foreground hover:bg-accent"
+                      "flex-1 py-1.5 font-medium transition-colors",
+                      i > 0 && "border-l border-border",
+                      target === t ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-accent"
                     )}
                   >
-                    Semua ({usersLoading ? "…" : users.length})
+                    {t === "all" ? "Semua Pengguna" : "Pilih Manual"}
                   </button>
-                  {(["free", "plus", "pro"] as const).map((tier) => {
-                    const count = users.filter((u) => u.tier === tier).length;
-                    const active = selectedTiers.has(tier);
-                    return (
-                      <button
-                        key={tier}
-                        onClick={() => toggleTier(tier)}
-                        className={cn(
-                          "text-xs px-2.5 py-1 rounded-full border font-medium capitalize transition-colors",
-                          active ? tierActivePill[tier] : "border-border text-muted-foreground hover:bg-accent"
+                ))}
+              </div>
+
+              {target === "all" && (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      onClick={() => setSelectedTiers(new Set())}
+                      className={cn("text-xs px-2.5 py-1 rounded-full border font-medium transition-colors",
+                        selectedTiers.size === 0 ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:bg-accent"
+                      )}
+                    >
+                      Semua ({usersLoading ? "…" : users.length})
+                    </button>
+                    {(["free","plus","pro"] as const).map((tier) => (
+                      <button key={tier} onClick={() => toggleTier(tier)}
+                        className={cn("text-xs px-2.5 py-1 rounded-full border font-medium capitalize transition-colors",
+                          selectedTiers.has(tier) ? tierActivePill[tier] : "border-border text-muted-foreground hover:bg-accent"
                         )}
                       >
-                        {tier} ({usersLoading ? "…" : count})
+                        {tier} ({usersLoading ? "…" : users.filter((u) => u.tier === tier).length})
                       </button>
-                    );
-                  })}
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    {selectedTiers.size === 0
+                      ? `${usersLoading ? "…" : users.length} penerima — semua tier`
+                      : `${tierFiltered.length} penerima — tier ${Array.from(selectedTiers).join(", ")}`}
+                  </p>
                 </div>
-                <p className="text-[10px] text-muted-foreground">
-                  {selectedTiers.size === 0
-                    ? `${usersLoading ? "…" : users.length} penerima — semua tier`
-                    : `${tierFiltered.length} penerima — tier ${Array.from(selectedTiers).join(", ")}`}
-                </p>
-              </div>
-            )}
+              )}
 
-            {/* Mode: Pilih — collapsible user list */}
-            {target === "select" && (
-              <div className="space-y-1.5">
-                {/* Ringkasan + tombol buka/tutup */}
-                <button
-                  onClick={() => setShowList((v) => !v)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors text-xs"
-                >
-                  <span className="text-muted-foreground">
-                    {selected.size > 0 ? `${selected.size} pengguna dipilih` : "Klik untuk pilih pengguna"}
-                  </span>
-                  {showList ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
-                </button>
-
-                {showList && (
-                  <div className="space-y-1.5">
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
-                      <input
-                        type="text"
-                        placeholder="Cari email atau nama..."
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                        className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
-                      />
-                    </div>
-                    {usersLoading ? (
-                      <div className="flex items-center justify-center py-3 text-muted-foreground text-xs gap-2">
-                        <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
+              {target === "select" && (
+                <div className="space-y-1.5">
+                  <button onClick={() => setShowList((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg border border-border hover:bg-accent transition-colors text-xs"
+                  >
+                    <span className="text-muted-foreground">
+                      {selected.size > 0 ? `${selected.size} pengguna dipilih` : "Klik untuk pilih pengguna"}
+                    </span>
+                    {showList ? <ChevronUp className="w-3 h-3 text-muted-foreground" /> : <ChevronDown className="w-3 h-3 text-muted-foreground" />}
+                  </button>
+                  {showList && (
+                    <div className="space-y-1.5">
+                      <div className="relative">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-muted-foreground" />
+                        <input type="text" placeholder="Cari email atau nama..." value={search}
+                          onChange={(e) => setSearch(e.target.value)}
+                          className="w-full pl-8 pr-3 py-1.5 rounded-lg border border-input bg-background text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/30"
+                        />
                       </div>
-                    ) : (
-                      <div className="rounded-lg border border-border overflow-hidden">
-                        <div
-                          className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors"
-                          onClick={toggleAll}
-                        >
-                          <div className={cn(
-                            "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                            selected.size > 0 && selected.size === filtered.length
-                              ? "bg-primary border-primary text-primary-foreground"
-                              : "border-border"
-                          )}>
-                            {selected.size > 0 && selected.size === filtered.length && <Check className="w-2 h-2" />}
-                          </div>
-                          <span className="text-xs text-muted-foreground flex-1">
-                            {selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})
-                          </span>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowList(false); }}
-                            className="text-muted-foreground hover:text-foreground p-0.5 rounded"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
+                      {usersLoading ? (
+                        <div className="flex items-center justify-center py-3 text-muted-foreground text-xs gap-2">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Memuat...
                         </div>
-                        <div className="max-h-32 overflow-y-auto divide-y divide-border">
-                          {filtered.length === 0 ? (
-                            <div className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan.</div>
-                          ) : filtered.map((u) => (
-                            <div
-                              key={u.id}
-                              className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent transition-colors"
-                              onClick={() => toggleUser(u.id)}
-                            >
-                              <div className={cn(
-                                "w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
-                                selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
-                              )}>
-                                {selected.has(u.id) && <Check className="w-2 h-2" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="text-xs truncate">{u.email}</div>
-                              </div>
-                              <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>
-                                {u.tier}
-                              </span>
+                      ) : (
+                        <div className="rounded-lg border border-border overflow-hidden">
+                          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/40 cursor-pointer hover:bg-muted/70 transition-colors" onClick={toggleAll}>
+                            <div className={cn("w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                              selected.size > 0 && selected.size === filtered.length ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                            )}>
+                              {selected.size > 0 && selected.size === filtered.length && <Check className="w-2 h-2" />}
                             </div>
-                          ))}
+                            <span className="text-xs text-muted-foreground flex-1">{selected.size > 0 ? `${selected.size} dipilih` : "Pilih semua"} ({filtered.length})</span>
+                            <button onClick={(e) => { e.stopPropagation(); setShowList(false); }} className="text-muted-foreground hover:text-foreground p-0.5 rounded">
+                              <X className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="max-h-32 overflow-y-auto divide-y divide-border">
+                            {filtered.length === 0 ? (
+                              <div className="py-4 text-center text-xs text-muted-foreground">Tidak ditemukan.</div>
+                            ) : filtered.map((u) => (
+                              <div key={u.id} className="flex items-center gap-2 px-3 py-1.5 cursor-pointer hover:bg-accent transition-colors" onClick={() => toggleUser(u.id)}>
+                                <div className={cn("w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0 transition-colors",
+                                  selected.has(u.id) ? "bg-primary border-primary text-primary-foreground" : "border-border"
+                                )}>
+                                  {selected.has(u.id) && <Check className="w-2 h-2" />}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-xs truncate">{u.full_name || u.email}</div>
+                                  {u.full_name && <div className="text-[10px] text-muted-foreground truncate">{u.email}</div>}
+                                </div>
+                                <span className={cn("text-[10px] px-1.5 py-0.5 rounded-full font-medium shrink-0", tierBadgeColor[u.tier] ?? tierBadgeColor.free)}>{u.tier}</span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Body + placeholder chips */}
+            <div className="rounded-xl border border-border bg-card px-4 py-3 flex flex-col gap-2 flex-1 min-h-0">
+              <label className="text-xs font-medium text-muted-foreground shrink-0">Isi Email</label>
+              <textarea
+                ref={bodyRef}
+                placeholder={"Halo {{nama}}!\n\nKami ingin memberitahu kamu bahwa..."}
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                className="flex-1 min-h-0 w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-mono"
+              />
+              {/* Placeholder chips */}
+              <div className="shrink-0 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <p className="text-[10px] text-muted-foreground">Klik untuk sisipkan placeholder:</p>
+                  <button onClick={() => setShowGuide((v) => !v)} className="text-[10px] text-primary hover:underline flex items-center gap-0.5">
+                    {showGuide ? "Tutup panduan" : "Lihat panduan"} <ChevronDown className={cn("w-2.5 h-2.5 transition-transform", showGuide && "rotate-180")} />
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {PLACEHOLDERS.map((ph) => (
+                    <button key={ph.key} onClick={() => insertPlaceholder(ph.key)}
+                      className="text-[11px] font-mono px-2 py-0.5 rounded-md bg-primary/8 hover:bg-primary/15 text-primary border border-primary/20 transition-colors"
+                    >
+                      {ph.key}
+                    </button>
+                  ))}
+                </div>
+                {showGuide && (
+                  <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-1.5 mt-1">
+                    <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">Panduan Placeholder</p>
+                    {PLACEHOLDERS.map((ph) => (
+                      <div key={ph.key} className="flex items-start gap-2 text-[11px]">
+                        <code className="font-mono text-primary bg-primary/8 px-1.5 py-0.5 rounded shrink-0">{ph.key}</code>
+                        <span className="text-muted-foreground flex-1">{ph.desc} <span className="text-foreground/50">(contoh: {ph.example})</span></span>
                       </div>
-                    )}
+                    ))}
+                    <p className="text-[10px] text-muted-foreground/70 pt-1 border-t border-border mt-2">Preview di kanan menggunakan nilai contoh. Nilai asli diambil dari data masing-masing pengguna saat email dikirim.</p>
                   </div>
                 )}
               </div>
-            )}
-          </div>
-
-          {/* Body */}
-          <div className="rounded-xl border border-border bg-card px-4 py-3 flex flex-col gap-1.5 flex-1 min-h-0">
-            <label className="text-xs font-medium text-muted-foreground shrink-0">Isi Email</label>
-            <textarea
-              placeholder={"Halo!\n\nKami ingin memberitahu kamu bahwa..."}
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              className="flex-1 min-h-0 w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary/50 resize-none font-sans"
-            />
-            <p className="text-[10px] text-muted-foreground shrink-0">Baris baru otomatis dikonversi ke HTML.</p>
-          </div>
-        </div>
-
-        {/* RIGHT — Live email preview */}
-        <div className="flex-1 rounded-xl border border-border bg-card px-4 py-3 flex flex-col gap-2 min-h-0">
-          <div className="flex items-center gap-2 shrink-0">
-            <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-            <span className="text-xs font-medium text-muted-foreground">Preview Email</span>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-lg border border-border bg-[#f4f4f5]">
-            <div className="bg-[#18181b] px-5 py-3">
-              <span className="text-white font-bold text-sm tracking-tight">PioCode</span>
             </div>
-            <div className="bg-white px-5 py-5">
-              <h2 className="font-bold text-[#18181b] text-base mb-3 leading-snug">
-                {subject || <span className="text-gray-400 font-normal italic text-sm">Subject email...</span>}
-              </h2>
-              <div className="text-[#3f3f46] text-sm leading-relaxed whitespace-pre-line min-h-[60px]">
-                {body || <span className="text-gray-400 italic text-sm">Isi email akan tampil di sini...</span>}
+          </div>
+
+          {/* RIGHT — iframe preview */}
+          <div className="flex-1 rounded-xl border border-border bg-card flex flex-col gap-0 min-h-0 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
+              <div className="flex items-center gap-2">
+                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs font-medium text-muted-foreground">Preview Email</span>
               </div>
+              <span className="text-[10px] text-muted-foreground/60 italic">Placeholder ditampilkan dengan nilai contoh</span>
             </div>
-            <div className="bg-white border-t border-[#e4e4e7] px-5 py-3">
-              <p className="text-[11px] text-[#a1a1aa] leading-relaxed">
-                Kamu menerima email ini karena terdaftar di PioCode. Jika ini bukan kamu, abaikan email ini.
-              </p>
-            </div>
+            <iframe
+              key={subject + body}
+              srcDoc={buildPreviewHtml(subject, body)}
+              sandbox="allow-same-origin"
+              className="flex-1 w-full border-0 bg-[#f0f0f1]"
+              title="Email Preview"
+            />
           </div>
         </div>
-      </div>
+      )}
+
+      {/* ══ TAB: RIWAYAT ══ */}
+      {activeTab === "riwayat" && (
+        <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-border bg-card">
+          {logsLoading ? (
+            <div className="flex items-center justify-center h-full gap-2 text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" /> Memuat riwayat...
+            </div>
+          ) : logs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-2 text-muted-foreground">
+              <Mail className="w-8 h-8 opacity-30" />
+              <p className="text-sm">Belum ada broadcast yang terkirim.</p>
+              <p className="text-xs opacity-60">Buat tabel <code className="font-mono">broadcast_logs</code> di Supabase jika belum.</p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {logs.map((log) => {
+                const isExpanded = expandedLog === log.id;
+                const allOk = log.failed_count === 0;
+                const d = new Date(log.created_at);
+                const dateStr = d.toLocaleDateString("id-ID", { day:"2-digit", month:"short", year:"numeric" });
+                const timeStr = d.toLocaleTimeString("id-ID", { hour:"2-digit", minute:"2-digit" });
+                const targetLabel = log.target_mode === "all" ? "Semua pengguna"
+                  : log.target_mode === "tiers" ? `Tier: ${(log.target_tiers ?? []).join(", ")}`
+                  : "Pilihan manual";
+                return (
+                  <div key={log.id} className="px-4 py-3 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-start gap-3">
+                      <div className={cn("w-2 h-2 rounded-full mt-1.5 shrink-0", allOk ? "bg-green-500" : "bg-amber-400")} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-foreground truncate">{log.subject}</p>
+                          <span className="text-[10px] text-muted-foreground shrink-0 tabular-nums">{dateStr} · {timeStr}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          <span className="text-[11px] text-muted-foreground">{targetLabel}</span>
+                          <span className="text-[10px] text-muted-foreground">·</span>
+                          <span className="text-[11px] text-green-600 font-medium">{log.sent_count} terkirim</span>
+                          {log.failed_count > 0 && (
+                            <>
+                              <span className="text-[10px] text-muted-foreground">·</span>
+                              <span className="text-[11px] text-amber-500 font-medium">{log.failed_count} gagal</span>
+                            </>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">·</span>
+                          <span className="text-[11px] text-muted-foreground">{log.recipient_count} total penerima</span>
+                        </div>
+                        {(log.errors && log.errors.length > 0) && (
+                          <button onClick={() => setExpandedLog(isExpanded ? null : log.id)}
+                            className="text-[11px] text-amber-500 hover:underline mt-1 flex items-center gap-0.5"
+                          >
+                            Lihat {log.errors.length} error <ChevronDown className={cn("w-3 h-3 transition-transform", isExpanded && "rotate-180")} />
+                          </button>
+                        )}
+                        {isExpanded && log.errors && (
+                          <div className="mt-2 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 px-3 py-2 space-y-1">
+                            {log.errors.map((e, i) => (
+                              <p key={i} className="text-[11px] font-mono text-amber-700 dark:text-amber-300">{e}</p>
+                            ))}
+                          </div>
+                        )}
+                        <button
+                          className="text-[11px] text-muted-foreground/60 hover:text-muted-foreground mt-1 flex items-center gap-0.5"
+                          onClick={() => setExpandedLog(expandedLog === log.id + "_body" ? null : log.id + "_body")}
+                        >
+                          {expandedLog === log.id + "_body" ? "Sembunyikan isi" : "Lihat isi email"} <ChevronDown className={cn("w-3 h-3 transition-transform", expandedLog === log.id + "_body" && "rotate-180")} />
+                        </button>
+                        {expandedLog === log.id + "_body" && (
+                          <div className="mt-2 rounded-lg bg-muted/50 border border-border px-3 py-2">
+                            <p className="text-[11px] text-muted-foreground whitespace-pre-wrap">{log.body}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Confirm dialog */}
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
@@ -1861,10 +2040,11 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok: boolean)
             <AlertDialogTitle>Kirim broadcast email?</AlertDialogTitle>
             <AlertDialogDescription asChild>
               <div className="space-y-2 text-sm text-muted-foreground">
-                <p>Email dengan subject <strong className="text-foreground">&quot;{subject}&quot;</strong> akan dikirim ke{" "}
+                <p>Email <strong className="text-foreground">&ldquo;{subject}&rdquo;</strong> akan dikirim ke{" "}
                   <strong className="text-foreground">{recipientCount} penerima</strong>.
                 </p>
-                <p>Email yang sudah dikirim tidak bisa ditarik kembali.</p>
+                <p>Placeholder seperti <code className="font-mono text-xs bg-muted px-1 rounded">{"{{nama}}"}</code> akan otomatis diisi per penerima.</p>
+                <p className="text-amber-600 dark:text-amber-400">Email yang sudah dikirim tidak bisa ditarik kembali.</p>
               </div>
             </AlertDialogDescription>
           </AlertDialogHeader>
