@@ -960,6 +960,22 @@ app.get("/api/admin/redeem-codes/:id/redemptions", requireAuth, requireAdmin, as
     (profiles ?? []).forEach((p: any) => { profileMap[p.id] = p; });
   }
 
+  // For users where email is still missing, fall back to auth.users
+  const missingEmailIds = userIds.filter((uid: string) => !profileMap[uid]?.email);
+  if (missingEmailIds.length > 0) {
+    await Promise.all(missingEmailIds.map(async (uid: string) => {
+      const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(uid);
+      if (authUser?.user) {
+        profileMap[uid] = {
+          ...profileMap[uid],
+          id: uid,
+          email: authUser.user.email ?? null,
+          full_name: profileMap[uid]?.full_name ?? authUser.user.user_metadata?.full_name ?? null,
+        };
+      }
+    }));
+  }
+
   const enriched = (data ?? []).map((r: any) => ({
     ...r,
     full_name: profileMap[r.user_id]?.full_name ?? null,
