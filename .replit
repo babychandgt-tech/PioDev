@@ -60,6 +60,7 @@ SITE_URL = "https://pio.codes"
 
 [nix]
 channel = "stable-25_05"
+packages = ["dig"]
 
 [[ports]]
 localPort = 5000
