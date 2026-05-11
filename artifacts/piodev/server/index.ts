@@ -706,25 +706,25 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
 
   const buildHtml = (subj: string, bodyText: string) => `<!DOCTYPE html>
 <html lang="id"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${subj}</title></head>
-<body style="margin:0;padding:0;background:#f0f0f1;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" style="background:#f0f0f1;padding:40px 16px;">
+<body style="margin:0;padding:0;background:#eef0fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#eef0fb;padding:40px 16px;">
   <tr><td align="center">
-    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
-      <tr><td style="background:#18181b;padding:28px 40px;">
+    <table width="580" cellpadding="0" cellspacing="0" style="max-width:580px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 4px 32px rgba(71,77,235,0.12);">
+      <tr><td style="background:linear-gradient(135deg,#2d2b8f 0%,#474deb 100%);padding:28px 40px;">
         <table width="100%" cellpadding="0" cellspacing="0"><tr>
           <td><span style="font-size:22px;font-weight:800;color:#ffffff;letter-spacing:-0.5px;">PioCode</span></td>
-          <td align="right"><span style="font-size:11px;color:#71717a;letter-spacing:0.8px;text-transform:uppercase;font-weight:500;">Pemberitahuan</span></td>
+          <td align="right"><span style="font-size:10px;color:rgba(255,255,255,0.55);letter-spacing:1px;text-transform:uppercase;font-weight:600;">Pemberitahuan</span></td>
         </tr></table>
       </td></tr>
       <tr><td style="padding:40px 40px 28px;">
-        <h2 style="margin:0 0 22px;font-size:22px;font-weight:700;color:#18181b;line-height:1.3;">${subj}</h2>
-        <div style="font-size:15px;color:#3f3f46;line-height:1.85;">${bodyText.replace(/\n/g, "<br>")}</div>
+        <h2 style="margin:0 0 22px;font-size:22px;font-weight:700;color:#0f172a;line-height:1.3;">${subj}</h2>
+        <div style="font-size:15px;color:#475569;line-height:1.85;">${bodyText.replace(/\n/g, "<br>")}</div>
       </td></tr>
       <tr><td style="padding:0 40px 36px;">
-        <a href="https://pio.codes" style="display:inline-block;padding:12px 28px;background:#18181b;color:#ffffff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;letter-spacing:-0.2px;">Buka PioCode &rarr;</a>
+        <a href="https://pio.codes" style="display:inline-block;padding:12px 28px;background:#474deb;color:#ffffff;text-decoration:none;border-radius:10px;font-size:14px;font-weight:600;letter-spacing:-0.1px;">Buka PioCode &rarr;</a>
       </td></tr>
-      <tr><td style="padding:20px 40px 24px;border-top:1px solid #f4f4f5;background:#fafafa;">
-        <p style="margin:0;font-size:11px;color:#a1a1aa;line-height:1.7;">Kamu menerima email ini karena terdaftar di <a href="https://pio.codes" style="color:#71717a;text-decoration:none;font-weight:500;">PioCode</a>. Jika tidak ingin menerima email semacam ini, hubungi kami di <a href="mailto:noreply@pio.codes" style="color:#71717a;text-decoration:none;">noreply@pio.codes</a>.</p>
+      <tr><td style="padding:20px 40px 24px;border-top:1px solid #e8ecf8;background:#f8f9fd;">
+        <p style="margin:0;font-size:11px;color:#94a3b8;line-height:1.7;">Kamu menerima email ini karena terdaftar di <a href="https://pio.codes" style="color:#474deb;text-decoration:none;font-weight:500;">PioCode</a>. Jika tidak ingin menerima email semacam ini, hubungi kami di <a href="mailto:noreply@pio.codes" style="color:#474deb;text-decoration:none;">noreply@pio.codes</a>.</p>
       </td></tr>
     </table>
   </td></tr>
