@@ -81,7 +81,7 @@ export default function ApiKeysPage() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
-  const [redeemResult, setRedeemResult] = useState<{ credit_amount_idr: number; new_balance: number } | null>(null);
+  const [redeemResult, setRedeemResult] = useState<{ credit_amount_idr: number; new_balance: number; grant_tier?: string | null; tier_expires_at?: string | null } | null>(null);
   const [newKeyName, setNewKeyName] = useState("");
   const [creating, setCreating] = useState(false);
   const [createdKey, setCreatedKey] = useState<{ key: string; revealable: boolean; warning?: string } | null>(null);
@@ -158,7 +158,7 @@ export default function ApiKeysPage() {
         setRedeemError(d.error ?? "Terjadi kesalahan.");
         return;
       }
-      setRedeemResult({ credit_amount_idr: d.credit_amount_idr, new_balance: d.new_balance });
+      setRedeemResult({ credit_amount_idr: d.credit_added ?? 0, new_balance: d.new_balance_idr ?? 0, grant_tier: d.grant_tier ?? null, tier_expires_at: d.tier_expires_at ?? null });
       await load();
     } catch (e: any) {
       setRedeemError(e.message ?? "Terjadi kesalahan.");
@@ -909,12 +909,29 @@ export default function ApiKeysPage() {
                     </div>
                     <div>
                       <p className="text-lg font-bold text-foreground leading-tight">Berhasil!</p>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        <span className="font-semibold text-green-600">
-                          +{`Rp ${redeemResult.credit_amount_idr.toLocaleString("id-ID")}`}
-                        </span>{" "}
-                        telah ditambahkan ke saldo kamu.
-                      </p>
+                      {redeemResult.grant_tier && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          <span className="font-semibold text-purple-500 capitalize">
+                            Tier {redeemResult.grant_tier}
+                          </span>{" "}
+                          telah diaktifkan di akunmu
+                          {redeemResult.tier_expires_at && (
+                            <> hingga{" "}
+                              <span className="font-semibold text-foreground">
+                                {new Date(redeemResult.tier_expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                              </span>
+                            </>
+                          )}.
+                        </p>
+                      )}
+                      {redeemResult.credit_amount_idr > 0 && (
+                        <p className="text-sm text-muted-foreground mt-1">
+                          <span className="font-semibold text-green-600">
+                            +{`Rp ${redeemResult.credit_amount_idr.toLocaleString("id-ID")}`}
+                          </span>{" "}
+                          telah ditambahkan ke saldo kamu.
+                        </p>
+                      )}
                     </div>
                     <div className="w-full rounded-xl bg-muted/50 border border-border px-4 py-3 text-center">
                       <p className="text-xs text-muted-foreground mb-0.5">Saldo sekarang</p>
