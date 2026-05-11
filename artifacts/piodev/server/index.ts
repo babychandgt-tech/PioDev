@@ -749,6 +749,8 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
     const resolvedSubject = resolvePlaceholders(subject.trim(), r);
     const resolvedBody    = resolvePlaceholders(body.trim(), r);
     try {
+      const siteUrl = process.env.SITE_URL || "https://pio.codes";
+      const unsubUrl = `${siteUrl}/api/unsubscribe?email=${encodeURIComponent(r.email)}`;
       await transporter.sendMail({
         from: smtpFrom,
         to: r.email,
@@ -756,7 +758,8 @@ app.post("/api/admin/broadcast-email", requireAuth, requireAdmin, async (req, re
         html: buildHtml(resolvedSubject, resolvedBody),
         text: resolvedBody,
         headers: {
-          "List-Unsubscribe": `<mailto:${smtpUser}?subject=unsubscribe>`,
+          "List-Unsubscribe": `<${unsubUrl}>, <mailto:${smtpUser}?subject=unsubscribe>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
           "Precedence": "bulk",
           "X-Mailer": "PioCode Broadcast",
         },
@@ -799,6 +802,29 @@ app.get("/api/admin/broadcast-logs", requireAuth, requireAdmin, async (req, res)
     .limit(50);
   if (error) { res.status(500).json({ error: error.message }); return; }
   res.json({ logs: data ?? [] });
+});
+
+// ── GET /api/unsubscribe  (one-click unsubscribe handler) ────────────────────
+// Gmail one-click mengirim POST ke URL ini; link di email menggunakan GET.
+app.get("/api/unsubscribe", async (req, res) => {
+  const email = req.query.email as string;
+  if (!email) { res.status(400).send("Email tidak valid."); return; }
+  await supabaseAdmin.from("unsubscribed_emails").upsert({ email }, { onConflict: "email" }).maybeSingle();
+  res.send(`<!DOCTYPE html><html lang="id"><head><meta charset="utf-8"><title>Berhenti Langganan</title>
+<style>body{font-family:-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f1f5f9;}
+.card{background:#fff;border-radius:16px;padding:40px 48px;max-width:400px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.08);}
+h2{margin:0 0 8px;font-size:20px;color:#0f172a;}p{color:#64748b;font-size:14px;margin:0;}
+a{color:#474deb;font-size:13px;}</style></head>
+<body><div class="card"><h2>✅ Berhasil berhenti langganan</h2>
+<p>${email} tidak akan menerima email broadcast dari PioCode lagi.</p>
+<br><a href="https://pio.codes">Kembali ke PioCode</a></div></body></html>`);
+});
+
+app.post("/api/unsubscribe", async (req, res) => {
+  const email = (req.body?.email || req.query.email) as string;
+  if (!email) { res.status(400).json({ error: "Email tidak valid." }); return; }
+  await supabaseAdmin.from("unsubscribed_emails").upsert({ email }, { onConflict: "email" }).maybeSingle();
+  res.json({ ok: true });
 });
 
 // ── POST /api/redeem — user redeem code ──────────────────────────────────────

@@ -1572,6 +1572,7 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
   const [logs, setLogs] = useState<BroadcastLog[]>([]);
   const [logsLoading, setLogsLoading] = useState(false);
   const [expandedLog, setExpandedLog] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -1730,14 +1731,24 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
         </div>
 
         {activeTab === "tulis" && (
-          <button
-            onClick={() => setConfirmOpen(true)}
-            disabled={!canSend}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40 shrink-0"
-          >
-            {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-            {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setPreviewOpen(true)}
+              disabled={!subject.trim() && !body.trim()}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-border text-sm font-medium text-muted-foreground hover:bg-accent transition-colors disabled:opacity-40"
+            >
+              <Mail className="w-4 h-4" />
+              Preview
+            </button>
+            <button
+              onClick={() => setConfirmOpen(true)}
+              disabled={!canSend}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-40"
+            >
+              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+              {sending ? "Mengirim..." : `Kirim ke ${recipientCount} penerima`}
+            </button>
+          </div>
         )}
         {activeTab === "riwayat" && (
           <button onClick={loadLogs} disabled={logsLoading} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border text-xs text-muted-foreground hover:bg-accent transition-colors disabled:opacity-50">
@@ -1778,10 +1789,8 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
 
       {/* ══ TAB: TULIS ══ */}
       {activeTab === "tulis" && (
-        <div className="flex gap-4 flex-1 min-h-0">
-
-          {/* LEFT — Compose */}
-          <div className="flex flex-col gap-3 w-[44%] shrink-0 min-h-0 overflow-y-auto pr-0.5">
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <div className="flex flex-col gap-3 pb-4">
 
             {/* Subject */}
             <div className="rounded-xl border border-border bg-card px-4 py-3 space-y-1.5 shrink-0">
@@ -1962,32 +1971,35 @@ function SectionBroadcast({ showToast }: { showToast: (msg: string, ok?: boolean
                         <span className="text-muted-foreground flex-1">{ph.desc} <span className="text-foreground/50">(contoh: {ph.example})</span></span>
                       </div>
                     ))}
-                    <p className="text-[10px] text-muted-foreground/70 pt-1 border-t border-border mt-2">Preview di kanan menggunakan nilai contoh. Nilai asli diambil dari data masing-masing pengguna saat email dikirim.</p>
+                    <p className="text-[10px] text-muted-foreground/70 pt-1 border-t border-border mt-2">Preview menggunakan nilai contoh. Nilai asli diambil dari data masing-masing pengguna saat email dikirim.</p>
                   </div>
                 )}
               </div>
             </div>
           </div>
-
-          {/* RIGHT — iframe preview */}
-          <div className="flex-1 rounded-xl border border-border bg-card flex flex-col gap-0 min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-border shrink-0">
-              <div className="flex items-center gap-2">
-                <Mail className="w-3.5 h-3.5 text-muted-foreground" />
-                <span className="text-xs font-medium text-muted-foreground">Preview Email</span>
-              </div>
-              <span className="text-[10px] text-muted-foreground/60 italic">Placeholder ditampilkan dengan nilai contoh</span>
-            </div>
-            <iframe
-              key={subject + body}
-              srcDoc={buildPreviewHtml(subject, body)}
-              sandbox="allow-same-origin"
-              className="flex-1 w-full border-0 bg-[#f0f0f1]"
-              title="Email Preview"
-            />
-          </div>
         </div>
       )}
+
+      {/* Preview Dialog */}
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-2xl w-full p-0 overflow-hidden">
+          <DialogHeader className="px-5 pt-5 pb-3 border-b border-border">
+            <DialogTitle className="flex items-center gap-2 text-sm font-semibold">
+              <Mail className="w-4 h-4 text-muted-foreground" />
+              Preview Email
+              <span className="text-xs font-normal text-muted-foreground ml-1 italic">Placeholder ditampilkan dengan nilai contoh</span>
+            </DialogTitle>
+          </DialogHeader>
+          <iframe
+            key={previewOpen ? subject + body : "closed"}
+            srcDoc={buildPreviewHtml(subject, body)}
+            sandbox="allow-same-origin"
+            className="w-full border-0 bg-[#f0f0f1]"
+            style={{ height: "70vh" }}
+            title="Email Preview"
+          />
+        </DialogContent>
+      </Dialog>
 
       {/* ══ TAB: RIWAYAT ══ */}
       {activeTab === "riwayat" && (
