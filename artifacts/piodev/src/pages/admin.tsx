@@ -1889,6 +1889,8 @@ type RedeemCode = {
 function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
   const [codes, setCodes] = useState<RedeemCode[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [form, setForm] = useState({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
   const [creating, setCreating] = useState(false);
@@ -1896,21 +1898,28 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
-  async function loadCodes() {
-    setLoading(true);
+  async function loadCodes(silent = false) {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
     try {
       const h = await authHeader();
       const r = await fetch("/api/admin/redeem-codes", { headers: h });
       const d = await r.json();
       setCodes(d.codes ?? []);
+      setLastUpdated(new Date());
     } catch (e) {
       console.error("[loadCodes]", e);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
+      else setRefreshing(false);
     }
   }
 
-  useEffect(() => { loadCodes(); }, []);
+  useEffect(() => {
+    loadCodes();
+    const interval = setInterval(() => loadCodes(true), 10_000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function handleCreate() {
     if (!form.code.trim() || !form.credit_amount_idr) return;
@@ -1974,16 +1983,43 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
       {/* Header */}
       <div className="flex items-center justify-between gap-4 shrink-0">
         <div>
-          <h2 className="text-base font-semibold text-foreground leading-tight">Kode Redeem</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Buat & kelola kode untuk membagikan kredit kepada pengguna.</p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-semibold text-foreground leading-tight">Kode Redeem</h2>
+            <span className="flex items-center gap-1 text-[10px] text-green-500 font-medium">
+              <span className="relative flex h-1.5 w-1.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-green-500" />
+              </span>
+              Live
+            </span>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Buat & kelola kode untuk membagikan kredit kepada pengguna.
+            {lastUpdated && (
+              <span className="ml-1.5">
+                · Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                {refreshing && <span className="ml-1 opacity-60">(memperbarui...)</span>}
+              </span>
+            )}
+          </p>
         </div>
-        <button
-          onClick={() => { setShowCreate(true); setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" }); }}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
-        >
-          <Plus className="w-4 h-4" />
-          Buat Kode
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => loadCodes(true)}
+            disabled={refreshing || loading}
+            className="p-2 rounded-xl border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors disabled:opacity-40"
+            title="Refresh sekarang"
+          >
+            <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
+          </button>
+          <button
+            onClick={() => { setShowCreate(true); setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" }); }}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Buat Kode
+          </button>
+        </div>
       </div>
 
       {/* Create Dialog */}
