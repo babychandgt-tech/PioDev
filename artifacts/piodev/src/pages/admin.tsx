@@ -1898,11 +1898,16 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
 
   async function loadCodes() {
     setLoading(true);
-    const h = await authHeader();
-    const r = await fetch("/api/admin/redeem-codes", { headers: h });
-    const d = await r.json();
-    setCodes(d.codes ?? []);
-    setLoading(false);
+    try {
+      const h = await authHeader();
+      const r = await fetch("/api/admin/redeem-codes", { headers: h });
+      const d = await r.json();
+      setCodes(d.codes ?? []);
+    } catch (e) {
+      console.error("[loadCodes]", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
   useEffect(() => { loadCodes(); }, []);
@@ -1910,24 +1915,29 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
   async function handleCreate() {
     if (!form.code.trim() || !form.credit_amount_idr) return;
     setCreating(true);
-    const h = await authHeader();
-    const r = await fetch("/api/admin/redeem-codes", {
-      method: "POST", headers: h,
-      body: JSON.stringify({
-        code: form.code.trim(),
-        description: form.description.trim() || undefined,
-        credit_amount_idr: Number(form.credit_amount_idr),
-        max_redemptions: form.max_redemptions ? Number(form.max_redemptions) : null,
-        expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
-      }),
-    });
-    const d = await r.json();
-    setCreating(false);
-    if (!r.ok) { showToast(d.error ?? "Gagal buat kode.", false); return; }
-    showToast(`Kode "${form.code.toUpperCase()}" berhasil dibuat.`, true);
-    setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
-    setShowCreate(false);
-    await loadCodes();
+    try {
+      const h = await authHeader();
+      const r = await fetch("/api/admin/redeem-codes", {
+        method: "POST", headers: h,
+        body: JSON.stringify({
+          code: form.code.trim(),
+          description: form.description.trim() || undefined,
+          credit_amount_idr: Number(form.credit_amount_idr),
+          max_redemptions: form.max_redemptions ? Number(form.max_redemptions) : null,
+          expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error ?? "Gagal buat kode.", false); return; }
+      showToast(`Kode "${form.code.toUpperCase()}" berhasil dibuat.`, true);
+      setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
+      setShowCreate(false);
+      await loadCodes();
+    } catch (e: any) {
+      showToast(e.message ?? "Terjadi kesalahan.", false);
+    } finally {
+      setCreating(false);
+    }
   }
 
   async function handleToggleActive(rc: RedeemCode) {
@@ -1968,7 +1978,7 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
           <p className="text-xs text-muted-foreground mt-0.5">Buat & kelola kode untuk membagikan kredit kepada pengguna.</p>
         </div>
         <button
-          onClick={() => setShowCreate((v) => !v)}
+          onClick={() => { setShowCreate(true); setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" }); }}
           className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shrink-0"
         >
           <Plus className="w-4 h-4" />
@@ -1976,86 +1986,93 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
         </button>
       </div>
 
-      {/* Create form */}
-      {showCreate && (
-        <div className="rounded-xl border border-border bg-card p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold flex items-center gap-2"><Gift className="w-4 h-4 text-primary" /> Kode Baru</h3>
-            <button onClick={() => setShowCreate(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Kode *</label>
-              <Input
-                placeholder="WELCOME2024"
-                value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
-                className="text-sm h-9 font-mono tracking-wider"
-              />
+      {/* Create Dialog */}
+      <Dialog open={showCreate} onOpenChange={(o) => { if (!creating) setShowCreate(o); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gift className="w-4 h-4 text-primary" /> Buat Kode Baru
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Kode *</label>
+                <Input
+                  placeholder="WELCOME2024"
+                  value={form.code}
+                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
+                  className="text-sm font-mono tracking-wider"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Kredit (IDR) *</label>
+                <Input
+                  type="number" placeholder="50000" min={1}
+                  value={form.credit_amount_idr}
+                  onChange={(e) => setForm((f) => ({ ...f, credit_amount_idr: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Maks Pengguna <span className="opacity-60">(kosong = tak terbatas)</span></label>
+                <Input
+                  type="number" placeholder="100" min={1}
+                  value={form.max_redemptions}
+                  onChange={(e) => setForm((f) => ({ ...f, max_redemptions: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Kedaluwarsa <span className="opacity-60">(opsional)</span>
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={form.expires_at}
+                  onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Deskripsi internal <span className="opacity-60">(opsional, tidak dilihat user)</span></label>
+                <Input
+                  placeholder="Misal: Kampanye Ramadan 2025"
+                  value={form.description}
+                  onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
             </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Kredit (IDR) *</label>
-              <Input
-                type="number" placeholder="50000" min={1}
-                value={form.credit_amount_idr}
-                onChange={(e) => setForm((f) => ({ ...f, credit_amount_idr: e.target.value }))}
-                className="text-sm h-9"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground">Maks Pengguna <span className="text-muted-foreground/60">(kosong = tak terbatas)</span></label>
-              <Input
-                type="number" placeholder="100" min={1}
-                value={form.max_redemptions}
-                onChange={(e) => setForm((f) => ({ ...f, max_redemptions: e.target.value }))}
-                className="text-sm h-9"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Kedaluwarsa <span className="text-muted-foreground/60">(opsional)</span></label>
-              <Input
-                type="datetime-local"
-                value={form.expires_at}
-                onChange={(e) => setForm((f) => ({ ...f, expires_at: e.target.value }))}
-                className="text-sm h-9"
-              />
-            </div>
-            <div className="sm:col-span-2 space-y-1">
-              <label className="text-xs text-muted-foreground">Deskripsi internal <span className="text-muted-foreground/60">(opsional, tidak dilihat user)</span></label>
-              <Input
-                placeholder="Misal: Kampanye Ramadan 2025"
-                value={form.description}
-                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                className="text-sm h-9"
-              />
-            </div>
-          </div>
 
-          {/* Preview */}
-          {form.code && form.credit_amount_idr && (
-            <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2 text-xs text-muted-foreground">
-              Kode <code className="font-mono font-semibold text-foreground">{form.code}</code> akan memberikan{" "}
-              <strong className="text-green-600">{formatIDR(Number(form.credit_amount_idr))}</strong> kredit
-              {form.max_redemptions ? ` ke maks ${form.max_redemptions} pengguna` : " ke pengguna tak terbatas"}
-              {form.expires_at ? ` hingga ${new Date(form.expires_at).toLocaleDateString("id-ID")}` : ""}.
-            </div>
-          )}
-
-          <div className="flex gap-2 pt-1">
-            <button onClick={() => setShowCreate(false)} className="px-3 py-1.5 rounded-lg text-sm border border-border hover:bg-accent transition-colors">
+            {form.code && form.credit_amount_idr && (
+              <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-xs text-muted-foreground">
+                Kode <code className="font-mono font-semibold text-foreground">{form.code}</code> akan memberikan{" "}
+                <strong className="text-green-600">{formatIDR(Number(form.credit_amount_idr))}</strong> kredit
+                {form.max_redemptions ? ` ke maks ${form.max_redemptions} pengguna` : " ke pengguna tak terbatas"}
+                {form.expires_at ? ` hingga ${new Date(form.expires_at).toLocaleDateString("id-ID")}` : ""}.
+              </div>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setShowCreate(false)}
+              disabled={creating}
+              className="px-4 py-2 rounded-lg text-sm border border-border hover:bg-accent transition-colors disabled:opacity-50"
+            >
               Batal
             </button>
             <button
               onClick={handleCreate}
               disabled={creating || !form.code.trim() || !form.credit_amount_idr}
-              className="px-4 py-1.5 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+              className="px-4 py-2 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
             >
               {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
               Simpan Kode
             </button>
-          </div>
-        </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* List */}
       {loading ? (

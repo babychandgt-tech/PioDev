@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic, Wallet, CreditCard, Server, Key, ArrowDownLeft, MessageSquare, Plus, ChevronDown, TrendingDown, TrendingUp } from "lucide-react";
+import { User, Lock, Check, Eye, EyeOff, Sun, Moon, Menu, X, BarChart2, Sparkles, Star, Zap, ImageIcon, Clapperboard, ChevronRight, Shield, Mail, Mic, Wallet, CreditCard, Server, Key, ArrowDownLeft, MessageSquare, Plus, ChevronDown, TrendingDown, TrendingUp, Gift, Loader2, PartyPopper } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 import { useChat } from "@/hooks/use-chat";
@@ -53,6 +53,7 @@ function getTxLabel(type: string): { label: string; icon: typeof User } {
   if (type?.includes("usage_hosting")) return { label: "Hosting", icon: Server };
   if (type?.includes("usage_api"))     return { label: "API Eksternal", icon: Key };
   if (type === "top_up")               return { label: "Top Up Saldo", icon: ArrowDownLeft };
+  if (type === "redeem_code")          return { label: "Redeem Kode", icon: Gift };
   if (type?.includes("bonus_plus_trial")) return { label: "Bonus Trial Plus", icon: Star };
   if (type?.includes("bonus_plus"))    return { label: "Bonus Upgrade Plus", icon: Star };
   if (type?.includes("bonus_pro"))     return { label: "Bonus Upgrade Pro", icon: Star };
@@ -118,6 +119,11 @@ export default function Settings() {
   const [billingSummaryLoading, setBillingSummaryLoading] = useState(false);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingTab, setBillingTab] = useState<"informasi" | "riwayat">("informasi");
+  const [redeemOpen, setRedeemOpen] = useState(false);
+  const [redeemCode, setRedeemCode] = useState("");
+  const [redeemLoading, setRedeemLoading] = useState(false);
+  const [redeemError, setRedeemError] = useState<string | null>(null);
+  const [redeemResult, setRedeemResult] = useState<{ new_balance_idr: number; credit_added: number } | null>(null);
 
   type Period = "this_month" | "last_month" | "3_months" | "6_months";
   const PERIODS: { value: Period; label: string }[] = [
@@ -199,6 +205,28 @@ export default function Settings() {
   const [pwSaving, setPwSaving] = useState(false);
   const [pwSuccess, setPwSuccess] = useState(false);
   const [pwError, setPwError] = useState("");
+
+  async function handleRedeem() {
+    if (!redeemCode.trim()) return;
+    setRedeemLoading(true);
+    setRedeemError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const r = await fetch("/api/redeem", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.access_token ?? ""}` },
+        body: JSON.stringify({ code: redeemCode.trim().toUpperCase() }),
+      });
+      const d = await r.json();
+      if (!r.ok) { setRedeemError(d.error ?? "Kode tidak valid."); return; }
+      setRedeemResult(d);
+      setBillingSummary((prev) => prev ? { ...prev, balance_idr: d.new_balance_idr } : prev);
+    } catch {
+      setRedeemError("Terjadi kesalahan. Coba lagi.");
+    } finally {
+      setRedeemLoading(false);
+    }
+  }
 
   if (!user) return null;
 
@@ -770,7 +798,7 @@ export default function Settings() {
                       <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
                         <div className="flex items-start justify-between gap-4">
                           <div>
-                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Saldo Kredit</p>
+                            <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-1.5">Kredit</p>
                             <p className="text-3xl sm:text-4xl font-bold text-foreground tabular-nums">
                               Rp {billingSummary.balance_idr.toLocaleString("id-ID")}
                             </p>
@@ -779,12 +807,11 @@ export default function Settings() {
                             </p>
                           </div>
                           <button
-                            disabled
-                            title="Segera hadir"
-                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-semibold opacity-50 cursor-not-allowed"
+                            onClick={() => { setRedeemOpen(true); setRedeemCode(""); setRedeemError(null); setRedeemResult(null); }}
+                            className="shrink-0 inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary/10 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
                           >
-                            <Plus className="w-3.5 h-3.5" />
-                            Top Up
+                            <Gift className="w-3.5 h-3.5" />
+                            Redeem Kode
                           </button>
                         </div>
                         <div className="mt-4 pt-4 border-t border-border flex flex-wrap items-center gap-x-3 gap-y-1.5">
@@ -1206,6 +1233,86 @@ export default function Settings() {
           </div>
         </div>
       </div>
+
+      {/* Redeem Kredit Modal */}
+      <AnimatePresence>
+        {redeemOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
+            onClick={(e) => { if (e.target === e.currentTarget && !redeemLoading) setRedeemOpen(false); }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 25 }}
+              className="bg-card border border-border rounded-2xl shadow-2xl p-6 w-full max-w-sm space-y-4"
+            >
+              {redeemResult ? (
+                <div className="flex flex-col items-center gap-3 py-2 text-center">
+                  <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center">
+                    <PartyPopper className="w-7 h-7 text-green-500" />
+                  </div>
+                  <p className="text-lg font-bold text-foreground">Kredit Berhasil!</p>
+                  <p className="text-sm text-muted-foreground">
+                    <span className="text-green-500 font-semibold">+Rp {redeemResult.credit_added.toLocaleString("id-ID")}</span> kredit ditambahkan ke akunmu.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Saldo sekarang:{" "}
+                    <span className="text-foreground font-semibold">Rp {redeemResult.new_balance_idr.toLocaleString("id-ID")}</span>
+                  </p>
+                  <button
+                    onClick={() => setRedeemOpen(false)}
+                    className="mt-1 w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors"
+                  >
+                    Oke!
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Gift className="w-5 h-5 text-primary" />
+                      <h3 className="text-base font-semibold">Redeem Kredit</h3>
+                    </div>
+                    <button
+                      onClick={() => { if (!redeemLoading) setRedeemOpen(false); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <p className="text-sm text-muted-foreground">Masukkan kode redeem untuk menambah kredit ke akunmu.</p>
+                  <input
+                    type="text"
+                    placeholder="Contoh: WELCOME2024"
+                    value={redeemCode}
+                    onChange={(e) => { setRedeemCode(e.target.value.toUpperCase().replace(/\s/g, "")); setRedeemError(null); }}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleRedeem(); }}
+                    disabled={redeemLoading}
+                    className="w-full px-3 py-2.5 rounded-xl border border-border bg-background text-sm font-mono tracking-widest text-center focus:outline-none focus:ring-2 focus:ring-primary/50 disabled:opacity-50"
+                    autoFocus
+                  />
+                  {redeemError && (
+                    <p className="text-xs text-red-500 text-center">{redeemError}</p>
+                  )}
+                  <button
+                    onClick={handleRedeem}
+                    disabled={redeemLoading || !redeemCode.trim()}
+                    className="w-full py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                  >
+                    {redeemLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Gift className="w-4 h-4" />}
+                    {redeemLoading ? "Memproses..." : "Redeem"}
+                  </button>
+                </>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
