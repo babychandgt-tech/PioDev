@@ -859,19 +859,76 @@ app.post("/api/redeem", requireAuth, async (req, res) => {
 
   if (existing) { res.status(400).json({ error: "Kamu sudah pernah memakai kode ini." }); return; }
 
-  const newBalance = await addCredit(userId, rc.credit_amount_idr, "redeem_code", {
-    code: rc.code, code_id: rc.id, description: rc.description,
-  });
+  // Add credit (skip if 0 — tier-only code)
+  let newBalance = 0;
+  if (rc.credit_amount_idr > 0) {
+    newBalance = await addCredit(userId, rc.credit_amount_idr, "redeem_code", {
+      code: rc.code, code_id: rc.id, description: rc.description,
+    });
+  } else {
+    // Just fetch current balance
+    const { data: prof } = await supabaseAdmin.from("profiles").select("credit_balance_idr").eq("id", userId).single();
+    newBalance = prof?.credit_balance_idr ?? 0;
+  }
+
+  // Grant tier if specified
+  let tierGranted: string | null = null;
+  let tierExpiresAt: string | null = null;
+  let bonusGranted = false;
+  let bonusAmount = 0;
+  if (rc.grant_tier && (rc.grant_tier === "plus" || rc.grant_tier === "pro")) {
+    const durationDays = rc.tier_duration_days ?? 30;
+    const { data: currentProfile } = await supabaseAdmin
+      .from("profiles")
+      .select("is_premium, premium_expires_at, tier")
+      .eq("id", userId)
+      .single();
+
+    // Extend existing expiry or start fresh
+    const now = new Date();
+    const currentExpiry = currentProfile?.premium_expires_at ? new Date(currentProfile.premium_expires_at) : null;
+    const baseDate = currentExpiry && currentExpiry > now ? currentExpiry : now;
+    const newExpiry = new Date(baseDate);
+    newExpiry.setDate(newExpiry.getDate() + durationDays);
+    tierExpiresAt = newExpiry.toISOString();
+
+    await supabaseAdmin.from("profiles").update({
+      tier: rc.grant_tier,
+      is_premium: true,
+      premium_expires_at: tierExpiresAt,
+    }).eq("id", userId);
+
+    tierGranted = rc.grant_tier;
+
+    if (rc.grant_tier_bonus) {
+      const result = await grantTierBonusOnce(userId, rc.grant_tier as Tier, { source: "redeem_code", code: rc.code });
+      bonusGranted = result.granted;
+      bonusAmount = result.amount;
+      if (bonusGranted) newBalance += bonusAmount;
+    }
+  }
 
   await supabaseAdmin.from("code_redemptions").insert({
-    code_id: rc.id, user_id: userId, credit_amount_idr: rc.credit_amount_idr,
+    code_id: rc.id, user_id: userId,
+    credit_amount_idr: rc.credit_amount_idr,
+    grant_tier: tierGranted,
   });
   await supabaseAdmin.from("redeem_codes")
     .update({ current_redemptions: rc.current_redemptions + 1 })
     .eq("id", rc.id);
 
-  console.log(`[Redeem] userId=${userId} code="${rc.code}" amount=${rc.credit_amount_idr} newBalance=${newBalance}`);
-  res.json({ ok: true, credit_added: rc.credit_amount_idr, new_balance_idr: newBalance, description: rc.description });
+  console.log(`[Redeem] userId=${userId} code="${rc.code}" credit=${rc.credit_amount_idr} tier=${tierGranted ?? "none"} newBalance=${newBalance}`);
+  res.json({
+    ok: true,
+    credit_added: rc.credit_amount_idr,
+    new_balance_idr: newBalance,
+    description: rc.description,
+    grant_tier: tierGranted,
+    tier_expires_at: tierExpiresAt,
+    tier_duration_days: rc.tier_duration_days ?? 30,
+    bonus_granted: bonusGranted,
+    bonus_amount: bonusAmount,
+  });
 });
 
 // ── GET /api/admin/redeem-codes ───────────────────────────────────────────────
@@ -882,24 +939,61 @@ app.get("/api/admin/redeem-codes", requireAuth, requireAdmin, async (_req, res) 
   res.json({ codes: data ?? [] });
 });
 
+// ── GET /api/admin/redeem-codes/:id/redemptions ───────────────────────────────
+app.get("/api/admin/redeem-codes/:id/redemptions", requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { data, error } = await supabaseAdmin
+    .from("code_redemptions")
+    .select("id, redeemed_at, credit_amount_idr, grant_tier, user_id")
+    .eq("code_id", id)
+    .order("redeemed_at", { ascending: false });
+  if (error) { res.status(500).json({ error: error.message }); return; }
+
+  // Enrich with profile info
+  const userIds = (data ?? []).map((r: any) => r.user_id);
+  let profileMap: Record<string, any> = {};
+  if (userIds.length > 0) {
+    const { data: profiles } = await supabaseAdmin
+      .from("profiles")
+      .select("id, full_name, email")
+      .in("id", userIds);
+    (profiles ?? []).forEach((p: any) => { profileMap[p.id] = p; });
+  }
+
+  const enriched = (data ?? []).map((r: any) => ({
+    ...r,
+    full_name: profileMap[r.user_id]?.full_name ?? null,
+    email: profileMap[r.user_id]?.email ?? null,
+  }));
+
+  res.json({ redemptions: enriched });
+});
+
 // ── POST /api/admin/redeem-codes ──────────────────────────────────────────────
 app.post("/api/admin/redeem-codes", requireAuth, requireAdmin, async (req, res) => {
   const userId = (req as any).userId;
-  const { code, description, credit_amount_idr, max_redemptions, expires_at } = req.body as {
+  const { code, description, credit_amount_idr, max_redemptions, expires_at, grant_tier, tier_duration_days, grant_tier_bonus } = req.body as {
     code?: string; description?: string; credit_amount_idr?: number;
     max_redemptions?: number | null; expires_at?: string | null;
+    grant_tier?: string | null; tier_duration_days?: number | null; grant_tier_bonus?: boolean;
   };
   if (!code?.trim()) { res.status(400).json({ error: "Kode wajib diisi." }); return; }
-  if (!credit_amount_idr || Number(credit_amount_idr) <= 0) {
-    res.status(400).json({ error: "Jumlah kredit harus lebih dari 0." }); return;
+  const creditAmt = Number(credit_amount_idr ?? 0);
+  if (creditAmt < 0) { res.status(400).json({ error: "Jumlah kredit tidak boleh negatif." }); return; }
+  if (creditAmt === 0 && !grant_tier) {
+    res.status(400).json({ error: "Kode harus memberikan kredit atau tier." }); return;
   }
+  const validGrantTier = grant_tier === "plus" || grant_tier === "pro" ? grant_tier : null;
   const { data, error } = await supabaseAdmin.from("redeem_codes").insert({
     code: code.trim().toUpperCase(),
     description: description?.trim() || null,
-    credit_amount_idr: Number(credit_amount_idr),
+    credit_amount_idr: creditAmt,
     max_redemptions: max_redemptions != null && max_redemptions !== 0 ? Number(max_redemptions) : null,
     expires_at: expires_at || null,
     created_by: userId,
+    grant_tier: validGrantTier,
+    tier_duration_days: validGrantTier ? (tier_duration_days ?? 30) : null,
+    grant_tier_bonus: validGrantTier ? !!grant_tier_bonus : false,
   }).select().single();
   if (error) {
     if (error.code === "23505") { res.status(409).json({ error: "Kode sudah dipakai. Gunakan nama lain." }); }
@@ -912,11 +1006,23 @@ app.post("/api/admin/redeem-codes", requireAuth, requireAdmin, async (req, res) 
 // ── PATCH /api/admin/redeem-codes/:id ────────────────────────────────────────
 app.patch("/api/admin/redeem-codes/:id", requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
+  const body = req.body as Record<string, any>;
   const updates: Record<string, any> = {};
-  if (typeof req.body.is_active === "boolean") updates.is_active = req.body.is_active;
-  if (req.body.description !== undefined) updates.description = req.body.description;
+  if (typeof body.is_active === "boolean") updates.is_active = body.is_active;
+  if (body.description !== undefined) updates.description = body.description ?? null;
+  if (body.code !== undefined) updates.code = String(body.code).trim().toUpperCase();
+  if (body.credit_amount_idr !== undefined) updates.credit_amount_idr = Number(body.credit_amount_idr);
+  if (body.max_redemptions !== undefined) updates.max_redemptions = body.max_redemptions != null && body.max_redemptions !== 0 ? Number(body.max_redemptions) : null;
+  if (body.expires_at !== undefined) updates.expires_at = body.expires_at || null;
+  if (body.grant_tier !== undefined) updates.grant_tier = body.grant_tier === "plus" || body.grant_tier === "pro" ? body.grant_tier : null;
+  if (body.tier_duration_days !== undefined) updates.tier_duration_days = body.tier_duration_days ? Number(body.tier_duration_days) : 30;
+  if (typeof body.grant_tier_bonus === "boolean") updates.grant_tier_bonus = body.grant_tier_bonus;
+  if (Object.keys(updates).length === 0) { res.json({ ok: true }); return; }
   const { error } = await supabaseAdmin.from("redeem_codes").update(updates).eq("id", id);
-  if (error) { res.status(500).json({ error: error.message }); return; }
+  if (error) {
+    if (error.code === "23505") { res.status(409).json({ error: "Kode sudah dipakai. Gunakan nama lain." }); return; }
+    res.status(500).json({ error: error.message }); return;
+  }
   res.json({ ok: true });
 });
 

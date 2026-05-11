@@ -2113,7 +2113,34 @@ type RedeemCode = {
   credit_amount_idr: number; max_redemptions: number | null;
   current_redemptions: number; expires_at: string | null;
   created_by: string | null; created_at: string; is_active: boolean;
+  grant_tier: "plus" | "pro" | null;
+  tier_duration_days: number | null;
+  grant_tier_bonus: boolean;
 };
+
+type Redemption = {
+  id: string; redeemed_at: string; credit_amount_idr: number;
+  grant_tier: string | null; user_id: string;
+  full_name: string | null; email: string | null;
+};
+
+type CodeForm = {
+  code: string; description: string; credit_amount_idr: string;
+  max_redemptions: string; expires_at: string;
+  grant_tier: "" | "plus" | "pro";
+  tier_duration_days: string;
+  grant_tier_bonus: boolean;
+};
+
+const EMPTY_FORM: CodeForm = {
+  code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "",
+  grant_tier: "", tier_duration_days: "30", grant_tier_bonus: false,
+};
+
+function genRandomCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  return Array.from({ length: 8 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
+}
 
 function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolean) => void }) {
   const [codes, setCodes] = useState<RedeemCode[]>([]);
@@ -2121,11 +2148,17 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
+  const [form, setForm] = useState<CodeForm>(EMPTY_FORM);
   const [creating, setCreating] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [editingCode, setEditingCode] = useState<RedeemCode | null>(null);
+  const [editForm, setEditForm] = useState<CodeForm>(EMPTY_FORM);
+  const [saving, setSaving] = useState(false);
+  const [viewingCode, setViewingCode] = useState<RedeemCode | null>(null);
+  const [redemptions, setRedemptions] = useState<Redemption[]>([]);
+  const [redemptionsLoading, setRedemptionsLoading] = useState(false);
 
   async function loadCodes(silent = false) {
     if (!silent) setLoading(true);
@@ -2151,7 +2184,11 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
   }, []);
 
   async function handleCreate() {
-    if (!form.code.trim() || !form.credit_amount_idr) return;
+    if (!form.code.trim()) return;
+    const creditAmt = Number(form.credit_amount_idr || 0);
+    if (creditAmt === 0 && !form.grant_tier) {
+      showToast("Masukkan kredit atau pilih tier yang akan diberikan.", false); return;
+    }
     setCreating(true);
     try {
       const h = await authHeader();
@@ -2160,21 +2197,89 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
         body: JSON.stringify({
           code: form.code.trim(),
           description: form.description.trim() || undefined,
-          credit_amount_idr: Number(form.credit_amount_idr),
+          credit_amount_idr: creditAmt,
           max_redemptions: form.max_redemptions ? Number(form.max_redemptions) : null,
           expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+          grant_tier: form.grant_tier || null,
+          tier_duration_days: form.grant_tier ? Number(form.tier_duration_days || 30) : null,
+          grant_tier_bonus: form.grant_tier ? form.grant_tier_bonus : false,
         }),
       });
       const d = await r.json();
       if (!r.ok) { showToast(d.error ?? "Gagal buat kode.", false); return; }
       showToast(`Kode "${form.code.toUpperCase()}" berhasil dibuat.`, true);
-      setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" });
+      setForm(EMPTY_FORM);
       setShowCreate(false);
       await loadCodes();
     } catch (e: any) {
       showToast(e.message ?? "Terjadi kesalahan.", false);
     } finally {
       setCreating(false);
+    }
+  }
+
+  function openEdit(rc: RedeemCode) {
+    setEditForm({
+      code: rc.code,
+      description: rc.description ?? "",
+      credit_amount_idr: String(rc.credit_amount_idr),
+      max_redemptions: rc.max_redemptions != null ? String(rc.max_redemptions) : "",
+      expires_at: rc.expires_at ? rc.expires_at.slice(0, 16) : "",
+      grant_tier: (rc.grant_tier as "" | "plus" | "pro") ?? "",
+      tier_duration_days: String(rc.tier_duration_days ?? 30),
+      grant_tier_bonus: rc.grant_tier_bonus ?? false,
+    });
+    setEditingCode(rc);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingCode || !editForm.code.trim()) return;
+    const creditAmt = Number(editForm.credit_amount_idr || 0);
+    if (creditAmt < 0) { showToast("Kredit tidak boleh negatif.", false); return; }
+    if (creditAmt === 0 && !editForm.grant_tier) {
+      showToast("Kode harus memberikan kredit atau tier.", false); return;
+    }
+    setSaving(true);
+    try {
+      const h = await authHeader();
+      const r = await fetch(`/api/admin/redeem-codes/${editingCode.id}`, {
+        method: "PATCH", headers: h,
+        body: JSON.stringify({
+          code: editForm.code.trim(),
+          description: editForm.description.trim() || null,
+          credit_amount_idr: creditAmt,
+          max_redemptions: editForm.max_redemptions ? Number(editForm.max_redemptions) : null,
+          expires_at: editForm.expires_at ? new Date(editForm.expires_at).toISOString() : null,
+          grant_tier: editForm.grant_tier || null,
+          tier_duration_days: editForm.grant_tier ? Number(editForm.tier_duration_days || 30) : null,
+          grant_tier_bonus: editForm.grant_tier ? editForm.grant_tier_bonus : false,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) { showToast(d.error ?? "Gagal menyimpan.", false); return; }
+      showToast("Kode berhasil diperbarui.", true);
+      setEditingCode(null);
+      await loadCodes();
+    } catch (e: any) {
+      showToast(e.message ?? "Terjadi kesalahan.", false);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function openViewRedemptions(rc: RedeemCode) {
+    setViewingCode(rc);
+    setRedemptions([]);
+    setRedemptionsLoading(true);
+    try {
+      const h = await authHeader();
+      const r = await fetch(`/api/admin/redeem-codes/${rc.id}/redemptions`, { headers: h });
+      const d = await r.json();
+      setRedemptions(d.redemptions ?? []);
+    } catch (e) {
+      console.error("[openViewRedemptions]", e);
+    } finally {
+      setRedemptionsLoading(false);
     }
   }
 
@@ -2207,6 +2312,69 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
 
   const fmtDate = (s: string | null) => s ? new Date(s).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" }) : "—";
 
+  function TierFormFields({ f, setF }: { f: CodeForm; setF: (fn: (prev: CodeForm) => CodeForm) => void }) {
+    return (
+      <>
+        <div className="space-y-1.5">
+          <label className="text-xs text-muted-foreground font-medium">Grant Tier <span className="opacity-60">(opsional)</span></label>
+          <Select value={f.grant_tier} onValueChange={(v) => setF((p) => ({ ...p, grant_tier: v as CodeForm["grant_tier"] }))}>
+            <SelectTrigger className="text-sm"><SelectValue placeholder="Tidak ada" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Tidak ada (kredit saja)</SelectItem>
+              <SelectItem value="plus">Plus</SelectItem>
+              <SelectItem value="pro">Pro</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        {f.grant_tier && (
+          <>
+            <div className="space-y-1.5">
+              <label className="text-xs text-muted-foreground font-medium">Durasi (hari)</label>
+              <Input
+                type="number" placeholder="30" min={1}
+                value={f.tier_duration_days}
+                onChange={(e) => setF((p) => ({ ...p, tier_duration_days: e.target.value }))}
+                className="text-sm"
+              />
+            </div>
+            <div className="sm:col-span-2 flex items-center gap-2.5 p-3 rounded-lg bg-muted/40 border border-border">
+              <input
+                id="grant_tier_bonus"
+                type="checkbox"
+                checked={f.grant_tier_bonus}
+                onChange={(e) => setF((p) => ({ ...p, grant_tier_bonus: e.target.checked }))}
+                className="w-4 h-4 accent-primary"
+              />
+              <label htmlFor="grant_tier_bonus" className="text-xs text-muted-foreground cursor-pointer">
+                <span className="font-medium text-foreground">Beri bonus upgrade</span>
+                {" "}— kredit bonus tier sekali (idempotent): Plus Rp 45.000 / Pro Rp 100.000
+              </label>
+            </div>
+          </>
+        )}
+      </>
+    );
+  }
+
+  function CodePreview({ f }: { f: CodeForm }) {
+    if (!f.code) return null;
+    const credit = Number(f.credit_amount_idr || 0);
+    const hasContent = credit > 0 || f.grant_tier;
+    if (!hasContent) return null;
+    return (
+      <div className="sm:col-span-2 rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-xs text-muted-foreground">
+        Kode <code className="font-mono font-semibold text-foreground">{f.code}</code> akan memberikan
+        {credit > 0 && <> <strong className="text-green-600">{formatIDR(credit)}</strong> kredit</>}
+        {credit > 0 && f.grant_tier && " +"}
+        {f.grant_tier && (
+          <> akses <strong className={f.grant_tier === "pro" ? "text-purple-600" : "text-blue-600"}>{f.grant_tier === "pro" ? "Pro" : "Plus"}</strong> selama {f.tier_duration_days || 30} hari</>
+        )}
+        {f.max_redemptions ? ` ke maks ${f.max_redemptions} pengguna` : " ke pengguna tak terbatas"}
+        {f.expires_at ? ` hingga ${new Date(f.expires_at).toLocaleDateString("id-ID")}` : ""}.
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -2223,7 +2391,7 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Buat & kelola kode untuk membagikan kredit kepada pengguna.
+            Buat & kelola kode untuk membagikan kredit atau akses tier kepada pengguna.
             {lastUpdated && (
               <span className="ml-1.5">
                 · Diperbarui {lastUpdated.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
@@ -2242,7 +2410,7 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
             <RefreshCw className={cn("w-4 h-4", refreshing && "animate-spin")} />
           </button>
           <button
-            onClick={() => { setShowCreate(true); setForm({ code: "", description: "", credit_amount_idr: "", max_redemptions: "", expires_at: "" }); }}
+            onClick={() => { setForm(EMPTY_FORM); setShowCreate(true); }}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
           >
             <Plus className="w-4 h-4" />
@@ -2251,36 +2419,49 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
         </div>
       </div>
 
-      {/* Create Dialog */}
+      {/* ── Create Dialog ── */}
       <Dialog open={showCreate} onOpenChange={(o) => { if (!creating) setShowCreate(o); }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Gift className="w-4 h-4 text-primary" /> Buat Kode Baru
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-1">
+          <div className="space-y-3 py-1">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Kode */}
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground font-medium">Kode *</label>
-                <Input
-                  placeholder="WELCOME2024"
-                  value={form.code}
-                  onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
-                  className="text-sm font-mono tracking-wider"
-                />
+                <div className="flex gap-1.5">
+                  <Input
+                    placeholder="WELCOME2025"
+                    value={form.code}
+                    onChange={(e) => setForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
+                    className="text-sm font-mono tracking-wider"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setForm((f) => ({ ...f, code: genRandomCode() }))}
+                    className="px-2 py-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-accent transition-colors text-xs whitespace-nowrap"
+                    title="Generate acak"
+                  >
+                    Acak
+                  </button>
+                </div>
               </div>
+              {/* Kredit */}
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-medium">Kredit (IDR) *</label>
+                <label className="text-xs text-muted-foreground font-medium">Kredit (IDR) <span className="opacity-60">(0 jika tier-only)</span></label>
                 <Input
-                  type="number" placeholder="50000" min={1}
+                  type="number" placeholder="50000" min={0}
                   value={form.credit_amount_idr}
                   onChange={(e) => setForm((f) => ({ ...f, credit_amount_idr: e.target.value }))}
                   className="text-sm"
                 />
               </div>
+              {/* Maks pengguna */}
               <div className="space-y-1.5">
-                <label className="text-xs text-muted-foreground font-medium">Maks Pengguna <span className="opacity-60">(kosong = tak terbatas)</span></label>
+                <label className="text-xs text-muted-foreground font-medium">Maks Pengguna <span className="opacity-60">(kosong = ∞)</span></label>
                 <Input
                   type="number" placeholder="100" min={1}
                   value={form.max_redemptions}
@@ -2288,6 +2469,7 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                   className="text-sm"
                 />
               </div>
+              {/* Kedaluwarsa */}
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
                   <Calendar className="w-3 h-3" /> Kedaluwarsa <span className="opacity-60">(opsional)</span>
@@ -2299,8 +2481,11 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                   className="text-sm"
                 />
               </div>
+              {/* Tier fields */}
+              <TierFormFields f={form} setF={setForm} />
+              {/* Deskripsi */}
               <div className="sm:col-span-2 space-y-1.5">
-                <label className="text-xs text-muted-foreground font-medium">Deskripsi internal <span className="opacity-60">(opsional, tidak dilihat user)</span></label>
+                <label className="text-xs text-muted-foreground font-medium">Deskripsi internal <span className="opacity-60">(tidak dilihat user)</span></label>
                 <Input
                   placeholder="Misal: Kampanye Ramadan 2025"
                   value={form.description}
@@ -2308,28 +2493,17 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                   className="text-sm"
                 />
               </div>
+              <CodePreview f={form} />
             </div>
-
-            {form.code && form.credit_amount_idr && (
-              <div className="rounded-lg bg-primary/5 border border-primary/20 px-3 py-2.5 text-xs text-muted-foreground">
-                Kode <code className="font-mono font-semibold text-foreground">{form.code}</code> akan memberikan{" "}
-                <strong className="text-green-600">{formatIDR(Number(form.credit_amount_idr))}</strong> kredit
-                {form.max_redemptions ? ` ke maks ${form.max_redemptions} pengguna` : " ke pengguna tak terbatas"}
-                {form.expires_at ? ` hingga ${new Date(form.expires_at).toLocaleDateString("id-ID")}` : ""}.
-              </div>
-            )}
           </div>
           <DialogFooter className="gap-2">
-            <button
-              onClick={() => setShowCreate(false)}
-              disabled={creating}
-              className="px-4 py-2 rounded-lg text-sm border border-border hover:bg-accent transition-colors disabled:opacity-50"
-            >
+            <button onClick={() => setShowCreate(false)} disabled={creating}
+              className="px-4 py-2 rounded-lg text-sm border border-border hover:bg-accent transition-colors disabled:opacity-50">
               Batal
             </button>
             <button
               onClick={handleCreate}
-              disabled={creating || !form.code.trim() || !form.credit_amount_idr}
+              disabled={creating || !form.code.trim()}
               className="px-4 py-2 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
             >
               {creating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
@@ -2339,7 +2513,156 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
         </DialogContent>
       </Dialog>
 
-      {/* List */}
+      {/* ── Edit Dialog ── */}
+      <Dialog open={!!editingCode} onOpenChange={(o) => { if (!saving && !o) setEditingCode(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" /> Edit Kode
+              {editingCode && <code className="ml-1 font-mono text-sm text-muted-foreground">{editingCode.code}</code>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Kode *</label>
+                <Input
+                  placeholder="WELCOME2025"
+                  value={editForm.code}
+                  onChange={(e) => setEditForm((f) => ({ ...f, code: e.target.value.toUpperCase().replace(/\s/g, "") }))}
+                  className="text-sm font-mono tracking-wider"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Kredit (IDR)</label>
+                <Input
+                  type="number" placeholder="50000" min={0}
+                  value={editForm.credit_amount_idr}
+                  onChange={(e) => setEditForm((f) => ({ ...f, credit_amount_idr: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Maks Pengguna <span className="opacity-60">(kosong = ∞)</span></label>
+                <Input
+                  type="number" placeholder="100" min={1}
+                  value={editForm.max_redemptions}
+                  onChange={(e) => setEditForm((f) => ({ ...f, max_redemptions: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                  <Calendar className="w-3 h-3" /> Kedaluwarsa
+                </label>
+                <Input
+                  type="datetime-local"
+                  value={editForm.expires_at}
+                  onChange={(e) => setEditForm((f) => ({ ...f, expires_at: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <TierFormFields f={editForm} setF={setEditForm} />
+              <div className="sm:col-span-2 space-y-1.5">
+                <label className="text-xs text-muted-foreground font-medium">Deskripsi internal</label>
+                <Input
+                  placeholder="Misal: Kampanye Ramadan 2025"
+                  value={editForm.description}
+                  onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))}
+                  className="text-sm"
+                />
+              </div>
+              <CodePreview f={editForm} />
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <button onClick={() => setEditingCode(null)} disabled={saving}
+              className="px-4 py-2 rounded-lg text-sm border border-border hover:bg-accent transition-colors disabled:opacity-50">
+              Batal
+            </button>
+            <button
+              onClick={handleSaveEdit}
+              disabled={saving || !editForm.code.trim()}
+              className="px-4 py-2 rounded-lg text-sm bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+              Simpan Perubahan
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Redemptions Modal ── */}
+      <Dialog open={!!viewingCode} onOpenChange={(o) => { if (!o) setViewingCode(null); }}>
+        <DialogContent className="max-w-xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="w-4 h-4 text-primary" /> Siapa yang Memakai
+              {viewingCode && <code className="ml-1 font-mono text-sm text-muted-foreground">{viewingCode.code}</code>}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="overflow-y-auto flex-1 -mx-1 px-1">
+            {redemptionsLoading ? (
+              <div className="flex items-center justify-center py-12 gap-2 text-muted-foreground text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" /> Memuat...
+              </div>
+            ) : redemptions.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-2">
+                <Users className="w-8 h-8 opacity-20" />
+                <p className="text-sm">Belum ada yang memakai kode ini.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-xl border border-border">
+                <table className="w-full text-sm min-w-[400px]">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/40">
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Pengguna</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Kredit</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Tier</th>
+                      <th className="text-left px-3 py-2 text-xs font-medium text-muted-foreground">Waktu</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {redemptions.map((r) => (
+                      <tr key={r.id} className="hover:bg-muted/20 transition-colors">
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-xs">{r.full_name ?? "—"}</p>
+                          <p className="text-[11px] text-muted-foreground">{r.email ?? r.user_id.slice(0, 12) + "..."}</p>
+                        </td>
+                        <td className="px-3 py-2.5 font-semibold text-green-600 text-xs whitespace-nowrap">
+                          {r.credit_amount_idr > 0 ? formatIDR(r.credit_amount_idr) : "—"}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          {r.grant_tier ? (
+                            <span className={cn(
+                              "text-[10px] px-2 py-0.5 rounded-full font-semibold",
+                              r.grant_tier === "pro" ? "bg-purple-500/10 text-purple-600" : "bg-blue-500/10 text-blue-600"
+                            )}>
+                              {r.grant_tier === "pro" ? "Pro" : "Plus"}
+                            </span>
+                          ) : <span className="text-muted-foreground/50 text-xs">—</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground text-[11px] whitespace-nowrap">{fmtDate(r.redeemed_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <p className="text-xs text-muted-foreground mr-auto">
+              {!redemptionsLoading && `${redemptions.length} pengguna`}
+            </p>
+            <button onClick={() => setViewingCode(null)}
+              className="px-4 py-2 rounded-lg text-sm border border-border hover:bg-accent transition-colors">
+              Tutup
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── List ── */}
       {loading ? (
         <div className="flex items-center justify-center py-16 text-muted-foreground gap-2 text-sm">
           <Loader2 className="w-4 h-4 animate-spin" /> Memuat...
@@ -2350,14 +2673,14 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
           <p className="text-sm">Belum ada kode redeem. Klik &quot;Buat Kode&quot; untuk mulai.</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border overflow-hidden">
-          <table className="w-full text-sm min-w-[600px]">
+        <div className="rounded-xl border border-border overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border bg-muted/40">
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kode</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kredit</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kredit / Tier</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Dipakai</th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Kedaluwarsa</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground hidden sm:table-cell">Kedaluwarsa</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-muted-foreground">Status</th>
                 <th className="px-4 py-2.5 text-xs font-medium text-muted-foreground text-right">Aksi</th>
               </tr>
@@ -2367,8 +2690,9 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                 const status = getStatus(rc);
                 return (
                   <tr key={rc.id} className="hover:bg-muted/20 transition-colors">
+                    {/* Kode */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <code className="font-mono font-semibold tracking-wider text-sm">{rc.code}</code>
                         <button
                           onClick={() => { navigator.clipboard.writeText(rc.code); showToast("Kode disalin!", true); }}
@@ -2379,26 +2703,66 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                         </button>
                       </div>
                       {rc.description && (
-                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-[200px] truncate">{rc.description}</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5 max-w-[180px] truncate">{rc.description}</p>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-semibold text-green-600 whitespace-nowrap">{formatIDR(rc.credit_amount_idr)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      <span>{rc.current_redemptions}</span>
-                      <span className="text-muted-foreground/50">/{rc.max_redemptions !== null ? rc.max_redemptions : "∞"}</span>
+                    {/* Kredit / Tier */}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-0.5">
+                        {rc.credit_amount_idr > 0 && (
+                          <span className="font-semibold text-green-600 whitespace-nowrap text-xs">{formatIDR(rc.credit_amount_idr)}</span>
+                        )}
+                        {rc.grant_tier && (
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-semibold w-fit",
+                            rc.grant_tier === "pro" ? "bg-purple-500/10 text-purple-600" : "bg-blue-500/10 text-blue-600"
+                          )}>
+                            {rc.grant_tier === "pro" ? "Pro" : "Plus"} {rc.tier_duration_days ?? 30}h
+                          </span>
+                        )}
+                        {rc.credit_amount_idr === 0 && !rc.grant_tier && (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </div>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap">
+                    {/* Dipakai — clickable jika ada */}
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => openViewRedemptions(rc)}
+                        className="flex items-center gap-1 text-muted-foreground hover:text-primary transition-colors group"
+                        title="Lihat siapa yang memakai"
+                      >
+                        <span className="group-hover:underline">
+                          {rc.current_redemptions}
+                          <span className="text-muted-foreground/50">/{rc.max_redemptions !== null ? rc.max_redemptions : "∞"}</span>
+                        </span>
+                        {rc.current_redemptions > 0 && <Eye className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />}
+                      </button>
+                    </td>
+                    {/* Kedaluwarsa (hidden on mobile) */}
+                    <td className="px-4 py-3 text-muted-foreground text-xs whitespace-nowrap hidden sm:table-cell">
                       <div className="flex items-center gap-1">
                         {rc.expires_at ? <><Clock className="w-3 h-3 shrink-0" />{fmtDate(rc.expires_at)}</> : "—"}
                       </div>
                     </td>
+                    {/* Status */}
                     <td className="px-4 py-3">
                       <span className={cn("text-[11px] px-2 py-0.5 rounded-full font-medium", status.color)}>
                         {status.label}
                       </span>
                     </td>
+                    {/* Aksi */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5 justify-end">
+                      <div className="flex items-center gap-1.5 justify-end flex-wrap">
+                        {/* Edit */}
+                        <button
+                          onClick={() => openEdit(rc)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
+                          title="Edit kode"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        {/* Toggle aktif */}
                         <button
                           onClick={() => handleToggleActive(rc)}
                           disabled={togglingId === rc.id}
@@ -2414,6 +2778,7 @@ function SectionRedeemCodes({ showToast }: { showToast: (msg: string, ok: boolea
                             : rc.is_active ? "Nonaktifkan" : "Aktifkan"
                           }
                         </button>
+                        {/* Hapus */}
                         {confirmDeleteId === rc.id ? (
                           <div className="flex items-center gap-1">
                             <button

@@ -123,7 +123,11 @@ export default function Settings() {
   const [redeemCode, setRedeemCode] = useState("");
   const [redeemLoading, setRedeemLoading] = useState(false);
   const [redeemError, setRedeemError] = useState<string | null>(null);
-  const [redeemResult, setRedeemResult] = useState<{ new_balance_idr: number; credit_added: number } | null>(null);
+  const [redeemResult, setRedeemResult] = useState<{
+    new_balance_idr: number; credit_added: number;
+    grant_tier?: string | null; tier_expires_at?: string | null;
+    tier_duration_days?: number; bonus_granted?: boolean; bonus_amount?: number;
+  } | null>(null);
 
   type Period = "this_month" | "last_month" | "3_months" | "6_months";
   const PERIODS: { value: Period; label: string }[] = [
@@ -1253,13 +1257,39 @@ export default function Settings() {
             >
               {redeemResult ? (
                 <div className="flex flex-col items-center gap-3 py-2 text-center">
-                  <div className="w-14 h-14 rounded-full bg-green-500/10 flex items-center justify-center">
-                    <PartyPopper className="w-7 h-7 text-green-500" />
+                  <div className={`w-14 h-14 rounded-full flex items-center justify-center ${redeemResult.grant_tier === "pro" ? "bg-purple-500/10" : "bg-green-500/10"}`}>
+                    <PartyPopper className={`w-7 h-7 ${redeemResult.grant_tier === "pro" ? "text-purple-500" : "text-green-500"}`} />
                   </div>
-                  <p className="text-lg font-bold text-foreground">Kredit Berhasil!</p>
-                  <p className="text-sm text-muted-foreground">
-                    <span className="text-green-500 font-semibold">+Rp {redeemResult.credit_added.toLocaleString("id-ID")}</span> kredit ditambahkan ke akunmu.
-                  </p>
+                  <p className="text-lg font-bold text-foreground">Berhasil!</p>
+
+                  {/* Credit row */}
+                  {redeemResult.credit_added > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      <span className="text-green-500 font-semibold">+Rp {redeemResult.credit_added.toLocaleString("id-ID")}</span> kredit ditambahkan ke akunmu.
+                    </p>
+                  )}
+
+                  {/* Tier grant row */}
+                  {redeemResult.grant_tier && (
+                    <div className={`w-full rounded-xl px-4 py-3 text-sm font-medium ${redeemResult.grant_tier === "pro" ? "bg-purple-500/10 text-purple-600" : "bg-blue-500/10 text-blue-600"}`}>
+                      Akses <strong>{redeemResult.grant_tier === "pro" ? "Pro" : "Plus"}</strong> aktif selama{" "}
+                      <strong>{redeemResult.tier_duration_days ?? 30} hari</strong>
+                      {redeemResult.tier_expires_at && (
+                        <span className="block text-xs mt-0.5 opacity-80">
+                          Hingga {new Date(redeemResult.tier_expires_at).toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" })}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Bonus row */}
+                  {redeemResult.bonus_granted && redeemResult.bonus_amount && redeemResult.bonus_amount > 0 && (
+                    <p className="text-xs text-muted-foreground">
+                      Termasuk bonus upgrade{" "}
+                      <span className="text-green-500 font-semibold">+Rp {redeemResult.bonus_amount.toLocaleString("id-ID")}</span>
+                    </p>
+                  )}
+
                   <p className="text-xs text-muted-foreground">
                     Saldo sekarang:{" "}
                     <span className="text-foreground font-semibold">Rp {redeemResult.new_balance_idr.toLocaleString("id-ID")}</span>
