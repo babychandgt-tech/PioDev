@@ -422,28 +422,27 @@ export function useChat(userId: string | undefined) {
         // Lanjut coba insert saja — mungkin session masih valid di cookie
       }
 
-      let newConvo: any = null;
+      // Generate UUID client-side — avoids .select().single() after insert which triggers
+      // PGRST102 when Supabase RLS SELECT policy doesn't return the new row immediately.
+      const newChatId = uuidv4();
       let convInsertError: any = null;
       try {
         const result = await supabase
           .from("conversations")
-          .insert({ user_id: userId, title: fallbackTitle })
-          .select()
-          .single();
-        newConvo = result.data;
+          .insert({ id: newChatId, user_id: userId, title: fallbackTitle });
         convInsertError = result.error;
       } catch (fetchErr: any) {
         // Supabase bisa throw NetworkError jika koneksi putus
         convInsertError = { message: fetchErr?.message ?? "Network error" };
       }
 
-      if (convInsertError || !newConvo) {
-        const errMsg = convInsertError?.message ?? "data null";
+      if (convInsertError) {
+        const errMsg = convInsertError?.message ?? "Unknown error";
         const errCode = convInsertError?.code ?? "";
         console.error("[PioCode] Gagal membuat percakapan baru:", errMsg, errCode, convInsertError?.details, convInsertError?.hint);
         throw new Error(`CONV_FAILED:${errCode ? `[${errCode}] ` : ""}${errMsg}`);
       }
-      chatId = newConvo.id;
+      chatId = newChatId;
       setChats((prev) => [{ id: chatId!, title: fallbackTitle, updatedAt: new Date(), messages: [] }, ...prev]);
       setActiveChatId(chatId);
     }
