@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import {
   LifeBuoy, MessageSquare, ImageIcon, Video, Mic, Library,
   CreditCard, Shield, Key, Search, ChevronDown, ChevronUp,
-  ArrowLeft, Mail,
+  ArrowLeft, Mail, ArrowRight,
 } from "lucide-react";
 
 type Faq = { q: string; a: string };
@@ -17,15 +17,15 @@ type Category = {
 };
 
 const ICON_MAP: Record<string, React.ReactNode> = {
-  LifeBuoy: <LifeBuoy className="w-5 h-5" />,
-  MessageSquare: <MessageSquare className="w-5 h-5" />,
-  ImageIcon: <ImageIcon className="w-5 h-5" />,
-  Video: <Video className="w-5 h-5" />,
-  Mic: <Mic className="w-5 h-5" />,
-  Library: <Library className="w-5 h-5" />,
-  CreditCard: <CreditCard className="w-5 h-5" />,
-  Shield: <Shield className="w-5 h-5" />,
-  Key: <Key className="w-5 h-5" />,
+  LifeBuoy: <LifeBuoy className="w-4 h-4" />,
+  MessageSquare: <MessageSquare className="w-4 h-4" />,
+  ImageIcon: <ImageIcon className="w-4 h-4" />,
+  Video: <Video className="w-4 h-4" />,
+  Mic: <Mic className="w-4 h-4" />,
+  Library: <Library className="w-4 h-4" />,
+  CreditCard: <CreditCard className="w-4 h-4" />,
+  Shield: <Shield className="w-4 h-4" />,
+  Key: <Key className="w-4 h-4" />,
 };
 
 function AccordionItem({ faq, isOpen, onToggle }: { faq: Faq; isOpen: boolean; onToggle: () => void }) {
@@ -80,7 +80,10 @@ export default function HelpCenterPage() {
     });
   };
 
+  const isFiltered = !!searchQuery.trim() || activeCategory !== "Semua";
+
   const filteredCategories = useMemo(() => {
+    if (!isFiltered) return [];
     const q = searchQuery.trim().toLowerCase();
     return categories
       .filter((cat) => activeCategory === "Semua" || cat.category === activeCategory)
@@ -91,7 +94,7 @@ export default function HelpCenterPage() {
           : cat.faqs,
       }))
       .filter((cat) => cat.faqs.length > 0);
-  }, [categories, searchQuery, activeCategory]);
+  }, [categories, searchQuery, activeCategory, isFiltered]);
 
   const totalFaqs = categories.reduce((s, c) => s + c.faqs.length, 0);
   const matchCount = filteredCategories.reduce((s, c) => s + c.faqs.length, 0);
@@ -135,39 +138,49 @@ export default function HelpCenterPage() {
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-muted/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 text-sm transition-all placeholder:text-muted-foreground/60"
             />
           </div>
+
+          {/* Contact link — always visible right below search */}
+          <p className="mt-3 text-sm text-muted-foreground">
+            Belum ketemu jawabannya?{" "}
+            <a
+              href="mailto:support@piocode.id"
+              className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+            >
+              Hubungi dukungan
+              <ArrowRight className="w-3.5 h-3.5" />
+            </a>
+          </p>
         </div>
 
         {/* Category chips */}
-        {!searchQuery && (
-          <div className="flex flex-wrap gap-2 justify-center mb-8">
+        <div className="flex flex-wrap gap-2 justify-center mb-8">
+          <button
+            onClick={() => { setActiveCategory("Semua"); setSearchQuery(""); }}
+            className={cn(
+              "px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
+              activeCategory === "Semua" && !searchQuery
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:bg-muted hover:text-foreground"
+            )}
+          >
+            Semua
+          </button>
+          {categories.map((cat) => (
             <button
-              onClick={() => setActiveCategory("Semua")}
+              key={cat.category}
+              onClick={() => { setActiveCategory(cat.category); setSearchQuery(""); }}
               className={cn(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
-                activeCategory === "Semua"
+                "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
+                activeCategory === cat.category && !searchQuery
                   ? "bg-primary text-primary-foreground border-primary"
                   : "bg-transparent text-muted-foreground border-border hover:bg-muted hover:text-foreground"
               )}
             >
-              Semua
+              <span className="[&>svg]:w-3.5 [&>svg]:h-3.5">{ICON_MAP[cat.icon]}</span>
+              {cat.category}
             </button>
-            {categories.map((cat) => (
-              <button
-                key={cat.category}
-                onClick={() => setActiveCategory(cat.category)}
-                className={cn(
-                  "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
-                  activeCategory === cat.category
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-transparent text-muted-foreground border-border hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <span className="[&>svg]:w-3.5 [&>svg]:h-3.5">{ICON_MAP[cat.icon]}</span>
-                {cat.category}
-              </button>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
 
         {/* FAQ list */}
         {isLoading ? (
@@ -176,11 +189,33 @@ export default function HelpCenterPage() {
               <div key={i} className="h-14 rounded-xl bg-muted animate-pulse" />
             ))}
           </div>
+        ) : !isFiltered ? (
+          /* Default state — nothing selected yet */
+          <div className="text-center py-16">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-muted mb-4">
+              <Search className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-foreground">Pilih kategori atau cari pertanyaan</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Gunakan chip di atas untuk menelusuri topik yang kamu butuhkan.
+            </p>
+          </div>
         ) : filteredCategories.length === 0 ? (
-          <div className="text-center py-20">
-            <Search className="w-10 h-10 text-muted-foreground/30 mx-auto mb-3" />
+          <div className="text-center py-16">
+            <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-muted mb-4">
+              <Mail className="w-5 h-5 text-muted-foreground" />
+            </div>
             <p className="font-medium text-foreground">Tidak ada hasil untuk "{searchQuery}"</p>
-            <p className="text-sm text-muted-foreground mt-1">Coba kata kunci lain atau pilih kategori berbeda.</p>
+            <p className="text-sm text-muted-foreground mt-1 mb-4">
+              Coba kata kunci lain, atau hubungi tim kami langsung.
+            </p>
+            <a
+              href="mailto:support@piocode.id"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              Hubungi Dukungan
+            </a>
           </div>
         ) : (
           <div className="space-y-10">
@@ -215,22 +250,6 @@ export default function HelpCenterPage() {
             ))}
           </div>
         )}
-
-        {/* Contact footer */}
-        <div className="mt-16 rounded-2xl border border-border bg-muted/20 p-8 text-center">
-          <Mail className="w-8 h-8 text-muted-foreground mx-auto mb-3" />
-          <h3 className="font-semibold text-lg mb-1">Masih ada pertanyaan?</h3>
-          <p className="text-sm text-muted-foreground mb-4">
-            Tidak menemukan jawaban yang kamu cari? Tim kami siap membantu.
-          </p>
-          <a
-            href="mailto:support@piocode.id"
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-          >
-            <Mail className="w-4 h-4" />
-            Hubungi Dukungan
-          </a>
-        </div>
       </div>
     </div>
   );
