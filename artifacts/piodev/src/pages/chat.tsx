@@ -913,8 +913,8 @@ export default function ChatPage() {
                 >
                   {msg.role === "user" ? (
                     <>
-                      <div className="flex items-end gap-3 max-w-[75%]">
-                        <div className="flex flex-col gap-2 items-end">
+                      <div className="flex items-end gap-3 max-w-[75%] min-w-0">
+                        <div className="flex flex-col gap-2 items-end min-w-0">
                           {/* Multiple images */}
                           {msg.imageUrls && msg.imageUrls.length > 0 && (
                             <div className="flex flex-wrap gap-2 justify-end">
@@ -940,7 +940,7 @@ export default function ChatPage() {
                             </div>
                           )}
                           {msg.content && (
-                            <div className="px-5 py-3 rounded-2xl rounded-br-sm bg-primary text-primary-foreground text-[15px] whitespace-pre-wrap leading-relaxed shadow-sm">
+                            <div className="px-5 py-3 rounded-2xl rounded-br-sm bg-primary text-primary-foreground text-[15px] whitespace-pre-wrap leading-relaxed shadow-sm break-words overflow-hidden w-full">
                               {msg.content}
                             </div>
                           )}
