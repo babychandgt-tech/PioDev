@@ -57,6 +57,7 @@ COOLIFY_API_URL = "http://20.212.54.127:8000"
 COOLIFY_BASE_DOMAIN = "app.pio.codes"
 GITHUB_WEBHOOK_SECRET = "82b7d349f5a715bc72e149e2860e94c0605337a9247c7de3e7caefca29bea898"
 SITE_URL = "https://pio.codes"
+SUPABASE_URL = "postgresql://postgres.rxhjvkzosbpusinydxlu:%40Avionika27@aws-1-ap-northeast-2.pooler.supabase.com:6543/postgres"
 
 [nix]
 channel = "stable-25_05"
