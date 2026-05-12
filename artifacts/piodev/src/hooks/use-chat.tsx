@@ -432,13 +432,16 @@ export function useChat(userId: string | undefined) {
       timestamp: new Date(),
     };
 
-    let currentMessages: Message[] = [];
+    // Compute currentMessages directly — DO NOT rely on setState updater side effects.
+    // For a brand-new chat the prior messages are always [] (just created).
+    // For an existing chat, read directly from the captured `chats` snapshot.
+    const priorMessages = isNewChat ? [] : (chats.find((c) => c.id === chatId)?.messages ?? []);
+    const currentMessages: Message[] = [...priorMessages, userMessage];
+
     setChats((prev) =>
       prev.map((c) => {
         if (c.id !== chatId) return c;
-        const updated = { ...c, updatedAt: new Date(), messages: [...c.messages, userMessage] };
-        currentMessages = updated.messages;
-        return updated;
+        return { ...c, updatedAt: new Date(), messages: [...c.messages, userMessage] };
       })
     );
 
@@ -803,7 +806,7 @@ export function useChat(userId: string | undefined) {
       setIsTyping(false);
       abortControllerRef.current = null;
     }
-  }, [activeChatId, userId]);
+  }, [activeChatId, userId, chats]);
 
   const stopGeneration = useCallback(() => {
     abortControllerRef.current?.abort();
