@@ -155,6 +155,7 @@ export default function ChatPage() {
   // Multi-attachment state
   const [attachedImages, setAttachedImages] = useState<string[]>([]);
   const [attachedFiles, setAttachedFiles] = useState<{ name: string; content: string }[]>([]);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   // Voice mode (telponan dengan AI) — fullscreen overlay
   const [voiceModeOpen, setVoiceModeOpen] = useState(false);
@@ -451,18 +452,37 @@ export default function ChatPage() {
     // Plain text → biarkan browser paste ke textarea
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if ((!input.trim() && !attachedImages.length && !attachedFiles.length) || isTyping) return;
-    sendMessage(
-      input.trim(),
-      attachedImages.length ? attachedImages : undefined,
-      attachedFiles.length ? attachedFiles : undefined,
-      { webSearch: webSearchEnabled, thinking: thinkingEnabled, modelTier },
-    );
+    setSendError(null);
+
+    const savedInput = input.trim();
+    const savedImages = [...attachedImages];
+    const savedFiles = [...attachedFiles];
+
     setInput("");
     setAttachedImages([]);
     setAttachedFiles([]);
     if (textareaRef.current) textareaRef.current.style.height = "auto";
+
+    try {
+      await sendMessage(
+        savedInput,
+        savedImages.length ? savedImages : undefined,
+        savedFiles.length ? savedFiles : undefined,
+        { webSearch: webSearchEnabled, thinking: thinkingEnabled, modelTier },
+      );
+    } catch (err: any) {
+      console.error("[PioCode] handleSend error:", err?.message, err);
+      setInput(savedInput);
+      setAttachedImages(savedImages);
+      setAttachedFiles(savedFiles);
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+        textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
+      }
+      setSendError("Gagal mengirim pesan. Coba lagi.");
+    }
   };
 
   const hasAttachments = attachedImages.length > 0 || attachedFiles.length > 0;
@@ -1054,12 +1074,22 @@ export default function ChatPage() {
                 </div>
               )}
 
+              {/* Send error notice */}
+              {sendError && (
+                <div className="mx-3 mb-1 px-3 py-1.5 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center gap-2">
+                  <span>{sendError}</span>
+                  <button onClick={() => setSendError(null)} className="ml-auto shrink-0 opacity-60 hover:opacity-100">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              )}
+
               {/* Input row */}
               <div className="flex flex-col">
                 <textarea
                   ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => { setInput(e.target.value); if (sendError) setSendError(null); }}
                   onInput={handleInputInput}
                   onKeyDown={handleKeyDown}
                   onPaste={handlePaste}

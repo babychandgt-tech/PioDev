@@ -391,7 +391,10 @@ export function useChat(userId: string | undefined) {
     fileDatas?: { name: string; content: string }[],
     options?: { webSearch?: boolean; thinking?: boolean; imageGen?: boolean; modelTier?: "plus" | "mini" | "coder"; voiceMode?: boolean },
   ) => {
-    if (!userId) return;
+    if (!userId) {
+      console.error("[PioCode] sendMessage: userId null — user belum login?");
+      throw new Error("NO_USER");
+    }
     let chatId = activeChatId;
     const isNewChat = !chatId;
 
@@ -408,7 +411,10 @@ export function useChat(userId: string | undefined) {
         .select()
         .single();
 
-      if (error || !newConvo) return;
+      if (error || !newConvo) {
+        console.error("[PioCode] Gagal membuat percakapan baru:", error?.message ?? "data null", error);
+        throw new Error("CONV_FAILED");
+      }
       chatId = newConvo.id;
       setChats((prev) => [{ id: chatId!, title: fallbackTitle, updatedAt: new Date(), messages: [] }, ...prev]);
       setActiveChatId(chatId);
