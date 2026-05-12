@@ -1,6 +1,8 @@
 import { memo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneDark, oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { Check, Copy, ExternalLink } from "lucide-react";
@@ -147,7 +149,8 @@ export const MarkdownRenderer = memo(({ content, isStreaming }: {
   return (
     <div className="markdown-body text-[15px] leading-relaxed text-foreground">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           code: isStreaming ? StreamingCodeBlock : CodeBlock,
 

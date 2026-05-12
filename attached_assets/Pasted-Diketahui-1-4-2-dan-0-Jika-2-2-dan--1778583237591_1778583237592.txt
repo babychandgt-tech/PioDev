@@ -1,0 +1,73 @@
+Diketahui ∫ 𝑓(𝑥)𝑑𝑥 =
+1
+4
+𝑎𝑥2 + 𝑏𝑥 + 𝑐 dan 𝑎 ≠ 0. Jika 𝑓(𝑎) =
+𝑎+2𝑏
+2
+dan 𝑓(𝑏) = 6, maka 
+fungsi 𝑓(𝑥) = . . . .
+A. 1
+2
+𝑥 + 4
+B. 2𝑥 + 4
+C. 1
+2
+𝑥 − 6
+D. 𝑥 + 4
+E. 1
+2
+𝑥 + 6
+
+jawab dengan benar
+A
+
+Copy
+Pioo 2.0
+Halo pio! Mari kita selesaikan soal kalkulus ini langkah demi langkah dengan teliti. Soal ini menggabungkan konsep integral tak tentu dan evaluasi fungsi.
+
+Langkah 1: Menentukan bentuk umum $f(x)$
+Diketahui hasil integral dari $f(x)$ adalah: $$ \int f(x) , dx = \frac{1}{4}ax^2 + bx + c $$
+
+Untuk mendapatkan $f(x)$, kita perlu menurunkan (diferensialkan) persamaan di atas terhadap $x$. Ingat aturan dasar turunan $\frac{d}{dx}(kx^n) = nkx^{n-1}$ dan turunan konstanta adalah 0.
+
+$$ f(x) = \frac{d}{dx} \left( \frac{1}{4}ax^2 + bx + c \right) $$ $$ f(x) = 2 \cdot \frac{1}{4}ax^{2-1} + 1 \cdot b x^{1-1} + 0 $$ $$ f(x) = \frac{1}{2}ax + b $$
+
+Jadi, bentuk fungsi yang kita cari adalah $f(x) = \frac{1}{2}ax + b$.
+
+Langkah 2: Menggunakan informasi $f(a)$ untuk mencari hubungan antara $a$ dan $b$
+Diketahui: $$ f(a) = \frac{a + 2b}{2} $$
+
+Substitusikan $x = a$ ke dalam bentuk umum $f(x)$ yang sudah kita temukan: $$ f(a) = \frac{1}{2}a(a) + b $$ $$ f(a) = \frac{1}{2}a^2 + b $$
+
+Sekarang, samakan kedua ekspresi untuk $f(a)$ tersebut: $$ \frac{1}{2}a^2 + b = \frac{a + 2b}{2} $$
+
+Kalikan seluruh persamaan dengan 2 untuk menghilangkan penyebut: $$ a^2 + 2b = a + 2b $$
+
+Kurangi kedua ruas dengan $2b$: $$ a^2 = a $$ $$ a^2 - a = 0 $$ $$ a(a - 1) = 0 $$
+
+Maka, nilai $a$ yang mungkin adalah $a = 0$ atau $a = 1$. Namun, pada soal disebutkan bahwa $a \neq 0$. Oleh karena itu, kita ambil: $$ \mathbf{a = 1} $$
+
+Langkah 3: Menggunakan informasi $f(b)$ untuk mencari nilai $b$
+Diketahui: $$ f(b) = 6 $$
+
+Kita sudah tahu $a = 1$, jadi bentuk fungsinya menjadi: $$ f(x) = \frac{1}{2}(1)x + b = \frac{1}{2}x + b $$
+
+Substitusikan $x = b$ ke dalam fungsi tersebut: $$ f(b) = \frac{1}{2}b + b $$ $$ f(b) = \frac{1}{2}b + \frac{2}{2}b $$ $$ f(b) = \frac{3}{2}b $$
+
+Samakan dengan nilai yang diketahui ($f(b) = 6$): $$ \frac{3}{2}b = 6 $$
+
+Kalikan kedua ruas dengan $\frac{2}{3}$: $$ b = 6 \cdot \frac{2}{3} $$ $$ b = \frac{12}{3} $$ $$ \mathbf{b = 4} $$
+
+Langkah 4: Menyusun fungsi akhir $f(x)$
+Kita telah menemukan:
+
+$a = 1$
+$b = 4$
+Substitusikan kembali ke bentuk umum $f(x) = \frac{1}{2}ax + b$: $$ f(x) = \frac{1}{2}(1)x + 4 $$ $$ f(x) = \frac{1}{2}x + 4 $$
+
+Kesimpulan
+Fungsi $f(x)$ adalah $\frac{1}{2}x + 4$.
+
+Jika kita lihat pilihan jawabannya: A. $\frac{1}{2}x + 4$ B. $2x + 4$ C. $\frac{1}{2}x - 6$ D. $x + 4$ E. $\frac{1}{2}x + 6$
+
+Jawaban yang benar adalah A.
