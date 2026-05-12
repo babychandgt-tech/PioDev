@@ -172,7 +172,7 @@ const StreamingCodeBlock = ({ inline, className, children }: any) => {
 const KATEX_OPTIONS = { throwOnError: false, errorColor: "inherit" };
 
 const MarkdownContent = ({ content, isStreaming }: { content: string; isStreaming?: boolean }) => (
-  <div className="markdown-body text-[15px] leading-relaxed text-foreground">
+  <div className="markdown-body text-[15px] leading-[1.85] text-foreground">
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
       rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
@@ -180,27 +180,27 @@ const MarkdownContent = ({ content, isStreaming }: { content: string; isStreamin
         code: isStreaming ? StreamingCodeBlock : CodeBlock,
 
         p: ({ children }) => (
-          <p className="my-2.5 leading-[1.75]">{children}</p>
+          <p className="my-3 leading-[1.85]">{children}</p>
         ),
 
         h1: ({ children }) => (
-          <h1 className="text-xl font-bold mt-6 mb-3 text-foreground leading-tight">{children}</h1>
+          <h1 className="text-xl font-bold mt-7 mb-3.5 text-foreground leading-tight">{children}</h1>
         ),
         h2: ({ children }) => (
-          <h2 className="text-lg font-semibold mt-5 mb-2.5 text-foreground leading-tight">{children}</h2>
+          <h2 className="text-lg font-semibold mt-6 mb-3 text-foreground leading-tight">{children}</h2>
         ),
         h3: ({ children }) => (
-          <h3 className="text-base font-semibold mt-4 mb-2 text-foreground leading-tight">{children}</h3>
+          <h3 className="text-base font-semibold mt-5 mb-2.5 text-foreground leading-tight">{children}</h3>
         ),
         h4: ({ children }) => (
-          <h4 className="text-sm font-semibold mt-3 mb-1.5 text-foreground uppercase tracking-wide">{children}</h4>
+          <h4 className="text-sm font-semibold mt-4 mb-2 text-foreground uppercase tracking-wide">{children}</h4>
         ),
 
         ul: ({ children }) => (
-          <ul className="my-2.5 ml-1 space-y-1 list-none">{children}</ul>
+          <ul className="my-3 ml-1 space-y-1.5 list-none">{children}</ul>
         ),
         ol: ({ children, start }) => (
-          <ol className="my-2.5 ml-1 space-y-1 list-none" style={{ counterReset: `list-item ${(start ?? 1) - 1}` }}>{children}</ol>
+          <ol className="my-3 ml-1 space-y-1.5 list-none" style={{ counterReset: `list-item ${(start ?? 1) - 1}` }}>{children}</ol>
         ),
         li: ({ children, node }: any) => {
           const isTaskItem =
@@ -209,14 +209,14 @@ const MarkdownContent = ({ content, isStreaming }: { content: string; isStreamin
 
           if (isTaskItem) {
             return (
-              <li className="flex items-start gap-2.5 py-0.5 list-none">{children}</li>
+              <li className="flex items-start gap-2.5 py-1 list-none">{children}</li>
             );
           }
 
           return (
-            <li className="flex items-start gap-2 py-0.5 list-none">
-              <span className="mt-[10px] flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-              <span className="leading-relaxed">{children}</span>
+            <li className="flex items-start gap-2.5 py-1 list-none">
+              <span className="mt-[11px] flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+              <span className="leading-[1.85]">{children}</span>
             </li>
           );
         },

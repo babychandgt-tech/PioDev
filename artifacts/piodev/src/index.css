@@ -222,3 +222,40 @@
   background: linear-gradient(90deg, transparent 0%, hsl(var(--primary) / 0.05) 50%, transparent 100%);
   animation: shimmer 2s ease-in-out infinite;
 }
+
+/* ── Markdown body typography ─────────────────────────────────────────────── */
+.markdown-body {
+  word-break: break-word;
+}
+
+/* Give display-mode math ($$...$$) proper block spacing & centering */
+.markdown-body .katex-display {
+  display: block;
+  margin: 1.25rem 0;
+  padding: 0.5rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+/* Prevent inline KaTeX from clipping ascenders/descenders */
+.markdown-body .katex {
+  font-size: 1.05em;
+  line-height: 1.5;
+}
+
+/* Separate adjacent paragraphs that contain math from each other */
+.markdown-body p {
+  line-height: 1.85;
+}
+
+/* Give numbered/bulleted lists inside steps proper breathing room */
+.markdown-body ol,
+.markdown-body ul {
+  margin-top: 0.625rem;
+  margin-bottom: 0.625rem;
+}
+
+/* Subtle horizontal rule inside markdown */
+.markdown-body hr {
+  border-color: hsl(var(--border));
+}
