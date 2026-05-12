@@ -272,14 +272,34 @@ export default function ChatPage() {
   // Tapi BERHENTI jika user sudah scroll ke atas secara manual
   useEffect(() => {
     if (userScrolledUpRef.current) return;
+    const el = messagesContainerRef.current;
+    if (!el) return;
     const msgCount = activeChat?.messages.length ?? 0;
     const isNewMessage = msgCount !== prevMsgCountRef.current;
     prevMsgCountRef.current = msgCount;
-    // Saat streaming (isTyping + bukan pesan baru) → instant agar tidak "keangkat-angkat"
-    // Saat pesan baru muncul → smooth biar enak dilihat
-    const behavior = isNewMessage ? "smooth" : "instant";
-    messagesEndRef.current?.scrollIntoView({ behavior });
+    // Gunakan scrollTop langsung (lebih stabil dari scrollIntoView saat konten tumbuh async)
+    if (isNewMessage) {
+      el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [activeChat?.messages, isTyping]);
+
+  // ResizeObserver: saat KaTeX atau Mermaid selesai render dan mengubah tinggi konten,
+  // otomatis scroll ke bawah selama user belum scroll ke atas secara manual.
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const inner = container.firstElementChild as Element | null;
+    if (!inner) return;
+    const observer = new ResizeObserver(() => {
+      if (!userScrolledUpRef.current) {
+        container.scrollTop = container.scrollHeight;
+      }
+    });
+    observer.observe(inner);
+    return () => observer.disconnect();
+  }, []);
 
   // Scroll to bottom button visibility + deteksi user scroll ke atas
   const handleScroll = useCallback(() => {
