@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, Component, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -10,6 +10,32 @@ import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { SourceCitations, parseJsonSources } from "@/components/source-citations";
+
+class MarkdownErrorBoundary extends Component<
+  { children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error: any) {
+    console.error("[PioCode] MarkdownRenderer crash:", error?.message ?? error);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <span className="text-sm text-muted-foreground italic">
+          [Gagal render — konten akan muncul setelah selesai]
+        </span>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 const LANG_DISPLAY: Record<string, string> = {
   js: "JavaScript", jsx: "JavaScript", ts: "TypeScript", tsx: "TypeScript",
@@ -142,165 +168,175 @@ const StreamingCodeBlock = ({ inline, className, children }: any) => {
   );
 };
 
-export const MarkdownRenderer = memo(({ content, isStreaming }: {
-  content: string;
-  isStreaming?: boolean;
-}) => {
-  return (
-    <div className="markdown-body text-[15px] leading-relaxed text-foreground">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          code: isStreaming ? StreamingCodeBlock : CodeBlock,
+// KaTeX options: throwOnError:false prevents crashes on partial/invalid LaTeX during streaming
+const KATEX_OPTIONS = { throwOnError: false, errorColor: "inherit" };
 
-          p: ({ children }) => (
-            <p className="my-2.5 leading-[1.75]">{children}</p>
-          ),
+const MarkdownContent = ({ content, isStreaming }: { content: string; isStreaming?: boolean }) => (
+  <div className="markdown-body text-[15px] leading-relaxed text-foreground">
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
+      components={{
+        code: isStreaming ? StreamingCodeBlock : CodeBlock,
 
-          h1: ({ children }) => (
-            <h1 className="text-xl font-bold mt-6 mb-3 text-foreground leading-tight">{children}</h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-lg font-semibold mt-5 mb-2.5 text-foreground leading-tight">{children}</h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-base font-semibold mt-4 mb-2 text-foreground leading-tight">{children}</h3>
-          ),
-          h4: ({ children }) => (
-            <h4 className="text-sm font-semibold mt-3 mb-1.5 text-foreground uppercase tracking-wide">{children}</h4>
-          ),
+        p: ({ children }) => (
+          <p className="my-2.5 leading-[1.75]">{children}</p>
+        ),
 
-          ul: ({ children }) => (
-            <ul className="my-2.5 ml-1 space-y-1 list-none">{children}</ul>
-          ),
-          ol: ({ children, start }) => (
-            <ol className="my-2.5 ml-1 space-y-1 list-none" style={{ counterReset: `list-item ${(start ?? 1) - 1}` }}>{children}</ol>
-          ),
-          li: ({ children, node }: any) => {
-            const isTaskItem = node?.children?.[0]?.tagName === "input" &&
-              node.children[0].properties?.type === "checkbox";
+        h1: ({ children }) => (
+          <h1 className="text-xl font-bold mt-6 mb-3 text-foreground leading-tight">{children}</h1>
+        ),
+        h2: ({ children }) => (
+          <h2 className="text-lg font-semibold mt-5 mb-2.5 text-foreground leading-tight">{children}</h2>
+        ),
+        h3: ({ children }) => (
+          <h3 className="text-base font-semibold mt-4 mb-2 text-foreground leading-tight">{children}</h3>
+        ),
+        h4: ({ children }) => (
+          <h4 className="text-sm font-semibold mt-3 mb-1.5 text-foreground uppercase tracking-wide">{children}</h4>
+        ),
 
-            if (isTaskItem) {
-              return (
-                <li className="flex items-start gap-2.5 py-0.5 list-none">{children}</li>
-              );
-            }
+        ul: ({ children }) => (
+          <ul className="my-2.5 ml-1 space-y-1 list-none">{children}</ul>
+        ),
+        ol: ({ children, start }) => (
+          <ol className="my-2.5 ml-1 space-y-1 list-none" style={{ counterReset: `list-item ${(start ?? 1) - 1}` }}>{children}</ol>
+        ),
+        li: ({ children, node }: any) => {
+          const isTaskItem =
+            node?.children?.[0]?.tagName === "input" &&
+            node.children[0].properties?.type === "checkbox";
 
+          if (isTaskItem) {
             return (
-              <li className="flex items-start gap-2 py-0.5 list-none">
-                <span className="mt-[10px] flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
-                <span className="leading-relaxed">{children}</span>
-              </li>
+              <li className="flex items-start gap-2.5 py-0.5 list-none">{children}</li>
             );
-          },
+          }
 
-          input: ({ type, checked }: any) => {
-            if (type === "checkbox") {
-              return (
-                <span className={cn(
+          return (
+            <li className="flex items-start gap-2 py-0.5 list-none">
+              <span className="mt-[10px] flex-shrink-0 w-1.5 h-1.5 rounded-full bg-zinc-400 dark:bg-zinc-500" />
+              <span className="leading-relaxed">{children}</span>
+            </li>
+          );
+        },
+
+        input: ({ type, checked }: any) => {
+          if (type === "checkbox") {
+            return (
+              <span
+                className={cn(
                   "inline-flex flex-shrink-0 mt-[3px] mr-0.5 w-4 h-4 rounded border items-center justify-center",
                   checked
                     ? "bg-violet-500 border-violet-500"
                     : "border-zinc-400 dark:border-zinc-600 bg-transparent"
-                )}>
-                  {checked && <Check className="w-2.5 h-2.5 text-white" />}
-                </span>
-              );
-            }
-            return <input type={type} checked={checked} readOnly />;
-          },
+                )}
+              >
+                {checked && <Check className="w-2.5 h-2.5 text-white" />}
+              </span>
+            );
+          }
+          return <input type={type} checked={checked} readOnly />;
+        },
 
-          blockquote: ({ children }) => (
-            <blockquote className="my-3 pl-4 border-l-[3px] border-violet-400/60 dark:border-violet-500/50 bg-violet-50/50 dark:bg-violet-950/20 rounded-r-lg py-2 pr-3">
-              <div className="text-zinc-600 dark:text-zinc-400 italic text-[0.95em]">{children}</div>
-            </blockquote>
-          ),
+        blockquote: ({ children }) => (
+          <blockquote className="my-3 pl-4 border-l-[3px] border-violet-400/60 dark:border-violet-500/50 bg-violet-50/50 dark:bg-violet-950/20 rounded-r-lg py-2 pr-3">
+            <div className="text-zinc-600 dark:text-zinc-400 italic text-[0.95em]">{children}</div>
+          </blockquote>
+        ),
 
-          hr: () => (
-            <hr className="my-5 border-0 border-t border-zinc-200 dark:border-zinc-700/60" />
-          ),
+        hr: () => (
+          <hr className="my-5 border-0 border-t border-zinc-200 dark:border-zinc-700/60" />
+        ),
 
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-0.5 text-violet-600 dark:text-violet-400 underline underline-offset-2 decoration-violet-400/50 hover:decoration-violet-400 transition-all font-medium"
-            >
+        a: ({ href, children }) => (
+          <a
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-0.5 text-violet-600 dark:text-violet-400 underline underline-offset-2 decoration-violet-400/50 hover:decoration-violet-400 transition-all font-medium"
+          >
+            {children}
+            <ExternalLink className="w-3 h-3 opacity-60 flex-shrink-0 ml-0.5" />
+          </a>
+        ),
+
+        strong: ({ children }) => (
+          <strong className="font-semibold text-foreground">{children}</strong>
+        ),
+
+        em: ({ children }) => (
+          <em className="italic text-zinc-700 dark:text-zinc-300">{children}</em>
+        ),
+
+        del: ({ children }) => (
+          <del className="line-through text-muted-foreground">{children}</del>
+        ),
+
+        table: ({ children }) => (
+          <div className="my-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700/60">
+            <table className="w-full text-sm border-collapse">
               {children}
-              <ExternalLink className="w-3 h-3 opacity-60 flex-shrink-0 ml-0.5" />
-            </a>
-          ),
+            </table>
+          </div>
+        ),
 
-          strong: ({ children }) => (
-            <strong className="font-semibold text-foreground">{children}</strong>
-          ),
+        thead: ({ children }) => (
+          <thead className="bg-zinc-50 dark:bg-zinc-800/60">
+            {children}
+          </thead>
+        ),
 
-          em: ({ children }) => (
-            <em className="italic text-zinc-700 dark:text-zinc-300">{children}</em>
-          ),
+        tbody: ({ children }) => (
+          <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
+            {children}
+          </tbody>
+        ),
 
-          del: ({ children }) => (
-            <del className="line-through text-muted-foreground">{children}</del>
-          ),
+        tr: ({ children }) => (
+          <tr className="transition-colors hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40">
+            {children}
+          </tr>
+        ),
 
-          table: ({ children }) => (
-            <div className="my-4 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-700/60">
-              <table className="w-full text-sm border-collapse">
-                {children}
-              </table>
-            </div>
-          ),
+        th: ({ children }) => (
+          <th className="px-4 py-2.5 text-left font-semibold text-zinc-700 dark:text-zinc-300 text-xs uppercase tracking-wide whitespace-nowrap border-b border-zinc-200 dark:border-zinc-700/60">
+            {children}
+          </th>
+        ),
 
-          thead: ({ children }) => (
-            <thead className="bg-zinc-50 dark:bg-zinc-800/60">
-              {children}
-            </thead>
-          ),
+        td: ({ children }) => (
+          <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300 align-top">
+            {children}
+          </td>
+        ),
 
-          tbody: ({ children }) => (
-            <tbody className="divide-y divide-zinc-100 dark:divide-zinc-700/50">
-              {children}
-            </tbody>
-          ),
+        img: ({ src, alt }) => (
+          <span className="block my-3">
+            <img
+              src={src}
+              alt={alt || "Image"}
+              className="rounded-xl border border-border shadow-md max-w-[420px] w-full"
+              loading="lazy"
+            />
+          </span>
+        ),
 
-          tr: ({ children }) => (
-            <tr className="transition-colors hover:bg-zinc-50/60 dark:hover:bg-zinc-800/40">
-              {children}
-            </tr>
-          ),
+        pre: ({ children }) => <>{children}</>,
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  </div>
+);
 
-          th: ({ children }) => (
-            <th className="px-4 py-2.5 text-left font-semibold text-zinc-700 dark:text-zinc-300 text-xs uppercase tracking-wide whitespace-nowrap border-b border-zinc-200 dark:border-zinc-700/60">
-              {children}
-            </th>
-          ),
-
-          td: ({ children }) => (
-            <td className="px-4 py-2.5 text-zinc-700 dark:text-zinc-300 align-top">
-              {children}
-            </td>
-          ),
-
-          img: ({ src, alt }) => (
-            <span className="block my-3">
-              <img
-                src={src}
-                alt={alt || "Image"}
-                className="rounded-xl border border-border shadow-md max-w-[420px] w-full"
-                loading="lazy"
-              />
-            </span>
-          ),
-
-          pre: ({ children }) => <>{children}</>,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
-    </div>
-  );
-});
+export const MarkdownRenderer = memo(({ content, isStreaming }: {
+  content: string;
+  isStreaming?: boolean;
+}) => (
+  <MarkdownErrorBoundary>
+    <MarkdownContent content={content} isStreaming={isStreaming} />
+  </MarkdownErrorBoundary>
+));
 
 MarkdownRenderer.displayName = "MarkdownRenderer";
