@@ -339,9 +339,13 @@ app.post("/api/conversations", requireAuth, async (req, res) => {
     res.status(400).json({ error: "id and title are required" });
     return;
   }
+  // Sanitize title: remove NUL bytes and control chars that PostgreSQL rejects,
+  // then re-slice by code points to avoid broken surrogate pairs from the client.
+  const rawTitle = String(title).replace(/[\u0000-\u001F\u007F]/g, " ").trim();
+  const safeTitle = ([...rawTitle].slice(0, 60).join("")) || "Percakapan baru";
   const { error } = await supabaseAdmin
     .from("conversations")
-    .insert({ id, user_id: userId, title });
+    .insert({ id, user_id: userId, title: safeTitle });
   if (error) {
     console.error("[PioCode] conversations insert error:", error);
     res.status(500).json({ error: error.message, code: error.code });

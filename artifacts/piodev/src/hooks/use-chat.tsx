@@ -419,7 +419,15 @@ export function useChat(userId: string | undefined) {
     const hasFiles = !!fileDatas?.length;
     const titleBase = content.trim()
       || (hasImages ? "Analisis gambar" : hasFiles ? `File: ${fileDatas![0].name}` : "");
-    const fallbackTitle = titleBase.slice(0, 40) + (titleBase.length > 40 ? "..." : "");
+    // Use spread to slice by Unicode code points (not UTF-16 code units) so surrogate-pair
+    // characters (e.g. mathematical italic 𝑓, 𝑥) don't get split, which would produce
+    // an unmatched surrogate and break JSON serialization → [PGRST102].
+    // Also strip NUL bytes and other control characters that PostgreSQL rejects.
+    const sanitized = titleBase.replace(/[\u0000-\u001F\u007F]/g, " ").trim();
+    const titleChars = [...sanitized];
+    const fallbackTitle = titleChars.length > 40
+      ? titleChars.slice(0, 40).join("") + "..."
+      : sanitized;
 
     if (!chatId) {
       // Pastikan sesi Supabase masih valid sebelum insert (bisa expired setelah lama idle)
