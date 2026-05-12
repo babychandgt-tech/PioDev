@@ -268,8 +268,8 @@ export default function ChatPage() {
     setIsChatMenuOpen(false);
   };
 
-  // Auto-scroll ke bawah saat ada pesan baru / isTyping
-  // Tapi BERHENTI jika user sudah scroll ke atas secara manual
+  // Auto-scroll ke bawah saat pesan BARU ditambahkan (bukan saat konten streaming tumbuh).
+  // Untuk streaming, ResizeObserver di bawah yang menghandle — via rAF agar smooth.
   useEffect(() => {
     if (userScrolledUpRef.current) return;
     const el = messagesContainerRef.current;
@@ -277,28 +277,37 @@ export default function ChatPage() {
     const msgCount = activeChat?.messages.length ?? 0;
     const isNewMessage = msgCount !== prevMsgCountRef.current;
     prevMsgCountRef.current = msgCount;
-    // Gunakan scrollTop langsung (lebih stabil dari scrollIntoView saat konten tumbuh async)
     if (isNewMessage) {
       el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-    } else {
-      el.scrollTop = el.scrollHeight;
     }
+    // Tidak set scrollTop untuk non-new-message — ResizeObserver handle itu
   }, [activeChat?.messages, isTyping]);
 
-  // ResizeObserver: saat KaTeX atau Mermaid selesai render dan mengubah tinggi konten,
-  // otomatis scroll ke bawah selama user belum scroll ke atas secara manual.
+  // ResizeObserver: saat konten tumbuh (streaming teks, KaTeX, Mermaid), otomatis
+  // scroll ke bawah. Throttle via requestAnimationFrame supaya tidak "geter" —
+  // berapapun banyaknya resize event, scroll hanya dieksekusi sekali per frame.
   useEffect(() => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const inner = container.firstElementChild as Element | null;
     if (!inner) return;
+    let rafId: number | null = null;
     const observer = new ResizeObserver(() => {
-      if (!userScrolledUpRef.current) {
-        container.scrollTop = container.scrollHeight;
-      }
+      if (userScrolledUpRef.current) return;
+      if (rafId !== null) return; // sudah ada rAF yang pending, skip
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (!userScrolledUpRef.current) {
+          const c = messagesContainerRef.current;
+          if (c) c.scrollTop = c.scrollHeight;
+        }
+      });
     });
     observer.observe(inner);
-    return () => observer.disconnect();
+    return () => {
+      observer.disconnect();
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // Scroll to bottom button visibility + deteksi user scroll ke atas
