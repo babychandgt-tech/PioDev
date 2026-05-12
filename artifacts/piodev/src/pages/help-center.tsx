@@ -57,6 +57,7 @@ export default function HelpCenterPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeCategory, setActiveCategory] = useState<string>("Semua");
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+  const [hasInteracted, setHasInteracted] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -80,7 +81,7 @@ export default function HelpCenterPage() {
     });
   };
 
-  const isFiltered = !!searchQuery.trim() || activeCategory !== "Semua";
+  const isFiltered = hasInteracted || !!searchQuery.trim();
 
   const filteredCategories = useMemo(() => {
     if (!isFiltered) return [];
@@ -133,7 +134,7 @@ export default function HelpCenterPage() {
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setActiveCategory("Semua"); }}
+              onChange={(e) => { setSearchQuery(e.target.value); setActiveCategory("Semua"); setHasInteracted(true); }}
               placeholder="Cari pertanyaan..."
               className="w-full pl-10 pr-4 py-3 rounded-xl border border-border bg-muted/30 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 text-sm transition-all placeholder:text-muted-foreground/60"
             />
@@ -155,7 +156,7 @@ export default function HelpCenterPage() {
         {/* Category chips */}
         <div className="flex flex-wrap gap-2 justify-center mb-8">
           <button
-            onClick={() => { setActiveCategory("Semua"); setSearchQuery(""); }}
+            onClick={() => { setActiveCategory("Semua"); setSearchQuery(""); setHasInteracted(true); }}
             className={cn(
               "px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
               activeCategory === "Semua" && !searchQuery
@@ -168,7 +169,7 @@ export default function HelpCenterPage() {
           {categories.map((cat) => (
             <button
               key={cat.category}
-              onClick={() => { setActiveCategory(cat.category); setSearchQuery(""); }}
+              onClick={() => { setActiveCategory(cat.category); setSearchQuery(""); setHasInteracted(true); }}
               className={cn(
                 "flex items-center gap-1.5 px-4 py-1.5 rounded-full text-sm font-medium transition-colors border",
                 activeCategory === cat.category && !searchQuery
