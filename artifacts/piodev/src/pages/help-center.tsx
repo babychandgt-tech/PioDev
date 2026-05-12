@@ -169,27 +169,6 @@ export default function HelpCenterPage() {
           </div>
         )}
 
-        {/* Category grid cards (shown only on "Semua" without search) */}
-        {activeCategory === "Semua" && !searchQuery && !isLoading && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
-            {categories.map((cat) => (
-              <button
-                key={cat.category}
-                onClick={() => setActiveCategory(cat.category)}
-                className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 transition-all text-left group"
-              >
-                <span className="shrink-0 p-2 rounded-lg bg-muted group-hover:bg-primary/10 transition-colors text-primary [&>svg]:w-4 [&>svg]:h-4">
-                  {ICON_MAP[cat.icon]}
-                </span>
-                <div>
-                  <p className="font-medium text-sm text-foreground">{cat.category}</p>
-                  <p className="text-xs text-muted-foreground">{cat.faqs.length} pertanyaan</p>
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
-
         {/* FAQ list */}
         {isLoading ? (
           <div className="space-y-3">
