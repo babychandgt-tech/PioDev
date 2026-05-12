@@ -450,14 +450,15 @@ export function useChat(userId: string | undefined) {
     const storedContent = content
       || (hasImages ? `[${imageUrls!.length} gambar]` : hasFiles ? `[${fileDatas!.length} file]` : "");
 
-    const { data: savedUserMsg } = await supabase
+    // Generate UUID client-side — same pattern as conversations insert to avoid PGRST102
+    // from .select().single() when RLS SELECT policy (EXISTS subquery) is slow or unavailable.
+    const userMsgId = uuidv4();
+    await supabase
       .from("messages")
-      .insert({ conversation_id: chatId, role: "user", content: storedContent })
-      .select()
-      .single();
+      .insert({ id: userMsgId, conversation_id: chatId, role: "user", content: storedContent });
 
     const userMessage: Message = {
-      id: savedUserMsg?.id || uuidv4(),
+      id: userMsgId,
       role: "user",
       content,
       imageUrls,
