@@ -5,7 +5,14 @@ import { Check, Copy, Download, ZoomIn, ZoomOut, Maximize2, X } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { useTheme } from "@/hooks/use-theme";
 
-function initMermaid(isDark: boolean) {
+// Track last initialized theme so we only call mermaid.initialize() when theme changes,
+// not on every render — re-initializing every render corrupts the internal parser state.
+let lastInitTheme: "dark" | "light" | null = null;
+
+function ensureMermaidInit(isDark: boolean) {
+  const theme = isDark ? "dark" : "light";
+  if (lastInitTheme === theme) return;
+  lastInitTheme = theme;
   mermaid.initialize({
     startOnLoad: false,
     theme: isDark ? "dark" : "default",
@@ -50,6 +57,20 @@ function initMermaid(isDark: boolean) {
   });
 }
 
+/**
+ * Preprocess mermaid code to fix common AI-generated syntax issues:
+ * - Strip %% comment lines (sometimes confuse the lexer in subgraph context)
+ * - Normalize Windows line endings
+ */
+function preprocessMermaid(code: string): string {
+  return code
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith("%%"))
+    .join("\n")
+    .trim();
+}
+
 const btnCls = (isDark: boolean) =>
   cn("p-1.5 rounded-md transition-colors",
     isDark ? "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.06]"
@@ -83,8 +104,12 @@ export function MermaidDiagram({ code }: { code: string }) {
       // Clean up any stale hidden elements mermaid may have left in DOM
       document.getElementById(renderId)?.remove();
       try {
-        initMermaid(isDark);
-        const { svg: rendered } = await mermaid.render(renderId, code.trim());
+        // Only initialize when theme changes — re-initializing every render
+        // corrupts the internal lexer/parser state and causes false parse errors.
+        ensureMermaidInit(isDark);
+        // Preprocess: strip %% comments and normalize line endings
+        const cleaned = preprocessMermaid(code);
+        const { svg: rendered } = await mermaid.render(renderId, cleaned);
         if (!cancelled) { setSvg(rendered); setError(""); }
       } catch (e: any) {
         if (!cancelled) {
