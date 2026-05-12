@@ -163,6 +163,7 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const prevMsgCountRef = useRef(0);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const attachMenuRef = useRef<HTMLDivElement>(null);
@@ -270,9 +271,14 @@ export default function ChatPage() {
   // Auto-scroll ke bawah saat ada pesan baru / isTyping
   // Tapi BERHENTI jika user sudah scroll ke atas secara manual
   useEffect(() => {
-    if (!userScrolledUpRef.current) {
-      messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    }
+    if (userScrolledUpRef.current) return;
+    const msgCount = activeChat?.messages.length ?? 0;
+    const isNewMessage = msgCount !== prevMsgCountRef.current;
+    prevMsgCountRef.current = msgCount;
+    // Saat streaming (isTyping + bukan pesan baru) → instant agar tidak "keangkat-angkat"
+    // Saat pesan baru muncul → smooth biar enak dilihat
+    const behavior = isNewMessage ? "smooth" : "instant";
+    messagesEndRef.current?.scrollIntoView({ behavior });
   }, [activeChat?.messages, isTyping]);
 
   // Scroll to bottom button visibility + deteksi user scroll ke atas

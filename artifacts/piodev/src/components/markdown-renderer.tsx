@@ -12,15 +12,20 @@ import { MermaidDiagram } from "@/components/mermaid-diagram";
 import { SourceCitations, parseJsonSources } from "@/components/source-citations";
 
 class MarkdownErrorBoundary extends Component<
-  { children: ReactNode },
+  { children: ReactNode; resetKey?: string },
   { hasError: boolean }
 > {
-  constructor(props: { children: ReactNode }) {
+  constructor(props: { children: ReactNode; resetKey?: string }) {
     super(props);
     this.state = { hasError: false };
   }
   static getDerivedStateFromError() {
     return { hasError: true };
+  }
+  componentDidUpdate(prev: { resetKey?: string }) {
+    if (prev.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.setState({ hasError: false });
+    }
   }
   componentDidCatch(error: any) {
     console.error("[PioCode] MarkdownRenderer crash:", error?.message ?? error);
@@ -171,11 +176,16 @@ const StreamingCodeBlock = ({ inline, className, children }: any) => {
 // KaTeX options: throwOnError:false prevents crashes on partial/invalid LaTeX during streaming
 const KATEX_OPTIONS = { throwOnError: false, errorColor: "inherit" };
 
+const REMARK_PLUGINS_FULL = [remarkGfm, remarkMath] as any;
+const REMARK_PLUGINS_STREAMING = [remarkGfm] as any;
+const REHYPE_PLUGINS_FULL = [[rehypeKatex, KATEX_OPTIONS]] as any;
+const REHYPE_PLUGINS_STREAMING = [] as any;
+
 const MarkdownContent = ({ content, isStreaming }: { content: string; isStreaming?: boolean }) => (
   <div className="markdown-body text-[15px] leading-[1.85] text-foreground">
     <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
+      remarkPlugins={isStreaming ? REMARK_PLUGINS_STREAMING : REMARK_PLUGINS_FULL}
+      rehypePlugins={isStreaming ? REHYPE_PLUGINS_STREAMING : REHYPE_PLUGINS_FULL}
       components={{
         code: isStreaming ? StreamingCodeBlock : CodeBlock,
 
@@ -334,7 +344,7 @@ export const MarkdownRenderer = memo(({ content, isStreaming }: {
   content: string;
   isStreaming?: boolean;
 }) => (
-  <MarkdownErrorBoundary>
+  <MarkdownErrorBoundary resetKey={isStreaming ? "streaming" : "done"}>
     <MarkdownContent content={content} isStreaming={isStreaming} />
   </MarkdownErrorBoundary>
 ));
