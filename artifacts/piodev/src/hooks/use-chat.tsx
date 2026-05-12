@@ -395,6 +395,23 @@ export function useChat(userId: string | undefined) {
       console.error("[PioCode] sendMessage: userId null — user belum login?");
       throw new Error("NO_USER");
     }
+
+    // Ambil token sekali di awal — dipakai untuk semua server API calls.
+    const getAuthToken = async () =>
+      (await supabase.auth.getSession()).data.session?.access_token ?? "";
+
+    // Helper: insert message via server-side API (bypass Supabase JS client PGRST102 bug).
+    const insertMessageViaAPI = async (payload: {
+      id: string; conversation_id: string; role: string; content: string;
+    }) => {
+      const token = await getAuthToken();
+      await fetch("/api/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify(payload),
+      });
+    };
+
     let chatId = activeChatId;
     const isNewChat = !chatId;
 
@@ -422,24 +439,31 @@ export function useChat(userId: string | undefined) {
         // Lanjut coba insert saja — mungkin session masih valid di cookie
       }
 
-      // Generate UUID client-side — avoids .select().single() after insert which triggers
-      // PGRST102 when Supabase RLS SELECT policy doesn't return the new row immediately.
+      // Buat conversation via server-side API (bypass Supabase JS client + RLS issues).
+      // Server pakai supabaseAdmin (service role) sehingga bebas dari PGRST102 / RLS.
       const newChatId = uuidv4();
       let convInsertError: any = null;
       try {
-        const result = await supabase
-          .from("conversations")
-          .insert({ id: newChatId, user_id: userId, title: fallbackTitle });
-        convInsertError = result.error;
+        const token = await getAuthToken();
+        const resp = await fetch("/api/conversations", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`,
+          },
+          body: JSON.stringify({ id: newChatId, title: fallbackTitle }),
+        });
+        if (!resp.ok) {
+          convInsertError = await resp.json().catch(() => ({ message: `HTTP ${resp.status}` }));
+        }
       } catch (fetchErr: any) {
-        // Supabase bisa throw NetworkError jika koneksi putus
         convInsertError = { message: fetchErr?.message ?? "Network error" };
       }
 
       if (convInsertError) {
-        const errMsg = convInsertError?.message ?? "Unknown error";
+        const errMsg = convInsertError?.error ?? convInsertError?.message ?? "Unknown error";
         const errCode = convInsertError?.code ?? "";
-        console.error("[PioCode] Gagal membuat percakapan baru:", errMsg, errCode, convInsertError?.details, convInsertError?.hint);
+        console.error("[PioCode] Gagal membuat percakapan baru:", errMsg, errCode);
         throw new Error(`CONV_FAILED:${errCode ? `[${errCode}] ` : ""}${errMsg}`);
       }
       chatId = newChatId;
@@ -450,12 +474,8 @@ export function useChat(userId: string | undefined) {
     const storedContent = content
       || (hasImages ? `[${imageUrls!.length} gambar]` : hasFiles ? `[${fileDatas!.length} file]` : "");
 
-    // Generate UUID client-side — same pattern as conversations insert to avoid PGRST102
-    // from .select().single() when RLS SELECT policy (EXISTS subquery) is slow or unavailable.
     const userMsgId = uuidv4();
-    await supabase
-      .from("messages")
-      .insert({ id: userMsgId, conversation_id: chatId, role: "user", content: storedContent });
+    await insertMessageViaAPI({ id: userMsgId, conversation_id: chatId!, role: "user", content: storedContent });
 
     const userMessage: Message = {
       id: userMsgId,
@@ -519,12 +539,7 @@ export function useChat(userId: string | undefined) {
           })
         );
 
-        await supabase.from("messages").insert({
-          id: aiMsgId,
-          conversation_id: chatId!,
-          role: "ai",
-          content: fullContent,
-        });
+        await insertMessageViaAPI({ id: aiMsgId, conversation_id: chatId!, role: "ai", content: fullContent });
 
         if (isNewChat) {
           generateTitle(content.trim(), "Generated image").then((generatedTitle) => {
@@ -1040,12 +1055,7 @@ export function useChat(userId: string | undefined) {
         }
       }
 
-      await supabase.from("messages").insert({
-        id: newAiMsgId,
-        conversation_id: chatId,
-        role: "ai",
-        content: fullContent,
-      });
+      await insertMessageViaAPI({ id: newAiMsgId, conversation_id: chatId!, role: "ai", content: fullContent });
     } catch (err: any) {
       if (err?.name === "AbortError") return;
 

@@ -331,6 +331,55 @@ async function requireAdmin(
   next();
 }
 
+// ── POST /api/conversations  (buat percakapan baru via admin, bypass RLS) ────
+app.post("/api/conversations", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { id, title } = req.body ?? {};
+  if (!id || !title) {
+    res.status(400).json({ error: "id and title are required" });
+    return;
+  }
+  const { error } = await supabaseAdmin
+    .from("conversations")
+    .insert({ id, user_id: userId, title });
+  if (error) {
+    console.error("[PioCode] conversations insert error:", error);
+    res.status(500).json({ error: error.message, code: error.code });
+    return;
+  }
+  res.status(201).json({ id });
+});
+
+// ── POST /api/messages  (simpan pesan via admin, bypass RLS) ─────────────────
+app.post("/api/messages", requireAuth, async (req, res) => {
+  const userId = (req as any).userId;
+  const { id, conversation_id, role, content } = req.body ?? {};
+  if (!id || !conversation_id || !role) {
+    res.status(400).json({ error: "id, conversation_id, and role are required" });
+    return;
+  }
+  // Verifikasi conversation milik user ini
+  const { data: conv, error: convErr } = await supabaseAdmin
+    .from("conversations")
+    .select("id")
+    .eq("id", conversation_id)
+    .eq("user_id", userId)
+    .single();
+  if (convErr || !conv) {
+    res.status(403).json({ error: "Conversation not found or not owned by user" });
+    return;
+  }
+  const { error } = await supabaseAdmin
+    .from("messages")
+    .insert({ id, conversation_id, role, content: content ?? "" });
+  if (error) {
+    console.error("[PioCode] messages insert error:", error);
+    res.status(500).json({ error: error.message, code: error.code });
+    return;
+  }
+  res.status(201).json({ id });
+});
+
 // ── GET /api/me/role  (ambil role user sendiri) ──────────────────────────────
 app.get("/api/me/role", requireAuth, async (req, res) => {
   const userId = (req as any).userId;
