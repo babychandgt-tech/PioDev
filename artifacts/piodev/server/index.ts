@@ -552,6 +552,200 @@ app.get("/api/admin/daily-usage", async (_req, res, next) => {
 });
 
 // ── Changelog (What's New) ─────────────────────────────────────────────────────
+// ── GET /api/help-faqs  (publik, tanpa auth) ──────────────────────────────────
+// FAQ data disimpan sebagai konstanta server-side agar bisa langsung dipakai
+// tanpa migrasi tabel. Ketika fitur edit admin diperlukan, data ini cukup
+// dipindahkan ke tabel `help_center_faqs` dan endpoint ini disesuaikan.
+const HELP_FAQS = [
+  {
+    category: "Memulai",
+    icon: "LifeBuoy",
+    order: 1,
+    faqs: [
+      {
+        q: "Apakah PioCode gratis digunakan?",
+        a: "Ya! PioCode memiliki paket Free yang bisa digunakan tanpa biaya. Paket Free mencakup akses ke AI Chat dengan kuota token harian, generate gambar terbatas, dan fitur-fitur dasar lainnya. Untuk kebutuhan lebih, tersedia paket Plus dan Pro dengan kapasitas yang lebih besar.",
+      },
+      {
+        q: "Apa perbedaan paket Free, Plus, dan Pro?",
+        a: "Paket Free cocok untuk penggunaan ringan sehari-hari dengan kuota terbatas. Paket Plus memberikan kuota token lebih besar, lebih banyak generate gambar, kredit Video & Voice Studio, serta akses ke model AI yang lebih canggih. Paket Pro menawarkan semua yang ada di Plus dengan kapasitas penuh, prioritas antrian, dan batas tertinggi di semua fitur.",
+      },
+      {
+        q: "Bagaimana cara mendaftar di PioCode?",
+        a: "Klik tombol 'Daftar Gratis' di halaman utama, masukkan email dan kata sandi, lalu verifikasi email kamu. Setelah verifikasi, akun langsung aktif dan siap digunakan.",
+      },
+      {
+        q: "Apakah ada batas jumlah percakapan?",
+        a: "Tidak ada batas jumlah percakapan yang bisa kamu buat. Yang ada batasannya adalah jumlah token (panjang pesan) yang bisa dikirim per hari, tergantung paket yang kamu gunakan.",
+      },
+    ],
+  },
+  {
+    category: "AI Chat",
+    icon: "MessageSquare",
+    order: 2,
+    faqs: [
+      {
+        q: "Apa itu mode Thinking?",
+        a: "Mode Thinking mengaktifkan kemampuan penalaran mendalam AI sebelum memberikan jawaban. Cocok untuk soal matematika, logika, coding kompleks, atau pertanyaan yang memerlukan analisis bertahap. Mode ini menggunakan lebih banyak token dibanding mode biasa.",
+      },
+      {
+        q: "Bagaimana cara menggunakan Web Search?",
+        a: "Klik ikon 'Web' di bawah kotak chat sebelum mengirim pesan. Saat aktif, AI akan mencari informasi terkini di internet sebelum menjawab dan menyertakan sumber referensi di akhir jawaban.",
+      },
+      {
+        q: "Bisakah saya melampirkan gambar atau file di chat?",
+        a: "Ya, bisa. Klik ikon '+' di bawah kotak chat untuk melampirkan gambar (JPG, PNG, WebP) atau file dokumen. AI akan membaca dan menganalisis konten file tersebut sebagai bagian dari percakapan.",
+      },
+      {
+        q: "Apa itu Artifact Panel?",
+        a: "Artifact Panel adalah panel preview yang muncul otomatis saat AI menghasilkan kode HTML/CSS/JavaScript. Kamu bisa langsung melihat hasil render kode tersebut tanpa perlu membuka browser atau editor lain.",
+      },
+      {
+        q: "Mengapa AI kadang memberikan jawaban yang tidak akurat?",
+        a: "AI bisa memberikan jawaban yang tidak akurat karena pengetahuannya memiliki batas waktu (training cutoff) dan tidak selalu mengakses internet secara real-time kecuali mode Web Search diaktifkan. Selalu verifikasi informasi penting dari sumber terpercaya.",
+      },
+    ],
+  },
+  {
+    category: "Image Studio",
+    icon: "ImageIcon",
+    order: 3,
+    faqs: [
+      {
+        q: "Berapa banyak gambar yang bisa dibuat per hari?",
+        a: "Kuota generate gambar harian berbeda per paket: Free mendapat kuota terbatas, Plus mendapat lebih banyak, dan Pro mendapat kuota tertinggi. Kuota reset setiap hari pukul 00.00 WIB.",
+      },
+      {
+        q: "Berapa resolusi gambar yang dihasilkan?",
+        a: "Gambar dihasilkan dengan resolusi 1024×1024 piksel secara default. Hasil gambar bisa langsung diunduh atau disimpan ke Galeri Studio untuk diakses kembali kapan saja.",
+      },
+      {
+        q: "Di mana hasil gambar saya tersimpan?",
+        a: "Semua gambar yang berhasil dibuat otomatis tersimpan di Galeri Studio. Kamu bisa mengaksesnya kapan saja dari menu Pio Studio → Galeri Studio di sidebar.",
+      },
+    ],
+  },
+  {
+    category: "Video Studio",
+    icon: "Video",
+    order: 4,
+    faqs: [
+      {
+        q: "Bagaimana cara membuat video dari teks?",
+        a: "Buka Video Studio dari sidebar, pilih tab 'Teks ke Video', masukkan deskripsi video yang kamu inginkan (dalam bahasa Indonesia atau Inggris), pilih rasio aspek dan durasi, lalu klik 'Buat Video'. Proses pembuatan membutuhkan beberapa menit.",
+      },
+      {
+        q: "Berapa kredit yang dibutuhkan per video?",
+        a: "Biaya kredit bervariasi tergantung durasi dan model video yang dipilih. Kredit Video Studio diisi ulang setiap bulan sesuai paket. Rincian kredit ditampilkan di halaman Video Studio sebelum kamu konfirmasi pembuatan.",
+      },
+      {
+        q: "Berapa lama proses pembuatan video?",
+        a: "Proses pembuatan video biasanya membutuhkan waktu 3–10 menit tergantung antrian server dan kompleksitas permintaan. Kamu bisa menutup halaman dan video tetap diproses; hasilnya bisa dilihat di Galeri Studio.",
+      },
+    ],
+  },
+  {
+    category: "Voice Studio",
+    icon: "Mic",
+    order: 5,
+    faqs: [
+      {
+        q: "Apa itu Voice Cloning?",
+        a: "Voice Cloning memungkinkan kamu membuat salinan digital dari suara tertentu menggunakan sampel audio. Suara yang sudah di-clone tersimpan di 'Suara Saya' dan bisa digunakan ulang untuk membuat audio baru kapan saja.",
+      },
+      {
+        q: "Bagaimana cara membuat suara kustom dengan Voice Design?",
+        a: "Buka Voice Studio → Voice Design, lalu deskripsikan karakter suara yang kamu inginkan (misalnya: 'suara wanita dewasa, tenang, dengan aksen formal'). AI akan menghasilkan suara sesuai deskripsimu yang bisa langsung digunakan atau disimpan.",
+      },
+      {
+        q: "Format audio apa yang dihasilkan Voice Studio?",
+        a: "Voice Studio menghasilkan file audio dalam format MP3 yang bisa langsung diputar di browser atau diunduh ke perangkatmu.",
+      },
+    ],
+  },
+  {
+    category: "Pustaka",
+    icon: "Library",
+    order: 6,
+    faqs: [
+      {
+        q: "Format file apa yang didukung di Pustaka?",
+        a: "Pustaka mendukung berbagai format: PDF, dokumen teks (.txt), kode sumber, JSON, Markdown, dan file gambar (JPG, PNG). File PDF dan gambar akan diproses menggunakan AI pengenalan dokumen untuk mengekstrak teksnya.",
+      },
+      {
+        q: "Berapa batas ukuran dan jumlah file di Pustaka?",
+        a: "Batas ukuran dan jumlah file berbeda per paket. Paket Free memiliki batas paling kecil, sementara Plus dan Pro mendukung file lebih besar dan jumlah dokumen lebih banyak. Detail batas ditampilkan di halaman Pustaka.",
+      },
+      {
+        q: "Bagaimana dokumen Pustaka digunakan dalam chat?",
+        a: "Saat menulis pesan di chat, klik ikon '+' lalu pilih 'Dari Pustaka'. Pilih dokumen yang relevan, dan isi dokumen tersebut akan otomatis disertakan sebagai konteks untuk AI dalam menjawab pertanyaanmu.",
+      },
+    ],
+  },
+  {
+    category: "Paket & Kredit",
+    icon: "CreditCard",
+    order: 7,
+    faqs: [
+      {
+        q: "Bagaimana sistem kredit bekerja?",
+        a: "Kredit adalah saldo dalam IDR yang bisa digunakan untuk membayar layanan di luar kuota paket. Konversi kredit: 2 token = Rp 1, dengan tarif tetap untuk generate gambar dan video. Kredit tidak expired dan bisa diisi ulang kapan saja.",
+      },
+      {
+        q: "Apa yang dimaksud dengan Plus Free Trial?",
+        a: "Plus Free Trial adalah program percobaan gratis selama 1 bulan untuk paket Plus. Setelah trial berakhir, akun otomatis kembali ke paket Free kecuali kamu berlangganan Plus. Trial hanya bisa diklaim satu kali per akun.",
+      },
+      {
+        q: "Apa yang terjadi jika kuota token harian habis?",
+        a: "Jika kuota token harian habis, kamu masih bisa mengirim pesan menggunakan saldo kredit (jika tersedia). Jika keduanya habis, kamu perlu menunggu reset kuota esok hari atau mengisi saldo kredit.",
+      },
+    ],
+  },
+  {
+    category: "Akun & Keamanan",
+    icon: "Shield",
+    order: 8,
+    faqs: [
+      {
+        q: "Bagaimana cara mengubah kata sandi?",
+        a: "Buka Pengaturan dari menu profil di sidebar, lalu cari opsi 'Ubah Kata Sandi'. Kamu akan menerima email konfirmasi untuk memverifikasi perubahan. Jika lupa kata sandi, gunakan fitur 'Lupa Kata Sandi' di halaman login.",
+      },
+      {
+        q: "Apakah data dan percakapan saya aman?",
+        a: "Ya. Semua data disimpan dengan enkripsi dan diproteksi menggunakan Row Level Security (RLS) — artinya hanya kamu yang bisa mengakses percakapan dan datamu sendiri. Kami tidak menjual data pengguna ke pihak ketiga.",
+      },
+      {
+        q: "Bagaimana cara menghapus akun?",
+        a: "Untuk menghapus akun, hubungi tim dukungan kami melalui email. Penghapusan akun akan menghapus semua data percakapan, file Pustaka, dan kredit secara permanen dan tidak dapat dipulihkan.",
+      },
+    ],
+  },
+  {
+    category: "API Keys",
+    icon: "Key",
+    order: 9,
+    faqs: [
+      {
+        q: "Bagaimana cara mendapatkan API Key PioCode?",
+        a: "API Key tersedia untuk pengguna paket Plus dan Pro. Buka menu profil di sidebar → API Keys, lalu klik 'Buat API Key Baru'. API Key digunakan untuk mengakses layanan PioCode secara programatik dari aplikasi eksternal.",
+      },
+      {
+        q: "Paket mana yang mendukung API Keys?",
+        a: "Fitur API Keys tersedia untuk paket Plus dan Pro. Pengguna Free tidak bisa membuat API Key. Setiap paket memiliki batas akses model yang berbeda melalui API.",
+      },
+      {
+        q: "Apa itu BYOK (Bring Your Own Key)?",
+        a: "BYOK memungkinkan kamu menggunakan API Key dari provider AI lain (seperti DashScope/Alibaba Cloud) di PioCode. Dengan BYOK, kuota penggunaan akan dipotong dari akun provider-mu, bukan dari kuota PioCode.",
+      },
+    ],
+  },
+];
+
+app.get("/api/help-faqs", (_req, res) => {
+  res.json(HELP_FAQS);
+});
+
 app.get("/api/changelog", async (_req, res) => {
   const { data, error } = await supabaseAdmin
     .from("changelogs")

@@ -65,6 +65,11 @@ export default function LandingPage() {
           <span className="font-bold text-lg tracking-tight">PioCode</span>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/bantuan">
+            <button className="px-4 py-1.5 rounded-lg text-sm font-medium text-white/60 hover:text-white transition-colors">
+              Bantuan
+            </button>
+          </Link>
           <Link href="/login">
             <button className="px-4 py-1.5 rounded-lg text-sm font-medium text-white/70 hover:text-white transition-colors">
               Masuk

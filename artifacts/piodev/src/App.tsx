@@ -27,6 +27,7 @@ import ResetPassword from "@/pages/reset-password";
 import ApiKeysPage from "@/pages/api-keys";
 import PustakaPage from "@/pages/pustaka";
 import HostingPage from "@/pages/hosting";
+import HelpCenterPage from "@/pages/help-center";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ function Router() {
       <Route path="/api-keys" component={ApiKeysPage} />
       <Route path="/pustaka" component={PustakaPage} />
       <Route path="/hosting" component={HostingPage} />
+      <Route path="/bantuan" component={HelpCenterPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useLocation } from "wouter";
-import { Plus, Settings, LogOut, MessageSquare, Trash2, Pencil, Search, X, MoreHorizontal, Star, Menu, Shield, Newspaper, Video, Key, Sparkles, Library, ChevronDown, ChevronRight, Mic, Image as ImageIcon, FolderOpen, Globe } from "lucide-react";
+import { Plus, Settings, LogOut, MessageSquare, Trash2, Pencil, Search, X, MoreHorizontal, Star, Menu, Shield, Newspaper, Video, Key, Sparkles, Library, ChevronDown, ChevronRight, Mic, Image as ImageIcon, FolderOpen, Globe, LifeBuoy } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -671,6 +671,10 @@ export function ChatSidebar({
                 {hasNewChangelog && (
                   <span className="ml-auto w-2 h-2 rounded-full bg-red-500" />
                 )}
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate("/bantuan")} className="gap-2 cursor-pointer">
+                <LifeBuoy className="w-4 h-4" />
+                <span>Pusat Bantuan</span>
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate("/settings")} className="gap-2 cursor-pointer">
                 <Settings className="w-4 h-4" />
