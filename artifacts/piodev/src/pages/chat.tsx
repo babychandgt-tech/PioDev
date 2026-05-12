@@ -323,7 +323,8 @@ export default function ChatPage() {
 
   const scrollToBottom = () => {
     userScrolledUpRef.current = false;
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
     setShowScrollBtn(false);
   };
 
@@ -331,7 +332,8 @@ export default function ChatPage() {
   useEffect(() => {
     userScrolledUpRef.current = false;
     setShowScrollBtn(false);
-    messagesEndRef.current?.scrollIntoView({ behavior: "instant" });
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [activeChat?.id]);
 
   // Close attach menu on outside click
