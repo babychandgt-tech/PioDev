@@ -405,15 +405,43 @@ export function useChat(userId: string | undefined) {
     const fallbackTitle = titleBase.slice(0, 40) + (titleBase.length > 40 ? "..." : "");
 
     if (!chatId) {
-      const { data: newConvo, error } = await supabase
-        .from("conversations")
-        .insert({ user_id: userId, title: fallbackTitle })
-        .select()
-        .single();
+      // Pastikan sesi Supabase masih valid sebelum insert (bisa expired setelah lama idle)
+      try {
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        if (!currentSession) {
+          const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession();
+          if (refreshErr || !refreshed.session) {
+            console.error("[PioCode] Sesi expired, refresh gagal:", refreshErr?.message);
+            throw new Error("SESSION_EXPIRED");
+          }
+          console.log("[PioCode] Sesi di-refresh sebelum insert conversation");
+        }
+      } catch (sessionErr: any) {
+        if (sessionErr.message === "SESSION_EXPIRED") throw sessionErr;
+        console.error("[PioCode] getSession error:", sessionErr?.message);
+        // Lanjut coba insert saja — mungkin session masih valid di cookie
+      }
 
-      if (error || !newConvo) {
-        console.error("[PioCode] Gagal membuat percakapan baru:", error?.message ?? "data null", error);
-        throw new Error("CONV_FAILED");
+      let newConvo: any = null;
+      let convInsertError: any = null;
+      try {
+        const result = await supabase
+          .from("conversations")
+          .insert({ user_id: userId, title: fallbackTitle })
+          .select()
+          .single();
+        newConvo = result.data;
+        convInsertError = result.error;
+      } catch (fetchErr: any) {
+        // Supabase bisa throw NetworkError jika koneksi putus
+        convInsertError = { message: fetchErr?.message ?? "Network error" };
+      }
+
+      if (convInsertError || !newConvo) {
+        const errMsg = convInsertError?.message ?? "data null";
+        const errCode = convInsertError?.code ?? "";
+        console.error("[PioCode] Gagal membuat percakapan baru:", errMsg, errCode, convInsertError?.details, convInsertError?.hint);
+        throw new Error(`CONV_FAILED:${errCode ? `[${errCode}] ` : ""}${errMsg}`);
       }
       chatId = newConvo.id;
       setChats((prev) => [{ id: chatId!, title: fallbackTitle, updatedAt: new Date(), messages: [] }, ...prev]);

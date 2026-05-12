@@ -481,7 +481,15 @@ export default function ChatPage() {
         textareaRef.current.style.height = "auto";
         textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 120)}px`;
       }
-      setSendError("Gagal mengirim pesan. Coba lagi.");
+      const msg = err?.message ?? "";
+      if (msg === "SESSION_EXPIRED" || msg === "NO_USER") {
+        setSendError("Sesi login habis — silakan refresh halaman atau login ulang.");
+      } else if (msg.startsWith("CONV_FAILED:")) {
+        const detail = msg.replace("CONV_FAILED:", "").slice(0, 80);
+        setSendError(`Gagal buat percakapan: ${detail}`);
+      } else {
+        setSendError("Gagal mengirim pesan. Coba lagi.");
+      }
     }
   };
 
