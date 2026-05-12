@@ -1,0 +1,75 @@
+Gagal render diagram
+Syntax diagram tidak valid. Coba minta Pioo untuk generate ulang.
+
+flowchart TD
+    %% Definisi Actor
+    subgraph Actors [Actors / Pengguna]
+        User([User / Pelanggan])
+        Admin([Administrator])
+        Guest([Pengunjung / Belum Login])
+    end
+
+    %% Definisi Use Cases
+    subgraph Authentication [Autentikasi Utama]
+        UC_Login[Login ke Aplikasi]
+        UC_Logout[Logout]
+        UC_Register[Registrasi Akun Baru]
+        UC_ForgotPassword[Lupa Password]
+        UC_ResetPassword[Reset Password via Email/SMS]
+    end
+
+    subgraph SocialAuth [Otentikasi Sosial / Third-Party]
+        UC_GoogleLogin[Login dengan Google]
+        UC_FacebookLogin[Login dengan Facebook]
+    end
+
+    subgraph AccountManagement [Manajemen Akun Pasca-Login]
+        UC_ViewProfile[Lihat Profil]
+        UC_EditProfile[Edit Profil]
+        UC_ChangePassword[Ganti Password]
+        UC_VerifyEmail[Verifikasi Email]
+    end
+
+    subgraph Security [Keamanan & Validasi]
+        UC_Captcha[Validasi CAPTCHA]
+        UC_MFA[Multifactor Authentication / OTP]
+    end
+
+    %% Hubungan Antar Actor dan Use Case
+    
+    %% Guest bisa melakukan hal-hal dasar
+    Guest --> UC_Login
+    Guest --> UC_Register
+    Guest --> UC_ForgotPassword
+    Guest --> UC_GoogleLogin
+    Guest --> UC_FacebookLogin
+
+    %% User Biasa
+    User --> UC_Login
+    User --> UC_Logout
+    User --> UC_ViewProfile
+    User --> UC_EditProfile
+    User --> UC_ChangePassword
+    User --> UC_ForgotPassword
+
+    %% Admin memiliki akses lebih luas (simplified untuk fokus login)
+    Admin --> UC_Login
+    Admin --> UC_Logout
+    Admin --> UC_ViewProfile
+
+    %% Include Relationships (Wajib terjadi jika Login Sukses)
+    UC_Login -.->|"include"| UC_Captcha
+    UC_Login -.->|"include"| UC_MFA
+
+    %% Extend Relationships (Opsional/Tergantung Kondisi)
+    UC_Login -.->|"extend"| UC_VerifyEmail : "Jika email belum diverifikasi"
+    UC_ForgotPassword -.->|"include"| UC_ResetPassword
+
+    %% Styling agar lebih jelas
+    classDef actor fill:#f9f,stroke:#333,stroke-width:2px;
+    classDef usecase fill:#e1f5fe,stroke:#0277bd,stroke-width:2px;
+    classDef security fill:#fff3e0,stroke:#ef6c00,stroke-width:2px;
+
+    class User,Admin,Guest actor;
+    class UC_Login,UC_Logout,UC_Register,UC_ForgotPassword,UC_ResetPassword,UC_ViewProfile,UC_EditProfile,UC_ChangePassword,UC_GoogleLogin,UC_FacebookLogin usecase;
+    class UC_Captcha,UC_MFA,UC_VerifyEmail security;

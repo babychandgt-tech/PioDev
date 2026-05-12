@@ -59,14 +59,28 @@ function ensureMermaidInit(isDark: boolean) {
 
 /**
  * Preprocess mermaid code to fix common AI-generated syntax issues:
- * - Strip %% comment lines (sometimes confuse the lexer in subgraph context)
  * - Normalize Windows line endings
+ * - Strip %% comment lines (confuse the lexer in subgraph/flowchart context)
+ * - Remove `: "..."` or `: '...'` suffix on edge lines — invalid in flowchart, AI often adds UML notation
+ * - Remove inline comments on edge lines (text after `-->` that isn't a valid label)
+ * - Strip bare colons at end of edge lines
  */
 function preprocessMermaid(code: string): string {
   return code
     .replace(/\r\n/g, "\n")
     .split("\n")
     .filter((line) => !line.trim().startsWith("%%"))
+    .map((line) => {
+      // Detect edge lines (contain -->, -.->`, ==>`, etc.)
+      const isEdgeLine = /(-+>|={2,}>|\.->|--o|--x)/i.test(line);
+      if (isEdgeLine) {
+        // Remove trailing `: "..."` or `: '...'` (UML-style annotation, invalid in flowchart)
+        line = line.replace(/\s*:\s*["'][^"']*["']\s*$/, "");
+        // Remove trailing bare `:` left over after above strip
+        line = line.replace(/\s*:\s*$/, "");
+      }
+      return line;
+    })
     .join("\n")
     .trim();
 }
